@@ -7007,7 +7007,7 @@ const form = reactive<SettingsForm>({
   default_user_rpm_limit: 0,
   site_name: "AySub",
   site_logo: "",
-  site_subtitle: "Subscription to API Conversion Platform",
+  site_subtitle: "All Your AI Sub Hub",
   api_base_url: "",
   contact_info: "",
   doc_url: "",

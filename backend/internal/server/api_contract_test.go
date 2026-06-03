@@ -1023,7 +1023,7 @@ func TestAPIContracts(t *testing.T) {
 					"google_oauth_frontend_redirect_url": "/auth/oauth/callback",
 					"site_name": "AySub",
 					"site_logo": "",
-					"site_subtitle": "Subscription to API Conversion Platform",
+					"site_subtitle": "All Your AI Sub Hub",
 					"api_base_url": "",
 					"api_key_acl_trust_forwarded_ip": false,
 					"contact_info": "",

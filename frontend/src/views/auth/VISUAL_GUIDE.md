@@ -40,7 +40,7 @@ Centered: Both horizontally and vertically
 ┌─────────────────────────────────────────────┐
 │                                             │
 │         🔷 AySub                          │
-│    Subscription to API Conversion Platform  │
+│            All Your AI Sub Hub              │
 │                                             │
 │  ┌─────────────────────────────────────┐   │
 │  │                                     │   │
@@ -134,7 +134,7 @@ Centered: Both horizontally and vertically
 ┌─────────────────────────────────────────────┐
 │                                             │
 │         🔷 AySub                          │
-│    Subscription to API Conversion Platform  │
+│            All Your AI Sub Hub              │
 │                                             │
 │  ┌─────────────────────────────────────┐   │
 │  │                                     │   │
