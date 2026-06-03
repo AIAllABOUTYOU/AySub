@@ -1,76 +1,69 @@
-# Sub2API Docker Image
+# AySub Docker Image
 
-Sub2API is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
+AySub Docker images are built from the current AySub repository source. The default local image tag used by Docker Compose is `aysub:latest`.
 
-## Quick Start
+## Build
+
+From the repository root:
 
 ```bash
-docker run -d \
-  --name sub2api \
-  -p 8080:8080 \
-  -e DATABASE_URL="postgres://user:pass@host:5432/sub2api" \
-  -e REDIS_URL="redis://host:6379" \
-  weishaw/sub2api:latest
+docker build -t aysub:latest .
+```
+
+Or use the helper script:
+
+```bash
+./deploy/build_image.sh
 ```
 
 ## Docker Compose
 
-```yaml
-version: '3.8'
+Recommended local-directory deployment:
 
-services:
-  sub2api:
-    image: weishaw/sub2api:latest
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/sub2api?sslmode=disable
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - db
-      - redis
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=sub2api
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-
-volumes:
-  postgres_data:
-  redis_data:
+```bash
+cd deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+docker compose -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
-## Environment Variables
+Named-volume deployment:
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes | - |
-| `REDIS_URL` | Redis connection string | Yes | - |
-| `PORT` | Server port | No | `8080` |
-| `GIN_MODE` | Gin framework mode (`debug`/`release`) | No | `release` |
+```bash
+cd deploy
+cp .env.example .env
+nano .env
+docker compose up -d --build
+docker compose logs -f aysub
+```
 
-## Supported Architectures
+Standalone app-only deployment with external PostgreSQL and Redis:
 
-- `linux/amd64`
-- `linux/arm64`
+```bash
+cd deploy
+cp .env.example .env
+nano .env
+docker compose -f docker-compose.standalone.yml up -d --build
+docker compose -f docker-compose.standalone.yml logs -f aysub
+```
 
-## Tags
+## Defaults
 
-- `latest` - Latest stable release
-- `x.y.z` - Specific version
-- `x.y` - Latest patch of minor version
-- `x` - Latest minor of major version
+| Item | Default |
+|------|---------|
+| Image | `aysub:latest` |
+| Service | `aysub` |
+| Container | `aysub` |
+| PostgreSQL container | `aysub-postgres` |
+| Redis container | `aysub-redis` |
+| Network | `aysub-network` |
+| Named data volume | `aysub_data` |
+
+The runtime binary inside the image is `/app/aysub`.
 
 ## Links
 
-- [GitHub Repository](https://github.com/weishaw/sub2api)
-- [Documentation](https://github.com/weishaw/sub2api#readme)
+- [GitHub Repository](https://github.com/AIAllABOUTYOU/AySub)
+- [Documentation](https://github.com/AIAllABOUTYOU/AySub#readme)

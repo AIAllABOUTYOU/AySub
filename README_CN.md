@@ -1,4 +1,4 @@
-# Sub2API
+# AySub
 
 <div align="center">
 
@@ -8,46 +8,52 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Wei-Shaw%2Fsub2api | Trendshift" width="250" height="55"/></a>
-
-**AI API 网关平台 - 订阅配额分发管理**
+**基于 Sub2API + NewAPI + Grok2API 的三合一 AI API 网关**
 
 [English](README.md) | 中文 | [日本語](README_JA.md)
 
 </div>
 
-> **Sub2API 官方仅使用  `sub2api.org` 与 `pincc.ai` 两个域名。其他使用 Sub2API 名义的网站可能为第三方部署或服务，与本项目无关，请自行甄别。**
+> **AySub 是基于 Sub2API 的二次魔改整合版本。** 为兼容现有代码，Go module 与部分旧 systemd/helper 路径当前仍保留 `sub2api` 标识。Docker 镜像、服务、容器、网络和卷默认使用 AySub 命名。
 ---
 
-## 在线体验
+## 当前状态
 
-体验地址：**[https://demo.sub2api.org/](https://demo.sub2api.org/)**
+当前项目落点：`/Volumes/llovky/AitchTey/code/AySub`。
 
-演示账号（共享演示环境；自建部署不会自动创建该账号）：
-
-| 邮箱 | 密码 |
-|------|------|
-| admin@sub2api.org | admin123 |
+主网关、NewAPI 风格运营能力、xAI/Grok 官方 API Key、Grok Cookie 逆向适配器、Console 免费模型适配和生成媒体本地缓存已结合进当前代码库。当前仓库暂未提供独立 AySub 公共演示环境；自部署时请通过初始化向导或 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 创建管理员账号。
 
 ## 项目概述
 
-Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的 API 配额。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、计费、负载均衡和请求转发。
+AySub 是一个 AI API 聚合网关：保留 Sub2API 的调度内核，叠加 NewAPI 风格的商用运营体系，并把 Grok2API 的 Grok Cookie 逆向能力改写为 Go 内置适配器。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、账号调度、模型定价、计费、额度控制、媒体生成路由和请求转发。
 
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key）
-- **API Key 分发** - 为用户生成和管理 API Key
-- **精确计费** - Token 级别的用量追踪和成本计算
-- **智能调度** - 智能账号选择，支持粘性会话
-- **并发控制** - 用户级和账号级并发限制
-- **速率限制** - 可配置的请求和 Token 速率限制
-- **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe，用户自助充值，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）
-- **管理后台** - Web 界面进行监控和管理
-- **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能
+- **Sub2API 调度内核** - 保留账号池调度、粘性会话、熔断、并发控制、速率限制和 Token 级用量记录主路径。
+- **NewAPI 风格运营体系** - 支持用户余额、平台额度、分组、API Key 权限、订单、充值套餐、支付实例、支付回调和运营支付看板。
+- **模型与定价管理** - 支持默认模型定价、渠道模型白名单、模型同步候选、渠道定价 UI、Token/图片/按次计费模式，以及用户侧可用渠道和价格展示。
+- **多厂商网关** - 支持 OpenAI 兼容、Claude/Anthropic 兼容、Gemini 兼容、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key 和自定义上游渠道。
+- **xAI 官方 API Key** - 新增 xAI 平台，支持 Chat Completions、Responses fallback、Anthropic Messages fallback、模型列表、端点统计归因和渠道监控。
+- **Grok Cookie 逆向适配器** - Grok Web Cookie 账号支持 Chat Completions、Responses、Anthropic Messages、联网搜索引用、thinking 流、多模态图片上传、图片生成/编辑、视频生成和 quota 查询。
+- **Grok Console 免费模型** - 支持 Cookie 账号经 `console.x.ai/v1/responses` 调用 `grok-4.3-console`、`grok-4.3-low/medium/high`、`grok-4.20-*`、`grok-4.20-multi-agent-*`、`grok-build-console`，并转换到 Chat、Responses、Messages 三类入口。
+- **生成媒体本地缓存** - Grok 生成图片/视频可落盘到 `DATA_DIR/files/images` 与 `DATA_DIR/files/videos`，并通过 `/v1/files/image`、`/v1/files/video` 读取。
+- **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe 等自助充值能力，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）。
+- **管理后台** - Web 界面覆盖用户、账号、渠道、定价、分组、支付、用量、监控、数据管理和系统设置。
+- **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能。
 
-## ❤️ 赞助商
+## 整合说明
 
-> [想出现在这里？](mailto:support@pincc.ai)
+| 模块 | 当前状态 |
+|------|----------|
+| Sub2API 主体 | 调度、账号池、粘性会话、用量计费、限流和网关路由主路径已保留。 |
+| NewAPI 模型/定价 | 已具备主路径：模型定价、渠道白名单、定价同步、可用渠道展示、后台渠道定价。完整独立的 NewAPI 风格“模型广场”产品页尚未作为单独模块完成。 |
+| NewAPI 商用运营 | 用户、余额、额度、分组、订单、充值套餐、支付实例、回调和支付看板已具备；真实商户配置仍需生产环境验收。 |
+| Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、模型列表、LiveKit token、LiveKit RTC 代理、Console 免费模型和本地媒体缓存已转 Go。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP/FlareSolverr 防封栈未直接整体并入。 |
+| 端到端验证 | 已完成单元测试和前端类型检查；真实 xAI/Grok Cookie/Console/媒体/LiveKit 账号链路仍需上线前逐项验收。 |
+
+## 上游 Sub2API 赞助商
+
+本节保留自上游 Sub2API README，用于来源标注和生态参考。
 
 <table>
 <tr>
@@ -135,11 +141,11 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## 生态项目
 
-围绕 Sub2API 的社区扩展与集成项目：
+仍可供 AySub 部署参考的上游 Sub2API 社区扩展与集成项目：
 
 | 项目 | 说明 | 功能 |
 |------|------|------|
-| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~自助支付系统~~ | **已内置** — 支付功能已集成到 Sub2API 中，无需独立部署。详见 [支付配置指南](docs/PAYMENT_CN.md) |
+| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~自助支付系统~~ | **已内置** — 支付功能已集成到 AySub/Sub2API 中，无需独立部署。详见 [支付配置指南](docs/PAYMENT_CN.md) |
 | [sub2api-mobile](https://github.com/ckken/sub2api-mobile) | 移动端管理控制台 | 跨平台应用（iOS/Android/Web），支持用户管理、账号管理、监控看板、多后端切换；基于 Expo + React Native 构建 |
 
 ## 技术栈
@@ -155,7 +161,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## Nginx 反向代理注意事项
 
-通过 Nginx 反向代理 Sub2API（或 CRS 服务）并搭配 Codex CLI 使用时，需要在 Nginx 配置的 `http` 块中添加：
+通过 Nginx 反向代理 AySub（或 CRS 服务）并搭配 Codex CLI 使用时，需要在 Nginx 配置的 `http` 块中添加：
 
 ```nginx
 underscores_in_headers on;
@@ -167,9 +173,9 @@ Nginx 默认会丢弃名称中含下划线的请求头（如 `session_id`），�
 
 ## 部署方式
 
-### 方式一：脚本安装（推荐）
+### 方式一：脚本安装（上游兼容）
 
-一键安装脚本，自动从 GitHub Releases 下载预编译的二进制文件。
+一键安装脚本当前仍跟随上游 Sub2API Release 产物。只有在你明确需要上游兼容二进制布局时才使用；部署当前 AySub 魔改代码请优先使用 Docker Compose 或从当前仓库源码编译。
 
 #### 前置条件
 
@@ -236,39 +242,37 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 ---
 
-### 方式二：Docker Compose（推荐）
+### 方式二：Docker Compose（AySub 推荐）
 
-使用 Docker Compose 部署，包含 PostgreSQL 和 Redis 容器。
+使用 Docker Compose 部署当前 AySub 源码，包含 PostgreSQL 和 Redis 容器。默认 compose 会从本仓库源码构建 `aysub:latest` 镜像。
 
 #### 前置条件
 
 - Docker 20.10+
 - Docker Compose v2+
 
-#### 快速开始（一键部署）
+#### 快速开始
 
-使用自动化部署脚本快速搭建：
+从当前仓库构建 AySub 镜像，再启动 compose：
 
 ```bash
-# 创建部署目录
-mkdir -p sub2api-deploy && cd sub2api-deploy
+# 克隆 AySub
+git clone https://github.com/AIAllABOUTYOU/AySub.git
 
-# 下载并运行部署准备脚本
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+# 准备部署配置
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
 
-# 启动服务
-docker compose up -d
+# 构建并启动服务
+docker compose -f docker-compose.local.yml up -d --build
 
 # 查看日志
-docker compose logs -f sub2api
+docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
-**脚本功能：**
-- 下载 `docker-compose.local.yml`（本地保存为 `docker-compose.yml`）和 `.env.example`
-- 自动生成安全凭证（JWT_SECRET、TOTP_ENCRYPTION_KEY、POSTGRES_PASSWORD）
-- 创建 `.env` 文件并填充自动生成的密钥
-- 创建数据目录（使用本地目录，便于备份和迁移）
-- 显示生成的凭证供你记录
+生产环境请先为 `JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、`POSTGRES_PASSWORD` 生成安全值。
 
 #### 手动部署
 
@@ -276,8 +280,8 @@ docker compose logs -f sub2api
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+cd AySub/deploy
 
 # 2. 复制环境配置文件
 cp .env.example .env
@@ -322,18 +326,18 @@ openssl rand -hex 32
 # 4. 创建数据目录（本地版）
 mkdir -p data postgres_data redis_data
 
-# 5. 启动所有服务
+# 5. 构建并启动所有服务
 # 选项 A：本地目录版（推荐 - 易于迁移）
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 
 # 选项 B：命名卷版（简单设置）
-docker compose up -d
+docker compose up -d --build
 
 # 6. 查看状态
 docker compose -f docker-compose.local.yml ps
 
 # 7. 查看日志
-docker compose -f docker-compose.local.yml logs -f sub2api
+docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
 #### 部署版本对比
@@ -363,15 +367,15 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 
 如果管理员密码是自动生成的，在日志中查找：
 ```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
+docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
 ```
 
 #### 升级
 
 ```bash
-# 拉取最新镜像并重建容器
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
+# 拉取最新 AySub 源码并重新构建/重建容器
+git pull
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 #### 轻松迁移（本地目录版）
@@ -382,14 +386,14 @@ docker compose -f docker-compose.local.yml up -d
 # 源服务器
 docker compose -f docker-compose.local.yml down
 cd ..
-tar czf sub2api-complete.tar.gz sub2api-deploy/
+tar czf aysub-complete.tar.gz AySub/
 
 # 传输到新服务器
-scp sub2api-complete.tar.gz user@new-server:/path/
+scp aysub-complete.tar.gz user@new-server:/path/
 
 # 新服务器
-tar xzf sub2api-complete.tar.gz
-cd sub2api-deploy/
+tar xzf aysub-complete.tar.gz
+cd AySub/deploy/
 docker compose -f docker-compose.local.yml up -d
 ```
 
@@ -427,8 +431,8 @@ rm -rf data/ postgres_data/ redis_data/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+cd AySub
 
 # 2. 安装 pnpm（如果还没有安装）
 npm install -g pnpm
@@ -441,7 +445,7 @@ pnpm run build
 
 # 4. 编译后端（嵌入前端）
 cd ../backend
-go build -tags embed -o sub2api ./cmd/server
+go build -tags embed -o aysub ./cmd/server
 
 # 5. 创建配置文件
 cp ../deploy/config.example.yaml ./config.yaml
@@ -465,7 +469,7 @@ database:
   port: 5432
   user: "postgres"
   password: "your_password"
-  dbname: "sub2api"
+  dbname: "aysub"
 
 redis:
   host: "localhost"
@@ -573,7 +577,7 @@ Invalid base URL: invalid url scheme: http
 
 ```bash
 # 6. 运行应用
-./sub2api
+./aysub
 ```
 
 #### HTTP/2 (h2c) 与 HTTP/1.1 回退
@@ -635,7 +639,7 @@ go generate ./cmd/server
 
 ## Antigravity 使用说明
 
-Sub2API 支持 [Antigravity](https://antigravity.so/) 账户，授权后可通过专用端点访问 Claude 和 Gemini 模型。
+AySub 支持 [Antigravity](https://antigravity.so/) 账户，授权后可通过专用端点访问 Claude 和 Gemini 模型。
 
 ### 专用端点
 
@@ -666,7 +670,7 @@ Antigravity 账户支持可选的**混合调度**功能。开启后，通用端�
 ## 项目结构
 
 ```
-sub2api/
+AySub/
 ├── backend/                  # Go 后端服务
 │   ├── cmd/server/           # 应用入口
 │   ├── internal/             # 内部模块
@@ -703,11 +707,11 @@ sub2api/
 
 ## Star History
 
-<a href="https://star-history.com/#Wei-Shaw/sub2api&Date">
+<a href="https://star-history.com/#AIAllABOUTYOU/AySub&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
  </picture>
 </a>
 

@@ -1,4 +1,4 @@
-# Sub2API
+# AySub
 
 <div align="center">
 
@@ -8,47 +8,53 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-<a href="https://trendshift.io/repositories/21823" target="_blank"><img src="https://trendshift.io/api/badge/repositories/21823" alt="Wei-Shaw%2Fsub2api | Trendshift" width="250" height="55"/></a>
-
-**サブスクリプションクォータ配分のための AI API ゲートウェイプラットフォーム**
+**Sub2API + NewAPI + Grok2API を統合した AI API ゲートウェイ**
 
 [English](README.md) | [中文](README_CN.md) | 日本語
 
 </div>
 
-> **Sub2API が公式に使用しているドメインは `sub2api.org` と `pincc.ai` のみです。Sub2API の名称を使用している他のウェブサイトは、サードパーティによるデプロイやサービスであり、本プロジェクトとは一切関係がありません。ご利用の際はご自身で確認・判断をお願いします。**
+> **AySub は Sub2API をベースにした改造統合版です。** 既存コードとの互換性のため、Go module と一部の旧 systemd/helper パスには現在も `sub2api` 識別子が残っています。Docker の image、service、container、network、volume はデフォルトで AySub 名を使用します。
 
 ---
 
-## デモ
+## 現在の状態
 
-Sub2API をオンラインでお試しください: **[https://demo.sub2api.org/](https://demo.sub2api.org/)**
+現在の実装場所: `/Volumes/llovky/AitchTey/code/AySub`。
 
-デモ用認証情報（共有デモ環境です。セルフホスト環境では**自動作成されません**）:
-
-| メールアドレス | パスワード |
-|-------|----------|
-| admin@sub2api.org | admin123 |
+メインゲートウェイ、NewAPI 風の運用機能、xAI/Grok 公式 API Key、Grok Cookie リバースアダプター、Console モデルアダプター、生成メディアのローカルキャッシュは現在のコードベースに統合済みです。このリポジトリにはまだ AySub 専用の公開デモはありません。セルフホスト時はセットアップウィザード、または `ADMIN_EMAIL` / `ADMIN_PASSWORD` で管理者アカウントを作成してください。
 
 ## 概要
 
-Sub2API は、AI 製品のサブスクリプションから API クォータを配分・管理するために設計された AI API ゲートウェイプラットフォームです。ユーザーはプラットフォームが生成した API キーを通じて上流の AI サービスにアクセスでき、プラットフォームは認証、課金、負荷分散、リクエスト転送を処理します。
+AySub は、Sub2API のスケジューリングコアを維持しつつ、NewAPI 風の商用運用機能と Grok2API の Grok Cookie リバースアクセスを Go 実装として統合した AI API ゲートウェイです。ユーザーはプラットフォームが生成した API キーを通じて上流 AI サービスへアクセスし、AySub が認証、アカウントスケジューリング、モデル価格、課金、クォータ制御、メディア生成ルーティング、リクエスト転送を処理します。
 
 ## 機能
 
-- **マルチアカウント管理** - 複数の上流アカウントタイプ（OAuth、APIキー）をサポート
-- **APIキー配布** - ユーザー向けの APIキーの生成と管理
-- **精密な課金** - トークンレベルの使用量追跡とコスト計算
-- **スマートスケジューリング** - スティッキーセッション付きのインテリジェントなアカウント選択
-- **同時実行制御** - ユーザーごと・アカウントごとの同時実行数制限
-- **レート制限** - 設定可能なリクエスト数およびトークンレート制限
-- **内蔵決済システム** - EasyPay、Alipay、WeChat Pay、Stripe に対応。ユーザーのセルフサービスチャージが可能で、別途決済サービスのデプロイは不要（[設定ガイド](docs/PAYMENT.md)）
-- **管理ダッシュボード** - 監視・管理のための Web インターフェース
-- **外部システム連携** - 外部システム（チケット管理など）を iframe 経由で管理ダッシュボードに埋め込み可能
+- **Sub2API スケジューリングコア** - アカウントプール、スティッキーセッション、サーキットブレーカー、同時実行制御、レート制限、トークン単位の使用量記録を維持。
+- **NewAPI 風の運用機能** - ユーザー残高、プラットフォーム別クォータ、グループ、API Key 権限、注文、チャージプラン、決済インスタンス、決済コールバック、決済ダッシュボードをサポート。
+- **モデルと価格管理** - デフォルトモデル価格、チャネル別モデル許可リスト、モデル同期候補、チャネル価格 UI、トークン/画像/リクエスト単位の課金モード、ユーザー向け利用可能チャネルと価格表示に対応。
+- **マルチプロバイダーゲートウェイ** - OpenAI 互換、Claude/Anthropic 互換、Gemini 互換、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key、カスタム上流チャネルをサポート。
+- **xAI 公式 API Key** - xAI プラットフォームを追加し、Chat Completions、Responses fallback、Anthropic Messages fallback、モデル一覧、エンドポイント統計、チャネル監視に対応。
+- **Grok Cookie リバースアダプター** - Grok Web Cookie アカウントで Chat Completions、Responses、Anthropic Messages、検索引用、thinking ストリーム、マルチモーダル画像アップロード、画像生成/編集、動画生成、クォータ照会をサポート。
+- **Grok Console モデル** - Cookie アカウントから `console.x.ai/v1/responses` 経由で `grok-4.3-console`、`grok-4.3-low/medium/high`、`grok-4.20-*`、`grok-4.20-multi-agent-*`、`grok-build-console` を呼び出し、Chat、Responses、Messages エントリへ変換。
+- **生成メディアのローカルキャッシュ** - Grok 生成画像/動画を `DATA_DIR/files/images` と `DATA_DIR/files/videos` に保存し、`/v1/files/image` と `/v1/files/video` から配信可能。
+- **内蔵決済システム** - EasyPay、Alipay、WeChat Pay、Stripe などのセルフサービスチャージに対応し、別途決済サービスは不要（[設定ガイド](docs/PAYMENT.md)）。
+- **管理ダッシュボード** - ユーザー、アカウント、チャネル、価格、グループ、決済、使用量、監視、データ管理、システム設定を Web UI で管理。
+- **外部システム連携** - チケット管理などの外部システムを iframe で管理ダッシュボードに埋め込み可能。
 
-## ❤️ スポンサー
+## 統合状況
 
-> [こちらに掲載しませんか？](mailto:support@pincc.ai)
+| 領域 | 現在の状態 |
+|------|-------------|
+| Sub2API コア | スケジューリング、アカウントプール、スティッキーセッション、使用量課金、レート制限、ゲートウェイルートは維持済み。 |
+| NewAPI モデル/価格 | モデル価格、チャネル許可リスト、価格同期、利用可能チャネル表示、管理側チャネル価格は主経路として利用可能。独立した NewAPI 風の「モデルマーケット」商品ページは、まだ単独モジュールとして完成していません。 |
+| NewAPI 商用運用 | ユーザー、残高、クォータ、グループ、注文、チャージプラン、決済インスタンス、コールバック、決済ダッシュボードは実装済み。実決済事業者設定は本番環境での検証が必要です。 |
+| Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、モデル一覧、LiveKit token、LiveKit RTC proxy、Console モデル、ローカルメディアキャッシュは Go に移植済み。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP、FlareSolverr は直接統合していません。 |
+| E2E 検証 | 単体テストとフロントエンド型チェックは通過済み。実 xAI/Grok Cookie/Console/メディア/LiveKit アカウントでの検証は本番前に必要です。 |
+
+## 上流 Sub2API スポンサー
+
+このセクションは、出典表示とエコシステム参照のために上流 Sub2API README から保持しています。
 
 <table>
 <tr>
@@ -135,11 +141,11 @@ Sub2API は、AI 製品のサブスクリプションから API クォータを�
 
 ## エコシステム
 
-Sub2API を拡張・統合するコミュニティプロジェクト:
+AySub デプロイでも参考になる上流 Sub2API のコミュニティプロジェクト:
 
 | プロジェクト | 説明 | 機能 |
 |---------|-------------|----------|
-| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~セルフサービス決済システム~~ | **内蔵済み** — 決済機能は Sub2API に統合されました。別途デプロイは不要です。[決済設定ガイド](docs/PAYMENT.md)をご参照ください |
+| ~~[Sub2ApiPay](https://github.com/touwaeriol/sub2apipay)~~ | ~~セルフサービス決済システム~~ | **内蔵済み** — 決済機能は AySub/Sub2API に統合されています。別途デプロイは不要です。[決済設定ガイド](docs/PAYMENT.md)をご参照ください |
 | [sub2api-mobile](https://github.com/ckken/sub2api-mobile) | モバイル管理コンソール | ユーザー管理、アカウント管理、監視ダッシュボード、マルチバックエンド切り替えが可能なクロスプラットフォームアプリ（iOS/Android/Web）。Expo + React Native で構築 |
 
 ## 技術スタック
@@ -155,7 +161,7 @@ Sub2API を拡張・統合するコミュニティプロジェクト:
 
 ## Nginx リバースプロキシに関する注意
 
-Sub2API（または CRS）を Nginx でリバースプロキシし、Codex CLI と組み合わせて使用する場合、Nginx の `http` ブロックに以下の設定を追加してください:
+AySub（または CRS）を Nginx でリバースプロキシし、Codex CLI と組み合わせて使用する場合、Nginx の `http` ブロックに以下の設定を追加してください:
 
 ```nginx
 underscores_in_headers on;
@@ -167,9 +173,9 @@ Nginx はデフォルトでアンダースコアを含むヘッダー（例: `se
 
 ## デプロイ
 
-### 方法1: スクリプトによるインストール（推奨）
+### 方法1: スクリプトによるインストール（上流互換）
 
-GitHub Releases からビルド済みバイナリをダウンロードするワンクリックインストールスクリプトです。
+ワンクリックインストーラーは現在、上流 Sub2API の Release 生成物を前提にしています。上流互換のバイナリ配置が必要な場合のみ使用してください。現在の AySub 改造コードをデプロイする場合は、Docker Compose またはこのリポジトリからのソースビルドを推奨します。
 
 #### 前提条件
 
@@ -236,39 +242,37 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 ---
 
-### 方法2: Docker Compose（推奨）
+### 方法2: Docker Compose（AySub 推奨）
 
-PostgreSQL と Redis のコンテナを含む Docker Compose でデプロイします。
+現在の AySub ソースを Docker Compose でデプロイします。PostgreSQL と Redis のコンテナも含まれます。デフォルトの compose はこのリポジトリから `aysub:latest` イメージをビルドします。
 
 #### 前提条件
 
 - Docker 20.10+
 - Docker Compose v2+
 
-#### クイックスタート（ワンクリックデプロイ）
+#### クイックスタート
 
-自動デプロイスクリプトを使用して簡単にセットアップできます:
+現在のリポジトリから AySub イメージをビルドし、compose スタックを起動します:
 
 ```bash
-# デプロイ用ディレクトリを作成
-mkdir -p sub2api-deploy && cd sub2api-deploy
+# AySub をクローン
+git clone https://github.com/AIAllABOUTYOU/AySub.git
 
-# デプロイ準備スクリプトをダウンロードして実行
-curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/docker-deploy.sh | bash
+# デプロイ設定を準備
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
 
-# サービスを起動
-docker compose up -d
+# ビルドしてサービスを起動
+docker compose -f docker-compose.local.yml up -d --build
 
 # ログを表示
-docker compose logs -f sub2api
+docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
-**スクリプトの動作内容:**
-- `docker-compose.local.yml`（`docker-compose.yml` として保存）と `.env.example` をダウンロード
-- セキュアな認証情報（JWT_SECRET、TOTP_ENCRYPTION_KEY、POSTGRES_PASSWORD）を自動生成
-- 自動生成されたシークレットで `.env` ファイルを作成
-- データディレクトリを作成（バックアップ・移行が容易なローカルディレクトリを使用）
-- 生成された認証情報を参照用に表示
+本番環境では、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、`POSTGRES_PASSWORD` に安全な値を設定してください。
 
 #### 手動デプロイ
 
@@ -276,8 +280,8 @@ docker compose logs -f sub2api
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api/deploy
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+cd AySub/deploy
 
 # 2. 環境設定ファイルをコピー
 cp .env.example .env
@@ -322,18 +326,18 @@ openssl rand -hex 32
 # 4. データディレクトリを作成（ローカルバージョンの場合）
 mkdir -p data postgres_data redis_data
 
-# 5. すべてのサービスを起動
+# 5. ビルドしてすべてのサービスを起動
 # オプション A: ローカルディレクトリバージョン（推奨 - 移行が容易）
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 
 # オプション B: 名前付きボリュームバージョン（シンプルなセットアップ）
-docker compose up -d
+docker compose up -d --build
 
 # 6. ステータスを確認
 docker compose -f docker-compose.local.yml ps
 
 # 7. ログを表示
-docker compose -f docker-compose.local.yml logs -f sub2api
+docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
 #### デプロイバージョン
@@ -351,15 +355,15 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 
 管理者パスワードが自動生成された場合は、ログで確認できます:
 ```bash
-docker compose -f docker-compose.local.yml logs sub2api | grep "admin password"
+docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
 ```
 
 #### アップグレード
 
 ```bash
-# 最新イメージをプルしてコンテナを再作成
-docker compose -f docker-compose.local.yml pull
-docker compose -f docker-compose.local.yml up -d
+# 最新の AySub ソースを取得してコンテナを再ビルド/再作成
+git pull
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 #### 簡単な移行（ローカルディレクトリバージョン）
@@ -370,14 +374,14 @@ docker compose -f docker-compose.local.yml up -d
 # 移行元サーバーにて
 docker compose -f docker-compose.local.yml down
 cd ..
-tar czf sub2api-complete.tar.gz sub2api-deploy/
+tar czf aysub-complete.tar.gz AySub/
 
 # 新しいサーバーに転送
-scp sub2api-complete.tar.gz user@new-server:/path/
+scp aysub-complete.tar.gz user@new-server:/path/
 
 # 移行先サーバーにて
-tar xzf sub2api-complete.tar.gz
-cd sub2api-deploy/
+tar xzf aysub-complete.tar.gz
+cd AySub/deploy/
 docker compose -f docker-compose.local.yml up -d
 ```
 
@@ -415,8 +419,8 @@ rm -rf data/ postgres_data/ redis_data/
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/Wei-Shaw/sub2api.git
-cd sub2api
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+cd AySub
 
 # 2. pnpm をインストール（未インストールの場合）
 npm install -g pnpm
@@ -429,7 +433,7 @@ pnpm run build
 
 # 4. フロントエンドを組み込んだバックエンドをビルド
 cd ../backend
-go build -tags embed -o sub2api ./cmd/server
+go build -tags embed -o aysub ./cmd/server
 
 # 5. 設定ファイルを作成
 cp ../deploy/config.example.yaml ./config.yaml
@@ -453,7 +457,7 @@ database:
   port: 5432
   user: "postgres"
   password: "your_password"
-  dbname: "sub2api"
+  dbname: "aysub"
 
 redis:
   host: "localhost"
@@ -532,7 +536,7 @@ URL バリデーションまたはレスポンスヘッダーフィルタリン�
 
 ```bash
 # 6. アプリケーションを実行
-./sub2api
+./aysub
 ```
 
 #### 開発モード
@@ -571,7 +575,7 @@ go generate ./cmd/server
 
 ## Antigravity サポート
 
-Sub2API は [Antigravity](https://antigravity.so/) アカウントをサポートしています。認証後、Claude および Gemini モデル用の専用エンドポイントが利用可能になります。
+AySub は [Antigravity](https://antigravity.so/) アカウントをサポートしています。認証後、Claude および Gemini モデル用の専用エンドポイントが利用可能になります。
 
 ### 専用エンドポイント
 
@@ -604,7 +608,7 @@ Claude Code では、Plan Mode を自動的に終了できません。（通常�
 ## プロジェクト構成
 
 ```
-sub2api/
+AySub/
 ├── backend/                  # Go バックエンドサービス
 │   ├── cmd/server/           # アプリケーションエントリ
 │   ├── internal/             # 内部モジュール
@@ -641,11 +645,11 @@ sub2api/
 
 ## スター履歴
 
-<a href="https://star-history.com/#Wei-Shaw/sub2api&Date">
+<a href="https://star-history.com/#AIAllABOUTYOU/AySub&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wei-Shaw/sub2api&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
  </picture>
 </a>
 
