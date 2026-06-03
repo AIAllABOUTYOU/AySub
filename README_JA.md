@@ -8,13 +8,13 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-**Sub2API + NewAPI + Grok2API を統合した AI API ゲートウェイ**
+**AySub 三位一体 AI API ゲートウェイ**
 
 [English](README.md) | [中文](README_CN.md) | 日本語
 
 </div>
 
-> **AySub は Sub2API をベースにした改造統合版です。** 既存コードとの互換性のため、Go module と一部の旧 systemd/helper パスには現在も `sub2api` 識別子が残っています。Docker の image、service、container、network、volume はデフォルトで AySub 名を使用します。
+> AySub はアカウントスケジューリング、NewAPI 風の運用機能、Grok リバースアダプターを統合しています。既存コードとの互換性のため、Go module は上流の `github.com/Wei-Shaw/sub2api` import path を維持しますが、実行時名、Docker image、service、container、network、volume はデフォルトで AySub 名を使用します。
 
 ---
 
@@ -26,13 +26,14 @@
 
 ## 概要
 
-AySub は、Sub2API のスケジューリングコアを維持しつつ、NewAPI 風の商用運用機能と Grok2API の Grok Cookie リバースアクセスを Go 実装として統合した AI API ゲートウェイです。ユーザーはプラットフォームが生成した API キーを通じて上流 AI サービスへアクセスし、AySub が認証、アカウントスケジューリング、モデル価格、課金、クォータ制御、メディア生成ルーティング、リクエスト転送を処理します。
+AySub は、アカウントスケジューリング、NewAPI 風の商用運用機能、Grok Cookie リバースアクセスを Go 実装として統合した AI API ゲートウェイです。ユーザーはプラットフォームが生成した API キーを通じて上流 AI サービスへアクセスし、AySub が認証、アカウントスケジューリング、モデル価格、課金、クォータ制御、メディア生成ルーティング、リクエスト転送を処理します。
 
 ## 機能
 
-- **Sub2API スケジューリングコア** - アカウントプール、スティッキーセッション、サーキットブレーカー、同時実行制御、レート制限、トークン単位の使用量記録を維持。
+- **AySub スケジューリングコア** - アカウントプール、スティッキーセッション、サーキットブレーカー、同時実行制御、レート制限、トークン単位の使用量記録をサポート。
 - **NewAPI 風の運用機能** - ユーザー残高、プラットフォーム別クォータ、グループ、API Key 権限、注文、チャージプラン、決済インスタンス、決済コールバック、決済ダッシュボードをサポート。
 - **モデルと価格管理** - デフォルトモデル価格、チャネル別モデル許可リスト、モデル同期候補、チャネル価格 UI、トークン/画像/リクエスト単位の課金モード、ユーザー向け利用可能チャネルと価格表示に対応。
+- **体験センター** - ユーザー向け `/playground` で自分の API Key を使ったチャットと画像生成を試せます。動画と音声タブは予約済みで、現在は coming soon 表示です。
 - **マルチプロバイダーゲートウェイ** - OpenAI 互換、Claude/Anthropic 互換、Gemini 互換、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key、カスタム上流チャネルをサポート。
 - **xAI 公式 API Key** - xAI プラットフォームを追加し、Chat Completions、Responses fallback、Anthropic Messages fallback、モデル一覧、エンドポイント統計、チャネル監視に対応。
 - **Grok Cookie リバースアダプター** - Grok Web Cookie アカウントで Chat Completions、Responses、Anthropic Messages、検索引用、thinking ストリーム、マルチモーダル画像アップロード、画像生成/編集、動画生成、クォータ照会をサポート。
@@ -46,8 +47,9 @@ AySub は、Sub2API のスケジューリングコアを維持しつつ、NewAPI
 
 | 領域 | 現在の状態 |
 |------|-------------|
-| Sub2API コア | スケジューリング、アカウントプール、スティッキーセッション、使用量課金、レート制限、ゲートウェイルートは維持済み。 |
-| NewAPI モデル/価格 | モデル価格、チャネル許可リスト、価格同期、利用可能チャネル表示、管理側チャネル価格は主経路として利用可能。独立した NewAPI 風の「モデルマーケット」商品ページは、まだ単独モジュールとして完成していません。 |
+| AySub コア | スケジューリング、アカウントプール、スティッキーセッション、使用量課金、レート制限、ゲートウェイルートは実装済み。 |
+| NewAPI モデル/価格 | モデル価格、チャネル許可リスト、価格同期、利用可能チャネル表示、管理側チャネル価格、ユーザー向け `/models` モデルマーケットを実装済み。モデル単位でプラットフォーム、チャネル、グループ、価格を集約表示できます。 |
+| NewAPI 体験センター | ユーザー向け `/playground` でチャットと画像生成を試せます。動画と音声の入口は UI に残し、現在は coming soon として表示します。 |
 | NewAPI 商用運用 | ユーザー、残高、クォータ、グループ、注文、チャージプラン、決済インスタンス、コールバック、決済ダッシュボードは実装済み。実決済事業者設定は本番環境での検証が必要です。 |
 | Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、モデル一覧、LiveKit token、LiveKit RTC proxy、Console モデル、ローカルメディアキャッシュは Go に移植済み。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP、FlareSolverr は直接統合していません。 |
 | E2E 検証 | 単体テストとフロントエンド型チェックは通過済み。実 xAI/Grok Cookie/Console/メディア/LiveKit アカウントでの検証は本番前に必要です。 |
@@ -77,9 +79,9 @@ Nginx はデフォルトでアンダースコアを含むヘッダー（例: `se
 
 ## デプロイ
 
-### 方法1: スクリプトによるインストール（上流互換）
+### 方法1: スクリプトによるインストール
 
-ワンクリックインストーラーは現在、上流 Sub2API の Release 生成物を前提にしています。上流互換のバイナリ配置が必要な場合のみ使用してください。現在の AySub 改造コードをデプロイする場合は、Docker Compose またはこのリポジトリからのソースビルドを推奨します。
+ワンクリックインストーラーは AySub のパスにバイナリ、設定、システムユーザー、systemd サービスを配置します。コンテナデプロイでは Docker Compose を推奨します。
 
 #### 前提条件
 
@@ -97,7 +99,7 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 スクリプトは以下を実行します:
 1. システムアーキテクチャの検出
 2. 最新リリースのダウンロード
-3. バイナリを `/opt/sub2api` にインストール
+3. バイナリを `/opt/aysub` にインストール
 4. systemd サービスの作成
 5. システムユーザーと権限の設定
 
@@ -105,10 +107,10 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 
 ```bash
 # 1. サービスを起動
-sudo systemctl start sub2api
+sudo systemctl start aysub
 
 # 2. 起動時の自動起動を有効化
-sudo systemctl enable sub2api
+sudo systemctl enable aysub
 
 # 3. ブラウザでセットアップウィザードを開く
 # http://YOUR_SERVER_IP:8080
@@ -132,13 +134,13 @@ Web インターフェースでは以下が可能です:
 
 ```bash
 # ステータスを確認
-sudo systemctl status sub2api
+sudo systemctl status aysub
 
 # ログを表示
-sudo journalctl -u sub2api -f
+sudo journalctl -u aysub -f
 
 # サービスを再起動
-sudo systemctl restart sub2api
+sudo systemctl restart aysub
 
 # アンインストール
 curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/install.sh | sudo bash -s -- uninstall -y

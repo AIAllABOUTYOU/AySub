@@ -8,13 +8,13 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-**基于 Sub2API + NewAPI + Grok2API 的三合一 AI API 网关**
+**AySub 三合一 AI API 网关**
 
 [English](README.md) | 中文 | [日本語](README_JA.md)
 
 </div>
 
-> **AySub 是基于 Sub2API 的二次魔改整合版本。** 为兼容现有代码，Go module 与部分旧 systemd/helper 路径当前仍保留 `sub2api` 标识。Docker 镜像、服务、容器、网络和卷默认使用 AySub 命名。
+> AySub 整合账号调度核心、NewAPI 风格运营体系和 Grok 逆向适配能力。为兼容现有代码，Go module 路径仍沿用上游 `github.com/Wei-Shaw/sub2api` import path；运行时名称、Docker 镜像、服务、容器、网络和卷默认使用 AySub 命名。
 ---
 
 ## 当前状态
@@ -25,13 +25,14 @@
 
 ## 项目概述
 
-AySub 是一个 AI API 聚合网关：保留 Sub2API 的调度内核，叠加 NewAPI 风格的商用运营体系，并把 Grok2API 的 Grok Cookie 逆向能力改写为 Go 内置适配器。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、账号调度、模型定价、计费、额度控制、媒体生成路由和请求转发。
+AySub 是一个 AI API 聚合网关：提供账号调度核心、NewAPI 风格的商用运营体系，并把 Grok Cookie 逆向能力改写为 Go 内置适配器。用户通过平台生成的 API Key 调用上游 AI 服务，平台负责鉴权、账号调度、模型定价、计费、额度控制、媒体生成路由和请求转发。
 
 ## 核心功能
 
-- **Sub2API 调度内核** - 保留账号池调度、粘性会话、熔断、并发控制、速率限制和 Token 级用量记录主路径。
+- **AySub 调度内核** - 支持账号池调度、粘性会话、熔断、并发控制、速率限制和 Token 级用量记录主路径。
 - **NewAPI 风格运营体系** - 支持用户余额、平台额度、分组、API Key 权限、订单、充值套餐、支付实例、支付回调和运营支付看板。
 - **模型与定价管理** - 支持默认模型定价、渠道模型白名单、模型同步候选、渠道定价 UI、Token/图片/按次计费模式，以及用户侧可用渠道和价格展示。
+- **体验中心** - 用户侧 `/playground` 支持使用自己的 API Key 进行聊天和画图体验；视频、音频入口保留并显示待开放。
 - **多厂商网关** - 支持 OpenAI 兼容、Claude/Anthropic 兼容、Gemini 兼容、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key 和自定义上游渠道。
 - **xAI 官方 API Key** - 新增 xAI 平台，支持 Chat Completions、Responses fallback、Anthropic Messages fallback、模型列表、端点统计归因和渠道监控。
 - **Grok Cookie 逆向适配器** - Grok Web Cookie 账号支持 Chat Completions、Responses、Anthropic Messages、联网搜索引用、thinking 流、多模态图片上传、图片生成/编辑、视频生成和 quota 查询。
@@ -45,8 +46,9 @@ AySub 是一个 AI API 聚合网关：保留 Sub2API 的调度内核，叠加 Ne
 
 | 模块 | 当前状态 |
 |------|----------|
-| Sub2API 主体 | 调度、账号池、粘性会话、用量计费、限流和网关路由主路径已保留。 |
-| NewAPI 模型/定价 | 已具备主路径：模型定价、渠道白名单、定价同步、可用渠道展示、后台渠道定价。完整独立的 NewAPI 风格“模型广场”产品页尚未作为单独模块完成。 |
+| AySub 主体 | 调度、账号池、粘性会话、用量计费、限流和网关路由主路径已具备。 |
+| NewAPI 模型/定价 | 已具备主路径：模型定价、渠道白名单、定价同步、可用渠道展示、后台渠道定价，以及用户侧 `/models` 模型广场，可按模型聚合展示平台、渠道、分组和价格。 |
+| NewAPI 体验中心 | 用户侧 `/playground` 已支持聊天和画图体验；视频、音频入口已保留，当前显示待开放。 |
 | NewAPI 商用运营 | 用户、余额、额度、分组、订单、充值套餐、支付实例、回调和支付看板已具备；真实商户配置仍需生产环境验收。 |
 | Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、模型列表、LiveKit token、LiveKit RTC 代理、Console 免费模型和本地媒体缓存已转 Go。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP/FlareSolverr 防封栈未直接整体并入。 |
 | 端到端验证 | 已完成单元测试和前端类型检查；真实 xAI/Grok Cookie/Console/媒体/LiveKit 账号链路仍需上线前逐项验收。 |
@@ -76,9 +78,9 @@ Nginx 默认会丢弃名称中含下划线的请求头（如 `session_id`），�
 
 ## 部署方式
 
-### 方式一：脚本安装（上游兼容）
+### 方式一：脚本安装
 
-一键安装脚本当前仍跟随上游 Sub2API Release 产物。只有在你明确需要上游兼容二进制布局时才使用；部署当前 AySub 魔改代码请优先使用 Docker Compose 或从当前仓库源码编译。
+一键安装脚本会按 AySub 路径安装二进制、配置文件、系统用户和 systemd 服务。容器化部署建议优先使用 Docker Compose。
 
 #### 前置条件
 
@@ -96,7 +98,7 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 脚本会自动：
 1. 检测系统架构
 2. 下载最新版本
-3. 安装二进制文件到 `/opt/sub2api`
+3. 安装二进制文件到 `/opt/aysub`
 4. 创建 systemd 服务
 5. 配置系统用户和权限
 
@@ -104,10 +106,10 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 
 ```bash
 # 1. 启动服务
-sudo systemctl start sub2api
+sudo systemctl start aysub
 
 # 2. 设置开机自启
-sudo systemctl enable sub2api
+sudo systemctl enable aysub
 
 # 3. 在浏览器中打开设置向导
 # http://你的服务器IP:8080
@@ -131,13 +133,13 @@ sudo systemctl enable sub2api
 
 ```bash
 # 查看状态
-sudo systemctl status sub2api
+sudo systemctl status aysub
 
 # 查看日志
-sudo journalctl -u sub2api -f
+sudo journalctl -u aysub -f
 
 # 重启服务
-sudo systemctl restart sub2api
+sudo systemctl restart aysub
 
 # 卸载
 curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/install.sh | sudo bash -s -- uninstall -y
@@ -281,7 +283,7 @@ docker compose -f docker-compose.local.yml logs -f aysub
 
 关键点：
 
-- 主进程固定探测：`/tmp/sub2api-datamanagement.sock`
+- 主进程固定探测：`/tmp/aysub-datamanagement.sock`
 - 只有该 Socket 可连通时，数据管理功能才会开启
 - Docker 场景需将宿主机 Socket 挂载到容器同路径
 
@@ -530,7 +532,7 @@ curl --http2-prior-knowledge -I http://localhost:8080/health
 # HTTP/1.1 回退
 curl --http1.1 -I http://localhost:8080/health
 # WebSocket 回退验证（需管理员 token）
-websocat -H="Sec-WebSocket-Protocol: sub2api-admin, jwt.<ADMIN_TOKEN>" ws://localhost:8080/api/v1/admin/ops/ws/qps
+websocat -H="Sec-WebSocket-Protocol: aysub-admin, jwt.<ADMIN_TOKEN>" ws://localhost:8080/api/v1/admin/ops/ws/qps
 ```
 
 #### 开发模式

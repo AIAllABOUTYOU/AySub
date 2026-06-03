@@ -8,13 +8,13 @@
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-**Three-in-one AI API gateway based on Sub2API, NewAPI, and Grok2API**
+**AySub three-in-one AI API gateway**
 
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 
 </div>
 
-> **AySub is a modified integration fork based on Sub2API.** The Go module and some legacy systemd/helper paths currently still use the upstream `sub2api` identifier for compatibility. Docker images, services, containers, networks, and volumes use the AySub naming by default.
+> AySub integrates an account scheduling core, NewAPI-style operations, and Grok reverse adapters. The Go module path still follows the upstream `github.com/Wei-Shaw/sub2api` import path for compatibility; runtime names, Docker images, services, containers, networks, and volumes use AySub naming by default.
 
 ---
 
@@ -26,13 +26,14 @@ There is no dedicated public AySub demo in this repository yet. Self-hosted depl
 
 ## Overview
 
-AySub is an AI API gateway platform that keeps the Sub2API scheduling core and adds NewAPI-style commercial operations plus a Go implementation of Grok2API reverse access. Users call upstream AI services through platform-generated API Keys, while AySub handles authentication, account scheduling, model pricing, billing, quota control, media generation routing, and request forwarding.
+AySub is an AI API gateway platform with account scheduling, NewAPI-style commercial operations, and a Go implementation of Grok reverse access. Users call upstream AI services through platform-generated API Keys, while AySub handles authentication, account scheduling, model pricing, billing, quota control, media generation routing, and request forwarding.
 
 ## Features
 
-- **Sub2API Scheduling Core** - Account pool scheduling, sticky sessions, circuit breaking, concurrency limits, rate limits, and token-level usage records.
+- **AySub Scheduling Core** - Account pool scheduling, sticky sessions, circuit breaking, concurrency limits, rate limits, and token-level usage records.
 - **NewAPI-style Operations** - User balance, platform quota, groups, API key permissions, orders, recharge plans, payment instances, payment callbacks, and payment dashboard.
 - **Model and Pricing Management** - Default model pricing, channel model allowlists, model sync candidates, per-channel pricing UI, token/image/request billing modes, and user-facing available-channel pricing display.
+- **Experience Center** - User-facing `/playground` for chat and image generation with the user's own API key; video and audio tabs are reserved and show "coming soon".
 - **Multi-Provider Gateway** - OpenAI-compatible, Claude/Anthropic-compatible, Gemini-compatible, Antigravity, OpenAI OAuth/API Key, Claude OAuth/API Key, Gemini OAuth/API Key, and custom upstream channels.
 - **xAI Official API Key** - xAI platform support with Chat Completions, Responses fallback, Anthropic Messages fallback, model listing, quota attribution, and channel monitoring.
 - **Grok Cookie Reverse Adapter** - Grok Web Cookie accounts support Chat Completions, Responses, Anthropic Messages, search references, thinking streams, multimodal image upload, image generation/edit, video generation, and quota lookup.
@@ -46,8 +47,9 @@ AySub is an AI API gateway platform that keeps the Sub2API scheduling core and a
 
 | Area | Current state |
 |------|---------------|
-| Sub2API core | Main scheduling, account pool, sticky session, billing records, rate limit, and gateway routes are retained. |
-| NewAPI model/pricing | Main path is available: model pricing, channel allowlists, pricing sync, available channels, and admin channel pricing. A full standalone NewAPI-style “model marketplace” product page is not yet a separate finished module. |
+| AySub core | Main scheduling, account pool, sticky session, billing records, rate limit, and gateway routes are retained. |
+| NewAPI model/pricing | Main path is available: model pricing, channel allowlists, pricing sync, available channels, admin channel pricing, and a user-facing `/models` model marketplace that aggregates available models by platform, channel, group, and pricing. |
+| NewAPI experience center | `/playground` is available for chat and image-generation trials. Video and audio entries are present in the UI and currently show a coming-soon state. |
 | NewAPI business operations | Users, balance, quotas, groups, orders, recharge plans, payment instances, callbacks, and payment dashboard are present. Real merchant configuration still needs production validation. |
 | Grok2API parity | Chat, Responses, Messages, Images, Videos, quota, model list, LiveKit token, LiveKit RTC proxy, console models, and local media cache are implemented in Go. Media link/upscale, Masonry/ChatKit/Admin WebUI, WARP, and FlareSolverr stacks are not directly imported. |
 | End-to-end validation | Unit tests and frontend type checks have passed for the implemented paths. Real xAI/Grok Cookie/Console/media/LiveKit account validation is still required before production claims. |
@@ -77,9 +79,9 @@ Nginx drops headers containing underscores by default (e.g. `session_id`), which
 
 ## Deployment
 
-### Method 1: Script Installation (Upstream Compatibility)
+### Method 1: Script Installation
 
-The one-click installer currently follows upstream Sub2API release artifacts. Use it only when you intentionally want the upstream-compatible binary layout. For the current AySub modified code, use Docker Compose or source build from this repository.
+The one-click installer installs AySub binaries, configuration, system user, and systemd service under AySub paths. For container deployments, Docker Compose remains the recommended path.
 
 #### Prerequisites
 
@@ -97,7 +99,7 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 The script will:
 1. Detect your system architecture
 2. Download the latest release
-3. Install binary to `/opt/sub2api`
+3. Install binary to `/opt/aysub`
 4. Create systemd service
 5. Configure system user and permissions
 
@@ -105,10 +107,10 @@ The script will:
 
 ```bash
 # 1. Start the service
-sudo systemctl start sub2api
+sudo systemctl start aysub
 
 # 2. Enable auto-start on boot
-sudo systemctl enable sub2api
+sudo systemctl enable aysub
 
 # 3. Open Setup Wizard in browser
 # http://YOUR_SERVER_IP:8080
@@ -132,13 +134,13 @@ The web interface will:
 
 ```bash
 # Check status
-sudo systemctl status sub2api
+sudo systemctl status aysub
 
 # View logs
-sudo journalctl -u sub2api -f
+sudo journalctl -u aysub -f
 
 # Restart service
-sudo systemctl restart sub2api
+sudo systemctl restart aysub
 
 # Uninstall
 curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/install.sh | sudo bash -s -- uninstall -y

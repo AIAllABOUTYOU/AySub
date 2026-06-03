@@ -21,8 +21,8 @@ This directory contains files for deploying AySub on Linux servers.
 | `DOCKER.md` | AySub Docker documentation |
 | `install.sh` | One-click binary installation script |
 | `install-datamanagementd.sh` | datamanagementd 一键安装脚本 |
-| `sub2api.service` | Systemd service unit file |
-| `sub2api-datamanagementd.service` | datamanagementd systemd service unit file |
+| `aysub.service` | Systemd service unit file |
+| `aysub-datamanagementd.service` | datamanagementd systemd service unit file |
 | `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 
@@ -175,7 +175,7 @@ SELECT
 
 如需启用管理后台“数据管理”功能，请额外部署宿主机 `datamanagementd`：
 
-- 主进程固定探测 `/tmp/sub2api-datamanagement.sock`
+- 主进程固定探测 `/tmp/aysub-datamanagement.sock`
 - Docker 场景下需把宿主机 Socket 挂载到容器内同路径
 - 详细步骤见：`deploy/DATAMANAGEMENTD_CN.md`
 
@@ -393,13 +393,13 @@ curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/inst
 ### Manual Installation
 
 1. Download the latest release from [GitHub Releases](https://github.com/AIAllABOUTYOU/AySub/releases)
-2. Extract and copy the binary to `/opt/sub2api/`
-3. Copy `sub2api.service` to `/etc/systemd/system/`
+2. Extract and copy the binary to `/opt/aysub/`
+3. Copy `aysub.service` to `/etc/systemd/system/`
 4. Run:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable sub2api
-   sudo systemctl start sub2api
+   sudo systemctl enable aysub
+   sudo systemctl start aysub
    ```
 5. Open the Setup Wizard in your browser to complete configuration
 
@@ -420,22 +420,22 @@ sudo ./install.sh uninstall
 
 ```bash
 # Start the service
-sudo systemctl start sub2api
+sudo systemctl start aysub
 
 # Stop the service
-sudo systemctl stop sub2api
+sudo systemctl stop aysub
 
 # Restart the service
-sudo systemctl restart sub2api
+sudo systemctl restart aysub
 
 # Check status
-sudo systemctl status sub2api
+sudo systemctl status aysub
 
 # View logs
-sudo journalctl -u sub2api -f
+sudo journalctl -u aysub -f
 
 # Enable auto-start on boot
-sudo systemctl enable sub2api
+sudo systemctl enable aysub
 ```
 
 ### Configuration
@@ -448,7 +448,7 @@ To change after installation:
 
 1. Edit the systemd service:
    ```bash
-   sudo systemctl edit sub2api
+   sudo systemctl edit aysub
    ```
 
 2. Add or modify:
@@ -461,7 +461,7 @@ To change after installation:
 3. Reload and restart:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl restart sub2api
+   sudo systemctl restart aysub
    ```
 
 #### Gemini OAuth Configuration
@@ -470,7 +470,7 @@ If you need to use AI Studio OAuth for Gemini accounts, add the OAuth client cre
 
 1. Edit the service file:
    ```bash
-   sudo nano /etc/systemd/system/sub2api.service
+   sudo nano /etc/systemd/system/aysub.service
    ```
 
 2. Add your OAuth credentials in the `[Service]` section (after the existing `Environment=` lines):
@@ -487,7 +487,7 @@ If you need to use AI Studio OAuth for Gemini accounts, add the OAuth client cre
 3. Reload and restart:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl restart sub2api
+   sudo systemctl restart aysub
    ```
 
 > **Note:** Code Assist OAuth does not require any configuration - it uses the built-in Gemini CLI client.
@@ -495,7 +495,7 @@ If you need to use AI Studio OAuth for Gemini accounts, add the OAuth client cre
 
 #### Application Configuration
 
-The main config file is at `/etc/sub2api/config.yaml` (created by Setup Wizard).
+The main config file is at `/etc/aysub/config.yaml` (created by Setup Wizard).
 
 ### Prerequisites
 
@@ -507,12 +507,12 @@ The main config file is at `/etc/sub2api/config.yaml` (created by Setup Wizard).
 ### Directory Structure
 
 ```
-/opt/sub2api/
-├── sub2api              # Main binary
-├── sub2api.backup       # Backup (after upgrade)
+/opt/aysub/
+├── aysub                # Main binary
+├── aysub.backup         # Backup (after upgrade)
 └── data/                # Runtime data
 
-/etc/sub2api/
+/etc/aysub/
 └── config.yaml          # Configuration file
 ```
 
@@ -567,13 +567,13 @@ docker compose restart
 
 ```bash
 # Check service status
-sudo systemctl status sub2api
+sudo systemctl status aysub
 
 # View recent logs
-sudo journalctl -u sub2api -n 50
+sudo journalctl -u aysub -n 50
 
 # Check config file
-sudo cat /etc/sub2api/config.yaml
+sudo cat /etc/aysub/config.yaml
 
 # Check PostgreSQL
 sudo systemctl status postgresql
@@ -593,9 +593,9 @@ sudo systemctl status redis
 
 ## TLS Fingerprint Configuration
 
-Sub2API supports TLS fingerprint simulation to make requests appear as if they come from the official Claude CLI (Node.js client).
+AySub supports TLS fingerprint simulation to make requests appear as if they come from the official Claude CLI (Node.js client).
 
-> **💡 Tip:** Visit **[tls.sub2api.org](https://tls.sub2api.org/)** to get TLS fingerprint information for different devices and browsers.
+> **Tip:** Use your upstream account's TLS fingerprint profile when routing through providers that enforce browser or client fingerprints.
 
 ### Default Behavior
 

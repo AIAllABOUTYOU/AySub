@@ -595,8 +595,8 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 		if got := wxSV(req.SceneInfo.H5Info.Type); got != wxpayH5Type {
 			t.Fatalf("scene_info.h5_info.type = %q, want %q", got, wxpayH5Type)
 		}
-		if got := wxSV(req.SceneInfo.H5Info.AppName); got != "Sub2API" {
-			t.Fatalf("scene_info.h5_info.app_name = %q, want %q", got, "Sub2API")
+		if got := wxSV(req.SceneInfo.H5Info.AppName); got != "AySub" {
+			t.Fatalf("scene_info.h5_info.app_name = %q, want %q", got, "AySub")
 		}
 		if got := wxSV(req.SceneInfo.H5Info.AppUrl); got != "https://app.example.com" {
 			t.Fatalf("scene_info.h5_info.app_url = %q, want %q", got, "https://app.example.com")
@@ -610,7 +610,7 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 		config: map[string]string{
 			"appId":     "wx123",
 			"mchId":     "mch123",
-			"h5AppName": "Sub2API",
+			"h5AppName": "AySub",
 			"h5AppUrl":  "https://app.example.com",
 		},
 		coreClient: &core.Client{},
