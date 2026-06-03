@@ -1,6 +1,22 @@
 # AySub Docker Image
 
-AySub Docker images are built from the current AySub repository source. The default local image tag used by Docker Compose is `aysub:latest`.
+AySub Docker images are built from the current AySub repository source. Local source builds use `aysub:latest`; GitHub Actions publishes prebuilt images to `ghcr.io/aiallaboutyou/aysub`.
+
+## GitHub Actions
+
+The workflow in `.github/workflows/docker.yml` builds and pushes a multi-platform image for `linux/amd64` and `linux/arm64`.
+
+It runs on:
+
+- Pushes to `main`: publishes `ghcr.io/aiallaboutyou/aysub:latest`
+- Tags matching `v*`: publishes the matching version tag
+- Manual `workflow_dispatch`: runs from the GitHub Actions UI
+
+Use a published image:
+
+```bash
+docker pull ghcr.io/aiallaboutyou/aysub:latest
+```
 
 ## Build
 
@@ -17,6 +33,18 @@ Or use the helper script:
 ```
 
 ## Docker Compose
+
+Prebuilt GHCR image deployment:
+
+```bash
+cd deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+docker compose -f docker-compose.image.yml pull
+docker compose -f docker-compose.image.yml up -d
+docker compose -f docker-compose.image.yml logs -f aysub
+```
 
 Recommended local-directory deployment:
 
@@ -53,7 +81,8 @@ docker compose -f docker-compose.standalone.yml logs -f aysub
 
 | Item | Default |
 |------|---------|
-| Image | `aysub:latest` |
+| Local build image | `aysub:latest` |
+| Prebuilt image | `ghcr.io/aiallaboutyou/aysub:latest` |
 | Service | `aysub` |
 | Container | `aysub` |
 | PostgreSQL container | `aysub-postgres` |

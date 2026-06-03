@@ -243,7 +243,7 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 ### Method 2: Docker Compose (Recommended for AySub)
 
-Deploy the current AySub source with Docker Compose, including PostgreSQL and Redis containers. The default compose files build the `aysub:latest` image from this repository.
+Deploy AySub with Docker Compose, including PostgreSQL and Redis containers. You can either use the GitHub-built GHCR image or build `aysub:latest` from this repository.
 
 #### Prerequisites
 
@@ -252,7 +252,29 @@ Deploy the current AySub source with Docker Compose, including PostgreSQL and Re
 
 #### Quick Start (One-Click Deployment)
 
-Build the current repository image locally, then start the compose stack:
+Use the GitHub-built image:
+
+```bash
+# Clone AySub
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+
+# Prepare deployment config
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+
+# Pull the GHCR image and start services
+docker compose -f docker-compose.image.yml pull
+docker compose -f docker-compose.image.yml up -d
+
+# View logs
+docker compose -f docker-compose.image.yml logs -f aysub
+```
+
+GitHub Actions builds `ghcr.io/aiallaboutyou/aysub:latest` on pushes to `main`, version tags matching `v*`, and manual workflow runs. If the package is not publicly pullable after the first publish, set the GitHub Packages visibility to public.
+
+Build the current repository image locally:
 
 ```bash
 # Clone AySub
@@ -343,10 +365,11 @@ docker compose -f docker-compose.local.yml logs -f aysub
 
 | Version | Data Storage | Migration | Best For |
 |---------|-------------|-----------|----------|
+| **docker-compose.image.yml** | Local directories | ✅ Easy (tar entire directory) | Production from GitHub-built images |
 | **docker-compose.local.yml** | Local directories | ✅ Easy (tar entire directory) | Production, frequent backups |
 | **docker-compose.yml** | Named volumes | ⚠️ Requires docker commands | Simple setup |
 
-**Recommendation:** Use `docker-compose.local.yml` (deployed by script) for easier data management.
+**Recommendation:** Use `docker-compose.image.yml` for GitHub-built images, or `docker-compose.local.yml` when building from local source.
 
 #### Access
 
@@ -363,6 +386,10 @@ docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
 # Pull latest AySub source and rebuild/recreate container
 git pull
 docker compose -f docker-compose.local.yml up -d --build
+
+# Or update from the GitHub-built image
+docker compose -f docker-compose.image.yml pull aysub
+docker compose -f docker-compose.image.yml up -d
 ```
 
 #### Easy Migration (Local Directory Version)
@@ -381,7 +408,7 @@ scp aysub-complete.tar.gz user@new-server:/path/
 # On new server
 tar xzf aysub-complete.tar.gz
 cd AySub/deploy/
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 #### Useful Commands

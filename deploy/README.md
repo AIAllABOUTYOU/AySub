@@ -15,6 +15,7 @@ This directory contains files for deploying AySub on Linux servers.
 |------|-------------|
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
+| `docker-compose.image.yml` | Docker Compose configuration using the prebuilt GHCR image |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | AySub Docker documentation |
@@ -28,6 +29,31 @@ This directory contains files for deploying AySub on Linux servers.
 ---
 
 ## Docker Deployment (Recommended)
+
+### GitHub-Built Docker Image
+
+The workflow at `.github/workflows/docker.yml` builds AySub from this repository and publishes a multi-platform image to GitHub Container Registry:
+
+```bash
+ghcr.io/aiallaboutyou/aysub:latest
+```
+
+It runs on pushes to `main`, tags matching `v*`, and manual `workflow_dispatch` runs from the GitHub Actions UI.
+
+Deploy the prebuilt image:
+
+```bash
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+docker compose -f docker-compose.image.yml pull
+docker compose -f docker-compose.image.yml up -d
+docker compose -f docker-compose.image.yml logs -f aysub
+```
+
+If the package is not publicly pullable after the first publish, open the package in GitHub Packages and set its visibility to public.
 
 ### Method 1: One-Click Deployment (Recommended)
 
@@ -97,10 +123,11 @@ docker compose -f docker-compose.local.yml logs -f aysub
 
 | Version | Data Storage | Migration | Best For |
 |---------|-------------|-----------|----------|
+| **docker-compose.image.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production from GitHub-built images |
 | **docker-compose.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production, need frequent backups/migration |
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
-**Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+**Recommendation:** Use `docker-compose.image.yml` when deploying GitHub-built images, or `docker-compose.local.yml` when building from local source.
 
 ### How Auto-Setup Works
 
@@ -176,6 +203,17 @@ docker compose -f docker-compose.local.yml up -d --build
 # Remove all data (caution!)
 docker compose -f docker-compose.local.yml down
 rm -rf data/ postgres_data/ redis_data/
+```
+
+For **prebuilt image version** (docker-compose.image.yml):
+
+```bash
+# Pull latest published image and recreate AySub
+docker compose -f docker-compose.image.yml pull aysub
+docker compose -f docker-compose.image.yml up -d
+
+# View logs
+docker compose -f docker-compose.image.yml logs -f aysub
 ```
 
 For **named volumes version** (docker-compose.yml):

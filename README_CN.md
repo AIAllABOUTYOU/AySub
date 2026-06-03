@@ -244,7 +244,7 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 ### 方式二：Docker Compose（AySub 推荐）
 
-使用 Docker Compose 部署当前 AySub 源码，包含 PostgreSQL 和 Redis 容器。默认 compose 会从本仓库源码构建 `aysub:latest` 镜像。
+使用 Docker Compose 部署 AySub，包含 PostgreSQL 和 Redis 容器。可以直接使用 GitHub 打包好的 GHCR 镜像，也可以从当前仓库源码构建 `aysub:latest`。
 
 #### 前置条件
 
@@ -253,7 +253,29 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 #### 快速开始
 
-从当前仓库构建 AySub 镜像，再启动 compose：
+直接使用 GitHub 打包好的镜像：
+
+```bash
+# 克隆 AySub
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+
+# 准备部署配置
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+
+# 拉取 GHCR 镜像并启动服务
+docker compose -f docker-compose.image.yml pull
+docker compose -f docker-compose.image.yml up -d
+
+# 查看日志
+docker compose -f docker-compose.image.yml logs -f aysub
+```
+
+GitHub Actions 会在推送到 `main`、推送 `v*` 版本标签或手动运行 workflow 时构建 `ghcr.io/aiallaboutyou/aysub:latest`。首次发布后如果外部无法拉取，需要在 GitHub Packages 中把包可见性设为 public。
+
+从当前仓库源码本地构建：
 
 ```bash
 # 克隆 AySub
@@ -344,10 +366,11 @@ docker compose -f docker-compose.local.yml logs -f aysub
 
 | 版本 | 数据存储 | 迁移便利性 | 适用场景 |
 |------|---------|-----------|---------|
+| **docker-compose.image.yml** | 本地目录 | ✅ 简单（打包整个目录） | 使用 GitHub 打包镜像的生产部署 |
 | **docker-compose.local.yml** | 本地目录 | ✅ 简单（打包整个目录） | 生产环境、频繁备份 |
 | **docker-compose.yml** | 命名卷 | ⚠️ 需要 docker 命令 | 简单设置 |
 
-**推荐：** 使用 `docker-compose.local.yml`（脚本部署）以便更轻松地管理数据。
+**推荐：** 使用 GitHub 打包镜像时选 `docker-compose.image.yml`；需要从本地源码构建时选 `docker-compose.local.yml`。
 
 #### 启用“数据管理”功能（datamanagementd）
 
@@ -376,6 +399,10 @@ docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
 # 拉取最新 AySub 源码并重新构建/重建容器
 git pull
 docker compose -f docker-compose.local.yml up -d --build
+
+# 或使用 GitHub 打包镜像更新
+docker compose -f docker-compose.image.yml pull aysub
+docker compose -f docker-compose.image.yml up -d
 ```
 
 #### 轻松迁移（本地目录版）
@@ -394,7 +421,7 @@ scp aysub-complete.tar.gz user@new-server:/path/
 # 新服务器
 tar xzf aysub-complete.tar.gz
 cd AySub/deploy/
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 #### 常用命令

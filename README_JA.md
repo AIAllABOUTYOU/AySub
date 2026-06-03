@@ -244,7 +244,7 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 ### 方法2: Docker Compose（AySub 推奨）
 
-現在の AySub ソースを Docker Compose でデプロイします。PostgreSQL と Redis のコンテナも含まれます。デフォルトの compose はこのリポジトリから `aysub:latest` イメージをビルドします。
+AySub を Docker Compose でデプロイします。PostgreSQL と Redis のコンテナも含まれます。GitHub でビルドされた GHCR イメージを使うことも、このリポジトリから `aysub:latest` をローカルビルドすることもできます。
 
 #### 前提条件
 
@@ -253,7 +253,29 @@ curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install
 
 #### クイックスタート
 
-現在のリポジトリから AySub イメージをビルドし、compose スタックを起動します:
+GitHub でビルドされたイメージを使う場合:
+
+```bash
+# AySub をクローン
+git clone https://github.com/AIAllABOUTYOU/AySub.git
+
+# デプロイ設定を準備
+cd AySub/deploy
+cp .env.example .env
+nano .env
+mkdir -p data postgres_data redis_data
+
+# GHCR イメージを取得してサービスを起動
+docker compose -f docker-compose.image.yml pull
+docker compose -f docker-compose.image.yml up -d
+
+# ログを表示
+docker compose -f docker-compose.image.yml logs -f aysub
+```
+
+GitHub Actions は `main` への push、`v*` タグ、または手動 workflow 実行で `ghcr.io/aiallaboutyou/aysub:latest` をビルドします。初回公開後に外部から pull できない場合は、GitHub Packages で package visibility を public に設定してください。
+
+現在のリポジトリからローカルビルドする場合:
 
 ```bash
 # AySub をクローン
@@ -344,10 +366,11 @@ docker compose -f docker-compose.local.yml logs -f aysub
 
 | バージョン | データストレージ | 移行 | 推奨用途 |
 |---------|-------------|-----------|----------|
+| **docker-compose.image.yml** | ローカルディレクトリ | ✅ 容易（ディレクトリ全体を tar） | GitHub ビルド済みイメージによる本番デプロイ |
 | **docker-compose.local.yml** | ローカルディレクトリ | ✅ 容易（ディレクトリ全体を tar） | 本番環境、頻繁なバックアップ |
 | **docker-compose.yml** | 名前付きボリューム | ⚠️ docker コマンドが必要 | シンプルなセットアップ |
 
-**推奨:** データ管理が容易な `docker-compose.local.yml`（スクリプトによるデプロイ）を使用してください。
+**推奨:** GitHub ビルド済みイメージを使う場合は `docker-compose.image.yml`、ローカルソースからビルドする場合は `docker-compose.local.yml` を使用してください。
 
 #### アクセス
 
@@ -364,6 +387,10 @@ docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
 # 最新の AySub ソースを取得してコンテナを再ビルド/再作成
 git pull
 docker compose -f docker-compose.local.yml up -d --build
+
+# または GitHub ビルド済みイメージで更新
+docker compose -f docker-compose.image.yml pull aysub
+docker compose -f docker-compose.image.yml up -d
 ```
 
 #### 簡単な移行（ローカルディレクトリバージョン）
@@ -382,7 +409,7 @@ scp aysub-complete.tar.gz user@new-server:/path/
 # 移行先サーバーにて
 tar xzf aysub-complete.tar.gz
 cd AySub/deploy/
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
 #### よく使うコマンド
