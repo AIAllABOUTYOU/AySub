@@ -166,6 +166,41 @@
       <div v-else class="text-xs text-gray-400">-</div>
     </template>
 
+    <!-- Grok Cookie accounts: fetch live rate-limits from Grok Web -->
+    <template v-else-if="account.platform === 'xai' && account.type === 'cookie'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+      </div>
+      <div v-else-if="usageInfo?.error" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          {{ usageErrorLabel }}
+        </span>
+      </div>
+      <div v-else-if="error" class="text-xs text-red-500">
+        {{ error }}
+      </div>
+      <div v-else-if="hasGrokQuota" class="space-y-1">
+        <UsageProgressBar
+          v-for="bar in grokUsageBars"
+          :key="bar.key"
+          :label="bar.label"
+          :utilization="bar.utilization"
+          :resets-at="bar.resetsAt"
+          :color="bar.color"
+        />
+      </div>
+      <div v-else class="text-xs text-gray-400">-</div>
+    </template>
+
     <!-- Antigravity OAuth accounts: fetch usage from API -->
     <template v-else-if="account.platform === 'antigravity' && account.type === 'oauth'">
       <!-- 账户类型徽章 -->
@@ -548,6 +583,7 @@ let visibilityObserver: IntersectionObserver | null = null
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini') return true
+  if (props.account.platform === 'xai' && props.account.type === 'cookie') return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -563,6 +599,9 @@ const shouldFetchUsage = computed(() => {
   }
   if (props.account.platform === 'openai') {
     return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'xai') {
+    return props.account.type === 'cookie'
   }
   return false
 })
@@ -585,6 +624,10 @@ const geminiUsageAvailable = computed(() => {
 const hasOpenAIUsageFallback = computed(() => {
   if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return false
   return !!usageInfo.value?.five_hour || !!usageInfo.value?.seven_day
+})
+
+const hasGrokQuota = computed(() => {
+  return usageInfo.value?.grok_quota && Object.keys(usageInfo.value.grok_quota).length > 0
 })
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
@@ -667,6 +710,33 @@ const antigravityClaudeUsageFromAPI = computed(() =>
     'claude-opus-4-7', 'claude-opus-4-8',
   ])
 )
+
+const grokUsageBars = computed(() => {
+  const quota = usageInfo.value?.grok_quota
+  if (!quota) return []
+
+  const modes: Array<{
+    key: string
+    label: string
+    color: 'indigo' | 'emerald' | 'purple' | 'amber'
+  }> = [
+    { key: 'auto', label: 'auto', color: 'indigo' },
+    { key: 'fast', label: 'fast', color: 'emerald' },
+    { key: 'expert', label: 'exp', color: 'purple' },
+    { key: 'heavy', label: 'hvy', color: 'amber' },
+    { key: 'grok-420-computer-use-sa', label: '4.3', color: 'indigo' }
+  ]
+
+  return modes.flatMap((mode) => {
+    const item = quota[mode.key]
+    if (!item) return []
+    return [{
+      ...mode,
+      utilization: item.utilization,
+      resetsAt: item.reset_time || null
+    }]
+  })
+})
 
 const aiCreditsDisplay = computed(() => {
   const credits = usageInfo.value?.ai_credits
@@ -1026,7 +1096,9 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   error.value = null
 
   try {
-    const fetchFn = () => adminAPI.accounts.getUsage(props.account.id, options?.source)
+    const fetchFn = () => options?.source
+      ? adminAPI.accounts.getUsage(props.account.id, options.source)
+      : adminAPI.accounts.getUsage(props.account.id)
     const result = await enqueueUsageRequest(props.account, fetchFn)
     if (!unmounted.value) {
       usageInfo.value = result
@@ -1213,7 +1285,10 @@ watch(openAIUsageRefreshKey, (nextKey, prevKey) => {
   if (!prevKey || nextKey === prevKey) return
   if (props.account.platform !== 'openai' || props.account.type !== 'oauth') return
 
-  requestAutoLoad()
+  _usageCache.delete(props.account.id)
+  loadUsage({ bypassCache: true }).catch((e) => {
+    console.error('Failed to refresh OpenAI usage after account row update:', e)
+  })
 })
 
 watch(

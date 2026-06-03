@@ -28,6 +28,9 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		{"/v1/responses", EndpointResponses},
 		{"/v1/images/generations", EndpointImagesGenerations},
 		{"/v1/images/edits", EndpointImagesEdits},
+		{"/v1/videos", EndpointVideos},
+		{"/v1/livekit/tokens", EndpointLiveKitTokens},
+		{"/v1/livekit/rtc", EndpointLiveKitRTC},
 		{"/v1beta/models", EndpointGeminiModels},
 
 		// Prefixed paths (antigravity, openai).
@@ -36,6 +39,7 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		{"/openai/v1/responses/compact", EndpointResponses},
 		{"/openai/v1/images/generations", EndpointImagesGenerations},
 		{"/openai/v1/images/edits", EndpointImagesEdits},
+		{"/openai/v1/livekit/rtc", EndpointLiveKitRTC},
 		{"/antigravity/v1beta/models/gemini:generateContent", EndpointGeminiModels},
 
 		// Gin route patterns with wildcards.
@@ -81,6 +85,13 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		{"openai embeddings", EndpointEmbeddings, "/v1/embeddings", service.PlatformOpenAI, EndpointEmbeddings},
 		{"openai image generations", EndpointImagesGenerations, "/v1/images/generations", service.PlatformOpenAI, EndpointImagesGenerations},
 		{"openai image edits", EndpointImagesEdits, "/openai/v1/images/edits", service.PlatformOpenAI, EndpointImagesEdits},
+		{"xai from messages", EndpointMessages, "/v1/messages", service.PlatformXAI, EndpointChatCompletions},
+		{"xai responses fallback", EndpointResponses, "/v1/responses", service.PlatformXAI, EndpointChatCompletions},
+		{"xai chat completions", EndpointChatCompletions, "/v1/chat/completions", service.PlatformXAI, EndpointChatCompletions},
+		{"xai embeddings", EndpointEmbeddings, "/v1/embeddings", service.PlatformXAI, EndpointEmbeddings},
+		{"xai videos reverse", EndpointVideos, "/v1/videos", service.PlatformXAI, EndpointChatCompletions},
+		{"xai livekit token reverse", EndpointLiveKitTokens, "/v1/livekit/tokens", service.PlatformXAI, EndpointChatCompletions},
+		{"xai livekit rtc reverse", EndpointLiveKitRTC, "/v1/livekit/rtc", service.PlatformXAI, EndpointChatCompletions},
 
 		// Antigravity — uses inbound to pick Claude vs Gemini upstream.
 		{"antigravity claude", EndpointMessages, "/antigravity/v1/messages", service.PlatformAntigravity, EndpointMessages},

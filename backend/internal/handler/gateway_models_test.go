@@ -84,6 +84,79 @@ func TestGatewayModels_GeminiGroupFallsBackToGeminiModels(t *testing.T) {
 	require.NotContains(t, modelIDsForTest(got.Data), "claude-sonnet-4-6")
 }
 
+func TestGatewayModels_XAIGroupFallsBackToGrokModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(28)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{ID: 1, Platform: service.PlatformXAI},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{ID: groupID, Platform: service.PlatformXAI},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Contains(t, modelIDsForTest(got.Data), "grok-4.20-auto")
+	require.Contains(t, modelIDsForTest(got.Data), "grok-4.3-console")
+	require.Contains(t, modelIDsForTest(got.Data), "grok-build-console")
+	require.Contains(t, modelIDsForTest(got.Data), "grok-imagine-image")
+	require.Contains(t, modelIDsForTest(got.Data), "grok-imagine-video")
+	require.NotContains(t, modelIDsForTest(got.Data), "gpt-5.4")
+}
+
+func TestGatewayModels_XAICustomModelsListUsesGrokFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(29)
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				groupID: {
+					{ID: 1, Platform: service.PlatformXAI},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformXAI,
+			ModelsListConfig: service.GroupModelsListConfig{
+				Enabled: true,
+				Models:  []string{"grok-imagine-video", "gpt-5.4", "grok-4.20-auto"},
+			},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"grok-imagine-video", "grok-4.20-auto"}, modelIDsForTest(got.Data))
+	require.Equal(t, "xai", got.Data[0].OwnedBy)
+}
+
 func TestGatewayModels_GeminiGroupFiltersMappedModelsByPlatform(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

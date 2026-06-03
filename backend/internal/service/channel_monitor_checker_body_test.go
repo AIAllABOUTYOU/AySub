@@ -190,6 +190,48 @@ func TestRunCheckForModel_OpenAI_DefaultChatRequest(t *testing.T) {
 	}
 }
 
+func TestRunCheckForModel_XAI_DefaultChatRequest(t *testing.T) {
+	h := &openAICaptureHandler{}
+	endpoint := setupFakeOpenAI(t, h)
+
+	res := runCheckForModel(context.Background(), MonitorProviderXAI, endpoint, "xai-key", "grok-4", nil)
+
+	if res.Status != MonitorStatusOperational {
+		t.Fatalf("xai chat request should pass challenge, got status=%s message=%q", res.Status, res.Message)
+	}
+	if h.lastPath != providerOpenAIPath {
+		t.Fatalf("expected xai to use chat completions path %q, got %q", providerOpenAIPath, h.lastPath)
+	}
+	if h.lastBody["model"] != "grok-4" {
+		t.Errorf("xai body should contain model=grok-4, got %v", h.lastBody["model"])
+	}
+	if _, ok := h.lastBody["messages"]; !ok {
+		t.Error("xai body should contain chat messages")
+	}
+	if _, ok := h.lastBody["instructions"]; ok {
+		t.Error("xai chat body must not contain responses instructions")
+	}
+	if h.lastHeaders.Get("Authorization") != "Bearer xai-key" {
+		t.Errorf("expected bearer auth header, got %q", h.lastHeaders.Get("Authorization"))
+	}
+}
+
+func TestRunCheckForModel_XAIResponsesRejected(t *testing.T) {
+	h := &openAICaptureHandler{}
+	endpoint := setupFakeOpenAI(t, h)
+
+	res := runCheckForModel(context.Background(), MonitorProviderXAI, endpoint, "xai-key", "grok-4", &CheckOptions{
+		APIMode: MonitorAPIModeResponses,
+	})
+
+	if res.Status != MonitorStatusError {
+		t.Fatalf("xai responses mode should fail locally as error, got status=%s", res.Status)
+	}
+	if h.lastPath != "" {
+		t.Fatalf("xai responses mode should not send upstream request, got path=%q", h.lastPath)
+	}
+}
+
 func TestRunCheckForModel_OpenAIResponses_DefaultRequest(t *testing.T) {
 	h := &openAICaptureHandler{}
 	endpoint := setupFakeOpenAI(t, h)

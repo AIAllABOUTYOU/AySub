@@ -69,6 +69,7 @@ import Icon from '@/components/icons/Icon.vue'
 import {
   PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
+  PROVIDER_XAI,
   PROVIDER_GEMINI,
 } from '@/constants/channelMonitor'
 
@@ -93,6 +94,7 @@ const providerFilterOptions = computed(() => [
   { value: '', label: t('admin.channelMonitor.allProviders') },
   { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
   { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
+  { value: PROVIDER_XAI, label: t('monitorCommon.providers.xai') },
   { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
 ])
 

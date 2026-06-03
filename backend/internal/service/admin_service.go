@@ -1653,6 +1653,19 @@ func defaultModelsListCandidateIDs(platform string) []string {
 	switch platform {
 	case PlatformOpenAI:
 		return openai.DefaultModelIDs()
+	case PlatformXAI:
+		return []string{
+			"grok-4",
+			"grok-4-0709",
+			"grok-3-beta",
+			"grok-3-mini-beta",
+			"grok-3-fast-beta",
+			"grok-2",
+			"grok-2-vision",
+			"grok-2-image",
+			"grok-beta",
+			"grok-vision-beta",
+		}
 	case PlatformGemini:
 		ids := make([]string, 0, len(geminicli.DefaultModels))
 		for _, model := range geminicli.DefaultModels {

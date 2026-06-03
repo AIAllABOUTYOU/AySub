@@ -167,6 +167,34 @@ function buildVertexAccount() {
   } as any
 }
 
+function buildGrokCookieAccount() {
+  return {
+    id: 3,
+    name: 'Grok Cookie',
+    notes: '',
+    platform: 'xai',
+    type: 'cookie',
+    credentials: {
+      base_url: 'https://grok.com',
+      disable_search: true
+    },
+    credentials_status: {
+      has_sso_token: true,
+      has_cf_cookies: true,
+      has_cf_clearance: true
+    },
+    extra: {},
+    proxy_id: null,
+    concurrency: 1,
+    priority: 1,
+    rate_multiplier: 1,
+    status: 'active',
+    group_ids: [],
+    expires_at: null,
+    auto_pause_on_expired: false
+  } as any
+}
+
 function mountModal(account = buildAccount()) {
   return mount(EditAccountModal, {
     props: {
@@ -518,6 +546,53 @@ describe('EditAccountModal', () => {
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).not.toHaveBeenCalled()
+  })
+
+  it('saves Grok Cookie account without resending redacted cookie secrets', async () => {
+    const account = buildGrokCookieAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="edit-grok-base-url"]').setValue('https://grok.example')
+    await wrapper.get('[data-testid="edit-grok-disable-search"]').setValue(false)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toMatchObject({
+      base_url: 'https://grok.example',
+      disable_search: false
+    })
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('sso_token')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('cookie')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('cf_cookies')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('cf_clearance')
+  })
+
+  it('saves new Grok Cookie credentials when admin rotates them', async () => {
+    const account = buildGrokCookieAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="edit-grok-cookie-value"]').setValue('sso=next; sso-rw=next')
+    await wrapper.get('[data-testid="edit-grok-cf-cookies"]').setValue('foo=bar')
+    await wrapper.get('[data-testid="edit-grok-cf-clearance"]').setValue('cf-next')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toMatchObject({
+      cookie: 'sso=next; sso-rw=next',
+      cf_cookies: 'foo=bar',
+      cf_clearance: 'cf-next'
+    })
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('sso_token')
   })
 
   it('allows saving Vertex SA account when backend redacted service_account_json but credentials_status reports it exists', async () => {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -39,9 +40,43 @@ const (
 const (
 	PlatformAnthropic   = domain.PlatformAnthropic
 	PlatformOpenAI      = domain.PlatformOpenAI
+	PlatformXAI         = domain.PlatformXAI
 	PlatformGemini      = domain.PlatformGemini
 	PlatformAntigravity = domain.PlatformAntigravity
 )
+
+// IsOpenAICompatiblePlatform reports whether platform uses OpenAI-compatible
+// request and response shapes for API-key upstreams.
+func IsOpenAICompatiblePlatform(platform string) bool {
+	switch platform {
+	case PlatformOpenAI, PlatformXAI:
+		return true
+	default:
+		return false
+	}
+}
+
+type openAICompatiblePlatformContextKey struct{}
+
+// WithOpenAICompatiblePlatform binds the OpenAI-compatible target platform for
+// request paths that share the OpenAI handler implementation.
+func WithOpenAICompatiblePlatform(ctx context.Context, platform string) context.Context {
+	if !IsOpenAICompatiblePlatform(platform) {
+		platform = PlatformOpenAI
+	}
+	return context.WithValue(ctx, openAICompatiblePlatformContextKey{}, platform)
+}
+
+// OpenAICompatiblePlatformFromContext returns the selected OpenAI-compatible
+// platform, defaulting to OpenAI for existing callers.
+func OpenAICompatiblePlatformFromContext(ctx context.Context) string {
+	if ctx != nil {
+		if platform, ok := ctx.Value(openAICompatiblePlatformContextKey{}).(string); ok && IsOpenAICompatiblePlatform(platform) {
+			return platform
+		}
+	}
+	return PlatformOpenAI
+}
 
 // AllowedQuotaPlatforms 是允许设置 user × platform quota 的平台列表（单一权威来源）。
 // ent/schema/user_platform_quota.go 的 Validate 函数独立维护（构建期约束），
@@ -49,6 +84,7 @@ const (
 var AllowedQuotaPlatforms = []string{
 	PlatformAnthropic,
 	PlatformOpenAI,
+	PlatformXAI,
 	PlatformGemini,
 	PlatformAntigravity,
 }
@@ -68,6 +104,7 @@ const (
 	AccountTypeOAuth          = domain.AccountTypeOAuth          // OAuth类型账号（full scope: profile + inference）
 	AccountTypeSetupToken     = domain.AccountTypeSetupToken     // Setup Token类型账号（inference only scope）
 	AccountTypeAPIKey         = domain.AccountTypeAPIKey         // API Key类型账号
+	AccountTypeCookie         = domain.AccountTypeCookie         // Web Cookie类型账号
 	AccountTypeUpstream       = domain.AccountTypeUpstream       // 上游透传类型账号（通过 Base URL + API Key 连接上游）
 	AccountTypeBedrock        = domain.AccountTypeBedrock        // AWS Bedrock 类型账号（通过 SigV4 签名或 API Key 连接 Bedrock，由 credentials.auth_mode 区分）
 	AccountTypeServiceAccount = domain.AccountTypeServiceAccount // Google Service Account 类型账号（用于 Vertex AI）

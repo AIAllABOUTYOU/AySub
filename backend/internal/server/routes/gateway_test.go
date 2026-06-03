@@ -15,6 +15,10 @@ import (
 )
 
 func newGatewayRoutesTestRouter() *gin.Engine {
+	return newGatewayRoutesTestRouterForPlatform(service.PlatformOpenAI)
+}
+
+func newGatewayRoutesTestRouterForPlatform(platform string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -28,7 +32,7 @@ func newGatewayRoutesTestRouter() *gin.Engine {
 			groupID := int64(1)
 			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
 				GroupID: &groupID,
-				Group:   &service.Group{Platform: service.PlatformOpenAI},
+				Group:   &service.Group{Platform: platform},
 			})
 			c.Next()
 		}),
@@ -75,5 +79,89 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI images handler", path)
+	}
+}
+
+func TestGatewayRoutesOpenAIVideosPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/v1/videos", `{"model":"grok-imagine-video","prompt":"make a video"}`},
+		{http.MethodGet, "/v1/videos/video_test", ``},
+		{http.MethodGet, "/v1/videos/video_test/content", ``},
+		{http.MethodGet, "/v1/files/image?id=0123456789abcdef", ``},
+		{http.MethodGet, "/v1/files/video?id=0123456789abcdef", ``},
+		{http.MethodPost, "/videos", `{"model":"grok-imagine-video","prompt":"make a video"}`},
+		{http.MethodGet, "/videos/video_test", ``},
+		{http.MethodGet, "/videos/video_test/content", ``},
+		{http.MethodGet, "/files/image?id=0123456789abcdef", ``},
+		{http.MethodGet, "/files/video?id=0123456789abcdef", ``},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI videos handler", tc.path)
+	}
+}
+
+func TestGatewayRoutesGrokLiveKitTokenPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
+
+	for _, path := range []string{
+		"/v1/livekit/tokens",
+		"/livekit/tokens",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"voice":"ara"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI LiveKit token handler", path)
+	}
+}
+
+func TestGatewayRoutesGrokLiveKitRTCPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
+
+	for _, path := range []string{
+		"/v1/livekit/rtc?access_token=lk-test",
+		"/livekit/rtc?access_token=lk-test",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI LiveKit RTC handler", path)
+	}
+}
+
+func TestGatewayRoutesXAIUsesOpenAICompatibleHandlers(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
+
+	for _, path := range []string{
+		"/v1/messages",
+		"/v1/responses",
+		"/v1/chat/completions",
+		"/v1/embeddings",
+		"/v1/videos",
+		"/v1/livekit/tokens",
+		"/responses",
+		"/chat/completions",
+		"/embeddings",
+		"/videos",
+		"/livekit/tokens",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"grok-4","input":"hello"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI-compatible handler for xAI", path)
 	}
 }

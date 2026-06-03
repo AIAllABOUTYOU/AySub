@@ -149,6 +149,53 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('25')
   })
 
+  it('Grok Cookie 账号会显示 live rate limit 配额', async () => {
+    getUsage.mockResolvedValue({
+      grok_quota: {
+        auto: {
+          utilization: 20,
+          reset_time: '2026-06-03T12:00:00Z',
+          remaining_queries: 8,
+          total_queries: 10,
+          window_size_seconds: 7200
+        },
+        fast: {
+          utilization: 75,
+          reset_time: '2026-06-03T11:00:00Z',
+          remaining_queries: 5,
+          total_queries: 20,
+          window_size_seconds: 3600
+        }
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 5001,
+          platform: 'xai',
+          type: 'cookie',
+          extra: {}
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(5001)
+    expect(wrapper.text()).toContain('auto|20|2026-06-03T12:00:00Z')
+    expect(wrapper.text()).toContain('fast|75|2026-06-03T11:00:00Z')
+  })
+
 
   it('OpenAI OAuth 快照已过期时首屏会重新请求 usage', async () => {
     getUsage.mockResolvedValue({

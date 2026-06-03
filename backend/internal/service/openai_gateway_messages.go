@@ -33,6 +33,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if account.IsXAICookie() {
+		return s.ForwardGrokAnthropicMessages(ctx, c, account, body, defaultMappedModel)
+	}
+
 	startTime := time.Now()
 
 	// 1. Parse Anthropic request
@@ -110,6 +114,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	if compatReplayGuardEnabled && account.Type != AccountTypeOAuth {
 		appendOpenAICompatClaudeCodeTodoGuard(responsesReq)
+	}
+
+	if account.Type == AccountTypeAPIKey && !shouldUseResponsesAPIForAccount(account) {
+		return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, responsesReq, originalModel, billingModel, upstreamModel, clientStream, startTime)
 	}
 
 	logFields := []zap.Field{

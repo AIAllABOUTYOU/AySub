@@ -103,6 +103,12 @@ type antigravityUsageCache struct {
 	timestamp time.Time
 }
 
+// grokUsageCache 缓存 Grok Web rate-limits 额度数据
+type grokUsageCache struct {
+	usageInfo *UsageInfo
+	timestamp time.Time
+}
+
 const (
 	apiCacheTTL             = 3 * time.Minute
 	apiErrorCacheTTL        = 1 * time.Minute        // 负缓存 TTL：429 等错误缓存 1 分钟
@@ -118,8 +124,10 @@ type UsageCache struct {
 	apiCache          sync.Map           // accountID -> *apiUsageCache
 	windowStatsCache  sync.Map           // accountID -> *windowStatsCache
 	antigravityCache  sync.Map           // accountID -> *antigravityUsageCache
+	grokCache         sync.Map           // accountID -> *grokUsageCache
 	apiFlight         singleflight.Group // 防止同一账号的并发请求击穿缓存（Anthropic）
 	antigravityFlight singleflight.Group // 防止同一 Antigravity 账号的并发请求击穿缓存
+	grokFlight        singleflight.Group // 防止同一 Grok Cookie 账号的并发请求击穿缓存
 	openAIProbeCache  sync.Map           // accountID -> time.Time
 }
 
@@ -157,6 +165,15 @@ type AntigravityModelQuota struct {
 	ResetTime   string `json:"reset_time"`  // 重置时间 ISO8601
 }
 
+// GrokModelQuota Grok Web 单个 mode 的额度信息
+type GrokModelQuota struct {
+	Utilization       int    `json:"utilization"`          // 使用率 0-100
+	ResetTime         string `json:"reset_time,omitempty"` // 估算重置时间 ISO8601
+	RemainingQueries  int    `json:"remaining_queries"`    // 剩余请求数
+	TotalQueries      int    `json:"total_queries"`        // 总请求数
+	WindowSizeSeconds int    `json:"window_size_seconds"`  // 窗口长度（秒）
+}
+
 // AntigravityModelDetail Antigravity 单个模型的详细能力信息
 type AntigravityModelDetail struct {
 	DisplayName        string          `json:"display_name,omitempty"`
@@ -192,6 +209,9 @@ type UsageInfo struct {
 
 	// Antigravity 多模型配额
 	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
+
+	// Grok Web 多 mode 配额
+	GrokQuota map[string]*GrokModelQuota `json:"grok_quota,omitempty"`
 
 	// Antigravity 账号级信息
 	SubscriptionTier    string `json:"subscription_tier,omitempty"`     // 归一化订阅等级: FREE/PRO/ULTRA/UNKNOWN
@@ -305,6 +325,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
 		usage, err := s.getOpenAIUsage(ctx, account, forceProbe)
+		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	if account.IsXAICookie() {
+		usage, err := s.getGrokUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}

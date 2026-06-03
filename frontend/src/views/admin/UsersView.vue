@@ -526,6 +526,10 @@
             <PlatformCostCell :usage="getPlatformUsage(row.id, 'openai')" />
           </template>
 
+          <template #cell-usage_xai="{ row }">
+            <PlatformCostCell :usage="getPlatformUsage(row.id, 'xai')" />
+          </template>
+
           <template #cell-usage_gemini="{ row }">
             <PlatformCostCell :usage="getPlatformUsage(row.id, 'gemini')" />
           </template>
@@ -837,6 +841,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
   { key: 'usage_anthropic', label: t('admin.users.columns.usageAnthropic'), sortable: false },
   { key: 'usage_openai', label: t('admin.users.columns.usageOpenAI'), sortable: false },
+  { key: 'usage_xai', label: t('admin.users.columns.usageXAI'), sortable: false },
   { key: 'usage_gemini', label: t('admin.users.columns.usageGemini'), sortable: false },
   { key: 'usage_antigravity', label: t('admin.users.columns.usageAntigravity'), sortable: false },
   { key: 'concurrency', label: t('admin.users.columns.concurrency'), sortable: true },
@@ -859,7 +864,7 @@ const hiddenColumns = reactive<Set<string>>(new Set())
 // Default hidden columns (columns hidden by default on first load)
 const DEFAULT_HIDDEN_COLUMNS = [
   'notes', 'groups', 'subscriptions', 'usage', 'concurrency',
-  'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity',
+  'usage_anthropic', 'usage_openai', 'usage_xai', 'usage_gemini', 'usage_antigravity',
   'balance_platform_quota'
 ]
 const REMOVED_COLUMNS = new Set(['last_login_at'])
@@ -873,10 +878,11 @@ const HIDDEN_COLUMNS_KEY = 'user-hidden-columns'
 // 并在 VERSION_NEW_HIDDEN_COLUMNS 中登记该版本新增的 key。
 // 这样老用户升级后这些新列会被自动隐藏一次，而不会影响他们对其它老列的偏好。
 const COLUMN_SETTINGS_VERSION_KEY = 'user-column-settings-version'
-const COLUMN_SETTINGS_VERSION = 3
+const COLUMN_SETTINGS_VERSION = 4
 const VERSION_NEW_HIDDEN_COLUMNS: Record<number, string[]> = {
   2: ['usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity'],
-  3: ['balance_platform_quota']
+  3: ['balance_platform_quota'],
+  4: ['usage_xai']
 }
 
 // Load saved column settings
@@ -956,11 +962,12 @@ const isColumnVisible = (key: string) => !hiddenColumns.has(key)
 // 列 key → 平台名（'usage' 主列汇总所有平台时为 null）
 // 显式数组取代 Object.keys()：保证迭代顺序（决定列头排序按钮渲染顺序）
 // 不会因 JS 引擎差异或 USAGE_COLUMN_PLATFORMS 属性顺序调整而静默变化。
-const USAGE_COLUMN_KEYS: readonly string[] = ['usage', 'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity']
+const USAGE_COLUMN_KEYS: readonly string[] = ['usage', 'usage_anthropic', 'usage_openai', 'usage_xai', 'usage_gemini', 'usage_antigravity']
 const USAGE_COLUMN_PLATFORMS: Record<string, string | null> = {
   usage: null,
   usage_anthropic: 'anthropic',
   usage_openai: 'openai',
+  usage_xai: 'xai',
   usage_gemini: 'gemini',
   usage_antigravity: 'antigravity'
 }

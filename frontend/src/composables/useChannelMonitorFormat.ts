@@ -15,6 +15,7 @@ import type { MonitorStatus, Provider } from '@/api/admin/channelMonitor'
 import {
   PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
+  PROVIDER_XAI,
   PROVIDER_GEMINI,
   STATUS_OPERATIONAL,
   STATUS_DEGRADED,
@@ -57,7 +58,7 @@ export function useChannelMonitorFormat() {
   }
 
   function providerLabel(p: Provider | string): string {
-    if (p === PROVIDER_OPENAI || p === PROVIDER_ANTHROPIC || p === PROVIDER_GEMINI) {
+    if (p === PROVIDER_OPENAI || p === PROVIDER_ANTHROPIC || p === PROVIDER_XAI || p === PROVIDER_GEMINI) {
       return t(`monitorCommon.providers.${p}`)
     }
     return p || '-'
@@ -69,6 +70,8 @@ export function useChannelMonitorFormat() {
         return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
       case PROVIDER_ANTHROPIC:
         return 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300'
+      case PROVIDER_XAI:
+        return 'bg-zinc-100 text-zinc-800 dark:bg-zinc-500/15 dark:text-zinc-200'
       case PROVIDER_GEMINI:
         return 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
       default:
@@ -91,6 +94,10 @@ export function useChannelMonitorFormat() {
         return active
           ? 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-400'
           : 'border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-orange-500/50'
+      case PROVIDER_XAI:
+        return active
+          ? 'border-zinc-500 bg-zinc-50 text-zinc-800 dark:bg-zinc-500/15 dark:text-zinc-200 dark:border-zinc-400'
+          : 'border-gray-200 bg-white text-gray-600 hover:border-zinc-400 hover:text-zinc-800 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400 dark:hover:border-zinc-500/50'
       case PROVIDER_GEMINI:
         return active
           ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400'
@@ -164,6 +171,8 @@ export function providerGradient(provider: string): string {
       return 'bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-500/10 dark:to-emerald-500/20'
     case PROVIDER_ANTHROPIC:
       return 'bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-500/10 dark:to-amber-500/20'
+    case PROVIDER_XAI:
+      return 'bg-gradient-to-br from-zinc-50 to-neutral-200 dark:from-zinc-500/10 dark:to-neutral-500/20'
     case PROVIDER_GEMINI:
       return 'bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-sky-500/10 dark:to-indigo-500/20'
     default:

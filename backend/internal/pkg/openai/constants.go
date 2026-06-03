@@ -26,10 +26,56 @@ var DefaultModels = []Model{
 	{ID: "gpt-image-2", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2"},
 }
 
+// XAIDefaultModels is the curated Grok/xAI compatible model list exposed for
+// xAI API-key and Grok Cookie groups.
+var XAIDefaultModels = []Model{
+	{ID: "grok-4.20-0309-non-reasoning", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast"},
+	{ID: "grok-4.20-0309", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Auto"},
+	{ID: "grok-4.20-0309-reasoning", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert"},
+	{ID: "grok-4.20-0309-non-reasoning-super", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast Super"},
+	{ID: "grok-4.20-0309-super", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Auto Super"},
+	{ID: "grok-4.20-0309-reasoning-super", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert Super"},
+	{ID: "grok-4.20-0309-non-reasoning-heavy", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast Heavy"},
+	{ID: "grok-4.20-0309-heavy", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Auto Heavy"},
+	{ID: "grok-4.20-0309-reasoning-heavy", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert Heavy"},
+	{ID: "grok-4.20-multi-agent-0309", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent"},
+	{ID: "grok-4.20-fast", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast"},
+	{ID: "grok-4.20-auto", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Auto"},
+	{ID: "grok-4.20-expert", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert"},
+	{ID: "grok-4.20-heavy", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Heavy"},
+	{ID: "grok-4.3-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Console"},
+	{ID: "grok-4.3-low", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Low"},
+	{ID: "grok-4.3-medium", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Medium"},
+	{ID: "grok-4.3-high", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 High"},
+	{ID: "grok-4.20-0309-reasoning-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Reasoning Console"},
+	{ID: "grok-4.20-0309-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Console"},
+	{ID: "grok-4.20-0309-non-reasoning-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast Console"},
+	{ID: "grok-4.20-multi-agent-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent Console"},
+	{ID: "grok-4.20-multi-agent-low", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent Low"},
+	{ID: "grok-4.20-multi-agent-medium", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent Medium"},
+	{ID: "grok-4.20-multi-agent-high", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent High"},
+	{ID: "grok-4.20-multi-agent-xhigh", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Multi Agent XHigh"},
+	{ID: "grok-build-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Build Console"},
+	{ID: "grok-imagine-image-lite", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Imagine Image Lite"},
+	{ID: "grok-imagine-image", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Imagine Image"},
+	{ID: "grok-imagine-image-pro", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Imagine Image Pro"},
+	{ID: "grok-imagine-image-edit", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Imagine Image Edit"},
+	{ID: "grok-imagine-video", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok Imagine Video"},
+}
+
 // DefaultModelIDs returns the default model ID list
 func DefaultModelIDs() []string {
 	ids := make([]string, len(DefaultModels))
 	for i, m := range DefaultModels {
+		ids[i] = m.ID
+	}
+	return ids
+}
+
+// XAIDefaultModelIDs returns the default Grok/xAI model ID list.
+func XAIDefaultModelIDs() []string {
+	ids := make([]string, len(XAIDefaultModels))
+	for i, m := range XAIDefaultModels {
 		ids[i] = m.ID
 	}
 	return ids

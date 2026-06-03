@@ -551,6 +551,11 @@ func (s *OpenAIGatewayService) ForwardImages(
 		return s.forwardOpenAIImagesAPIKey(ctx, c, account, body, parsed, channelMappedModel)
 	case AccountTypeOAuth:
 		return s.forwardOpenAIImagesOAuth(ctx, c, account, parsed, channelMappedModel)
+	case AccountTypeCookie:
+		if account.IsXAICookie() {
+			return s.ForwardGrokImages(ctx, c, account, parsed, channelMappedModel)
+		}
+		return nil, fmt.Errorf("unsupported cookie account platform: %s", account.Platform)
 	default:
 		return nil, fmt.Errorf("unsupported account type: %s", account.Type)
 	}

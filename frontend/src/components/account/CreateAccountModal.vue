@@ -70,7 +70,7 @@
       <!-- Platform Selection - Segmented Control Style -->
       <div>
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
-        <div class="mt-2 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
+        <div class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 dark:bg-dark-700 sm:grid-cols-5" data-tour="account-form-platform">
           <button
             type="button"
             @click="form.platform = 'anthropic'"
@@ -111,6 +111,19 @@
           </button>
           <button
             type="button"
+            @click="form.platform = 'xai'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'xai'
+                ? 'bg-white text-zinc-700 shadow-sm dark:bg-dark-600 dark:text-zinc-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <Icon name="sparkles" size="sm" />
+            xAI / Grok
+          </button>
+          <button
+            type="button"
             @click="form.platform = 'gemini'"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -146,6 +159,63 @@
           >
             <Icon name="cloud" size="sm" />
             Antigravity
+          </button>
+        </div>
+      </div>
+
+      <!-- Account Type Selection (xAI / Grok) -->
+      <div v-if="form.platform === 'xai'">
+        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
+        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
+          <button
+            type="button"
+            @click="accountCategory = 'apikey'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'apikey'
+                ? 'border-zinc-500 bg-zinc-50 dark:bg-zinc-900/20'
+                : 'border-gray-200 hover:border-zinc-300 dark:border-dark-600 dark:hover:border-zinc-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'apikey'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="key" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">xAI / Grok</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            @click="accountCategory = 'cookie'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'cookie'
+                ? 'border-zinc-500 bg-zinc-50 dark:bg-zinc-900/20'
+                : 'border-gray-200 hover:border-zinc-300 dark:border-dark-600 dark:hover:border-zinc-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'cookie'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="cloud" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.xai.cookieType') }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.xai.cookieDesc') }}</span>
+            </div>
           </button>
         </div>
       </div>
@@ -1008,6 +1078,45 @@
         </div>
       </div>
 
+      <div v-if="form.platform === 'xai' && form.type === 'cookie'" class="space-y-4">
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cookieBaseUrl') }}</label>
+          <input v-model="grokCookieBaseUrl" type="text" class="input" placeholder="https://grok.com" />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.ssoCookie') }}</label>
+          <textarea
+            v-model="grokCookieValue"
+            rows="3"
+            required
+            class="input font-mono"
+            :placeholder="t('admin.accounts.xai.cookiePlaceholder')"
+          ></textarea>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cfCookies') }}</label>
+          <textarea
+            v-model="grokCfCookies"
+            rows="2"
+            class="input font-mono"
+            :placeholder="t('admin.accounts.xai.cfCookiesPlaceholder')"
+          ></textarea>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cfClearance') }}</label>
+          <input
+            v-model="grokCfClearance"
+            type="password"
+            class="input font-mono"
+            :placeholder="t('admin.accounts.xai.optionalPlaceholder')"
+          />
+        </div>
+        <label class="flex items-center gap-2">
+          <input v-model="grokDisableSearch" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.disableSearch') }}</span>
+        </label>
+      </div>
+
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
       <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
         <div>
@@ -1019,6 +1128,8 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'https://api.openai.com'
+                : form.platform === 'xai'
+                  ? 'https://api.x.ai'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : 'https://api.anthropic.com'
@@ -1036,6 +1147,8 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'sk-proj-...'
+                : form.platform === 'xai'
+                  ? 'xai-...'
                 : form.platform === 'gemini'
                   ? 'AIza...'
                   : 'sk-ant-...'
@@ -3279,12 +3392,14 @@ const oauthStepTitle = computed(() => {
 // Platform-specific hints for API Key type
 const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
+  if (form.platform === 'xai') return t('admin.accounts.xai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   return t('admin.accounts.baseUrlHint')
 })
 
 const apiKeyHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
+  if (form.platform === 'xai') return t('admin.accounts.xai.apiKeyHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
   return t('admin.accounts.apiKeyHint')
 })
@@ -3357,10 +3472,15 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
-const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
+const accountCategory = ref<'oauth-based' | 'apikey' | 'cookie' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const grokCookieBaseUrl = ref('https://grok.com')
+const grokCookieValue = ref('')
+const grokCfCookies = ref('')
+const grokCfClearance = ref('')
+const grokDisableSearch = ref(false)
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
@@ -3767,6 +3887,10 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
+    if (form.platform === 'xai') {
+      form.type = category === 'cookie' ? 'cookie' as AccountType : 'apikey'
+      return
+    }
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
@@ -3796,6 +3920,8 @@ watch(
     apiKeyBaseUrl.value =
       (newPlatform === 'openai')
         ? 'https://api.openai.com'
+        : newPlatform === 'xai'
+          ? 'https://api.x.ai'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3816,6 +3942,11 @@ watch(
       antigravityWhitelistModels.value = []
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
+    }
+    if (newPlatform === 'xai') {
+      accountCategory.value = 'apikey'
+      addMethod.value = 'oauth'
+      grokCookieBaseUrl.value = 'https://grok.com'
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -4213,6 +4344,11 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  grokCookieBaseUrl.value = 'https://grok.com'
+  grokCookieValue.value = ''
+  grokCfCookies.value = ''
+  grokCfClearance.value = ''
+  grokDisableSearch.value = false
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -4605,6 +4741,35 @@ const handleSubmit = async () => {
     return
   }
 
+  if (form.platform === 'xai' && form.type === 'cookie') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    const cookieValue = grokCookieValue.value.trim()
+    if (!cookieValue) {
+      appStore.showError(t('admin.accounts.xai.cookieRequired'))
+      return
+    }
+    const credentials: Record<string, unknown> = {
+      base_url: grokCookieBaseUrl.value.trim() || 'https://grok.com',
+      disable_search: grokDisableSearch.value
+    }
+    if (cookieValue.includes('sso=')) {
+      credentials.cookie = cookieValue
+    } else {
+      credentials.sso_token = cookieValue
+    }
+    if (grokCfCookies.value.trim()) {
+      credentials.cf_cookies = grokCfCookies.value.trim()
+    }
+    if (grokCfClearance.value.trim()) {
+      credentials.cf_clearance = grokCfClearance.value.trim()
+    }
+    await createAccountAndFinish('xai', 'cookie' as AccountType, credentials)
+    return
+  }
+
   // For apikey type, create directly
   if (!apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
@@ -4615,6 +4780,8 @@ const handleSubmit = async () => {
   const defaultBaseUrl =
     form.platform === 'openai'
       ? 'https://api.openai.com'
+      : form.platform === 'xai'
+        ? 'https://api.x.ai'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com'

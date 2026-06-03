@@ -110,6 +110,7 @@ import type { APIMode, BodyOverrideMode, Provider } from '@/api/admin/channelMon
 import {
   API_MODE_RESPONSES,
   PROVIDER_OPENAI,
+  PROVIDER_XAI,
 } from '@/constants/channelMonitor'
 
 const props = defineProps<{
@@ -305,11 +306,12 @@ const bodyPlaceholder = computed(() => {
     }
     return '{\n  "model": "gpt-4o-mini",\n  "instructions": "You are a health check endpoint. Reply briefly.",\n  "input": "Reply with exactly: ok",\n  "max_output_tokens": 20,\n  "stream": false\n}'
   }
-  if (props.provider === PROVIDER_OPENAI) {
+  if (props.provider === PROVIDER_OPENAI || props.provider === PROVIDER_XAI) {
     if (props.bodyOverrideMode === 'merge') {
       return '{\n  "max_tokens": 20\n}'
     }
-    return '{\n  "model": "gpt-4o-mini",\n  "messages": [{"role":"user","content":"Reply with exactly: ok"}],\n  "max_tokens": 20,\n  "stream": false\n}'
+    const model = props.provider === PROVIDER_XAI ? 'grok-4' : 'gpt-4o-mini'
+    return `{\n  "model": "${model}",\n  "messages": [{"role":"user","content":"Reply with exactly: ok"}],\n  "max_tokens": 20,\n  "stream": false\n}`
   }
   if (props.bodyOverrideMode === 'merge') {
     return '{\n  "system": "You are Claude Code..."\n}'

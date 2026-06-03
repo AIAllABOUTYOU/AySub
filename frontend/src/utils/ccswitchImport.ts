@@ -1,6 +1,7 @@
 import type { GroupPlatform } from '@/types'
 
 export const OPENAI_CC_SWITCH_CODEX_MODEL = 'gpt-5.4'
+export const XAI_CC_SWITCH_CODEX_MODEL = 'grok-4'
 
 export type CcSwitchClientType = 'claude' | 'gemini'
 
@@ -35,6 +36,12 @@ export function resolveCcSwitchImportConfig(
         app: 'codex',
         endpoint: baseUrl,
         model: OPENAI_CC_SWITCH_CODEX_MODEL
+      }
+    case 'xai':
+      return {
+        app: 'codex',
+        endpoint: baseUrl,
+        model: XAI_CC_SWITCH_CODEX_MODEL
       }
     case 'gemini':
       return {

@@ -206,6 +206,7 @@ import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import {
   PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
+  PROVIDER_XAI,
   PROVIDER_GEMINI,
   API_MODE_CHAT_COMPLETIONS,
   API_MODE_RESPONSES,
@@ -384,6 +385,7 @@ interface ProviderOption {
 const providerOptions = computed<ProviderOption[]>(() => [
   { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
   { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
+  { value: PROVIDER_XAI, label: t('monitorCommon.providers.xai') },
   { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
 ])
 

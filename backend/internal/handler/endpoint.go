@@ -21,6 +21,9 @@ const (
 	EndpointResponses         = "/v1/responses"
 	EndpointImagesGenerations = "/v1/images/generations"
 	EndpointImagesEdits       = "/v1/images/edits"
+	EndpointVideos            = "/v1/videos"
+	EndpointLiveKitTokens     = "/v1/livekit/tokens"
+	EndpointLiveKitRTC        = "/v1/livekit/rtc"
 	EndpointGeminiModels      = "/v1beta/models"
 )
 
@@ -53,6 +56,12 @@ func NormalizeInboundEndpoint(path string) string {
 		return EndpointImagesGenerations
 	case strings.Contains(path, EndpointImagesEdits) || strings.Contains(path, "/images/edits"):
 		return EndpointImagesEdits
+	case strings.Contains(path, EndpointLiveKitTokens) || strings.Contains(path, "/livekit/tokens"):
+		return EndpointLiveKitTokens
+	case strings.Contains(path, EndpointLiveKitRTC) || strings.Contains(path, "/livekit/rtc"):
+		return EndpointLiveKitRTC
+	case strings.Contains(path, EndpointVideos) || strings.Contains(path, "/videos"):
+		return EndpointVideos
 	case strings.Contains(path, EndpointResponses):
 		return EndpointResponses
 	case strings.Contains(path, EndpointGeminiModels):
@@ -87,6 +96,20 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 			return EndpointResponses + suffix
 		}
 		return EndpointResponses
+
+	case service.PlatformXAI:
+		// xAI official API keys use OpenAI-compatible request shapes but do not
+		// support OpenAI's /v1/responses endpoint; service layer converts inbound
+		// /responses and Anthropic-compatible /messages to /v1/chat/completions
+		// for API-key accounts. Grok Cookie accounts are also served by the
+		// reverse adapter, not by xAI /responses.
+		if inbound == EndpointResponses || inbound == EndpointMessages {
+			return EndpointChatCompletions
+		}
+		if inbound == EndpointVideos || inbound == EndpointLiveKitTokens || inbound == EndpointLiveKitRTC {
+			return EndpointChatCompletions
+		}
+		return inbound
 
 	case service.PlatformAnthropic:
 		return EndpointMessages

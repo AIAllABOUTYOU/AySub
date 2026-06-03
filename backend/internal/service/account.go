@@ -71,6 +71,8 @@ type OpenAIEndpointCapability string
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
+	OpenAIEndpointCapabilityVideos          OpenAIEndpointCapability = "videos"
+	OpenAIEndpointCapabilityLiveKit         OpenAIEndpointCapability = "livekit"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -1050,6 +1052,18 @@ func (a *Account) IsOpenAI() bool {
 	return a.Platform == PlatformOpenAI
 }
 
+func (a *Account) IsOpenAICompatible() bool {
+	return a != nil && IsOpenAICompatiblePlatform(a.Platform)
+}
+
+func (a *Account) IsXAI() bool {
+	return a.Platform == PlatformXAI
+}
+
+func (a *Account) IsXAICookie() bool {
+	return a != nil && a.Platform == PlatformXAI && a.Type == AccountTypeCookie
+}
+
 func (a *Account) IsAnthropic() bool {
 	return a.Platform == PlatformAnthropic
 }
@@ -1059,11 +1073,11 @@ func (a *Account) IsOpenAIOAuth() bool {
 }
 
 func (a *Account) IsOpenAIApiKey() bool {
-	return a.IsOpenAI() && a.Type == AccountTypeAPIKey
+	return a.IsOpenAICompatible() && a.Type == AccountTypeAPIKey
 }
 
 func (a *Account) GetOpenAIBaseURL() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAICompatible() {
 		return ""
 	}
 	if a.Type == AccountTypeAPIKey {
@@ -1072,11 +1086,14 @@ func (a *Account) GetOpenAIBaseURL() string {
 			return baseURL
 		}
 	}
+	if a.IsXAI() {
+		return "https://api.x.ai"
+	}
 	return "https://api.openai.com"
 }
 
 func (a *Account) GetOpenAIAccessToken() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAICompatible() {
 		return ""
 	}
 	return a.GetCredential("access_token")
@@ -1104,7 +1121,7 @@ func (a *Account) GetOpenAIApiKey() string {
 }
 
 func (a *Account) GetOpenAIUserAgent() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAICompatible() {
 		return ""
 	}
 	return a.GetCredential("user_agent")
@@ -1138,13 +1155,17 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	if capability == "" {
 		return true
 	}
-	if !a.IsOpenAI() {
+	if !a.IsOpenAICompatible() {
 		return false
 	}
 	switch capability {
 	case OpenAIEndpointCapabilityChatCompletions:
 	case OpenAIEndpointCapabilityEmbeddings:
 		if a.Type != AccountTypeAPIKey {
+			return false
+		}
+	case OpenAIEndpointCapabilityVideos, OpenAIEndpointCapabilityLiveKit:
+		if !a.IsXAICookie() {
 			return false
 		}
 	default:
@@ -1206,12 +1227,12 @@ func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {
 }
 
 func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapability) bool {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAICompatible() {
 		return false
 	}
 	switch capability {
 	case OpenAIImagesCapabilityBasic, OpenAIImagesCapabilityNative:
-		return a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey
+		return a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey || a.IsXAICookie()
 	default:
 		return true
 	}

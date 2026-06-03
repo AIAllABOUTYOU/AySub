@@ -158,3 +158,57 @@ func TestGetGeminiBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestGetOpenAIBaseURL_XAI(t *testing.T) {
+	tests := []struct {
+		name     string
+		account  Account
+		expected string
+	}{
+		{
+			name: "xai apikey without base_url returns official xai url",
+			account: Account{
+				Type:        AccountTypeAPIKey,
+				Platform:    PlatformXAI,
+				Credentials: map[string]any{},
+			},
+			expected: "https://api.x.ai",
+		},
+		{
+			name: "xai apikey custom base_url wins",
+			account: Account{
+				Type:        AccountTypeAPIKey,
+				Platform:    PlatformXAI,
+				Credentials: map[string]any{"base_url": "https://xai-proxy.example.com"},
+			},
+			expected: "https://xai-proxy.example.com",
+		},
+		{
+			name: "openai default remains unchanged",
+			account: Account{
+				Type:        AccountTypeAPIKey,
+				Platform:    PlatformOpenAI,
+				Credentials: map[string]any{},
+			},
+			expected: "https://api.openai.com",
+		},
+		{
+			name: "non compatible platform returns empty",
+			account: Account{
+				Type:        AccountTypeAPIKey,
+				Platform:    PlatformAnthropic,
+				Credentials: map[string]any{},
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.account.GetOpenAIBaseURL()
+			if result != tt.expected {
+				t.Errorf("GetOpenAIBaseURL() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}

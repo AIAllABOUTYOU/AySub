@@ -247,6 +247,7 @@ import { useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
 import {
   PROVIDER_ANTHROPIC,
   PROVIDER_OPENAI,
+  PROVIDER_XAI,
   PROVIDER_GEMINI,
   API_MODE_CHAT_COMPLETIONS,
   API_MODE_RESPONSES,
@@ -266,6 +267,7 @@ const { providerPickerClass } = useChannelMonitorFormat()
 const providerTabs = computed<{ value: Provider; label: string }[]>(() => [
   { value: PROVIDER_ANTHROPIC, label: t('monitorCommon.providers.anthropic') },
   { value: PROVIDER_OPENAI, label: t('monitorCommon.providers.openai') },
+  { value: PROVIDER_XAI, label: t('monitorCommon.providers.xai') },
   { value: PROVIDER_GEMINI, label: t('monitorCommon.providers.gemini') },
 ])
 
@@ -281,6 +283,7 @@ const countByProvider = computed<Record<Provider, number>>(() => {
   const out: Record<Provider, number> = {
     anthropic: 0,
     openai: 0,
+    xai: 0,
     gemini: 0,
   }
   for (const t of templates.value) out[t.provider]++

@@ -507,6 +507,7 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 var platformToLiteLLMProvider = map[string]string{
 	service.PlatformAnthropic:   "anthropic",
 	service.PlatformOpenAI:      "openai",
+	service.PlatformXAI:         "xai",
 	service.PlatformGemini:      "google",
 	service.PlatformAntigravity: "anthropic",
 }

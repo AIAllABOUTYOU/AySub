@@ -442,10 +442,30 @@ func TestAccountSupportsOpenAIImageCapability_OAuthSupportsNative(t *testing.T) 
 	require.True(t, account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityNative))
 }
 
+func TestAccountSupportsOpenAIImageCapability_XAICookieSupportsNative(t *testing.T) {
+	account := &Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+	}
+
+	require.True(t, account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityBasic))
+	require.True(t, account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityNative))
+}
+
 func TestAccountSupportsOpenAIEndpointCapability(t *testing.T) {
 	t.Run("OpenAI APIKey 默认兼容 chat 和 embeddings", func(t *testing.T) {
 		account := &Account{
 			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+		}
+
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityChatCompletions))
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityEmbeddings))
+	})
+
+	t.Run("xAI APIKey 使用 OpenAI-compatible 能力判定", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformXAI,
 			Type:     AccountTypeAPIKey,
 		}
 
@@ -513,6 +533,38 @@ func TestAccountSupportsOpenAIEndpointCapability(t *testing.T) {
 
 		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapability("unknown")))
 	})
+
+	t.Run("xAI Cookie 支持 videos 和 livekit", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformXAI,
+			Type:     AccountTypeCookie,
+		}
+
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityVideos))
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityLiveKit))
+	})
+
+	t.Run("xAI APIKey 不支持 cookie-only videos/livekit", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformXAI,
+			Type:     AccountTypeAPIKey,
+		}
+
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityVideos))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityLiveKit))
+	})
+}
+
+func TestShouldUseResponsesAPIForAccount_XAIAPIKeyDefaultsToChatCompletions(t *testing.T) {
+	require.False(t, shouldUseResponsesAPIForAccount(&Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeAPIKey,
+	}))
+
+	require.True(t, shouldUseResponsesAPIForAccount(&Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+	}))
 }
 
 func TestBuildOpenAIImagesURL_HandlesVersionedBaseURL(t *testing.T) {

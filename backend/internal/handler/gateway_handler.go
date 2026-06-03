@@ -999,7 +999,15 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	}
 
 	// Fallback to default models
-	if platform == service.PlatformOpenAI {
+	if platform == service.PlatformXAI {
+		c.JSON(http.StatusOK, gin.H{
+			"object": "list",
+			"data":   openai.XAIDefaultModels,
+		})
+		return
+	}
+
+	if service.IsOpenAICompatiblePlatform(platform) {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
 			"data":   openai.DefaultModels,
@@ -1038,7 +1046,7 @@ func writeModelsList(c *gin.Context, modelIDs []string) {
 }
 
 func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
-	if platform == service.PlatformOpenAI {
+	if service.IsOpenAICompatiblePlatform(platform) {
 		writeOpenAIModelsList(c, modelIDs)
 		return
 	}
@@ -1046,8 +1054,11 @@ func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
 }
 
 func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
-	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
+	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels)+len(openai.XAIDefaultModels))
 	for _, model := range openai.DefaultModels {
+		defaultsByID[model.ID] = model
+	}
+	for _, model := range openai.XAIDefaultModels {
 		defaultsByID[model.ID] = model
 	}
 
@@ -1127,6 +1138,8 @@ func defaultModelIDsForPlatform(platform string) []string {
 	switch platform {
 	case service.PlatformOpenAI:
 		return openai.DefaultModelIDs()
+	case service.PlatformXAI:
+		return openai.XAIDefaultModelIDs()
 	case service.PlatformGemini:
 		ids := make([]string, 0, len(geminicli.DefaultModels))
 		for _, model := range geminicli.DefaultModels {

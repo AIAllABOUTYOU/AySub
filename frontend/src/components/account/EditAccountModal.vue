@@ -37,6 +37,8 @@
             :placeholder="
               account.platform === 'openai'
                 ? 'https://api.openai.com'
+                : account.platform === 'xai'
+                  ? 'https://api.x.ai'
                 : account.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : account.platform === 'antigravity'
@@ -59,6 +61,8 @@
             :placeholder="
               account.platform === 'openai'
                 ? 'sk-proj-...'
+                : account.platform === 'xai'
+                  ? 'xai-...'
                 : account.platform === 'gemini'
                   ? 'AIza...'
                   : account.platform === 'antigravity'
@@ -417,6 +421,64 @@
           </div>
         </div>
 
+      </div>
+
+      <div v-if="account.platform === 'xai' && account.type === 'cookie'" class="space-y-4">
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cookieBaseUrl') }}</label>
+          <input
+            v-model="editGrokCookieBaseUrl"
+            type="text"
+            class="input"
+            placeholder="https://grok.com"
+            data-testid="edit-grok-base-url"
+          />
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.ssoCookie') }}</label>
+          <textarea
+            v-model="editGrokCookieValue"
+            rows="3"
+            class="input font-mono"
+            autocomplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
+            data-testid="edit-grok-cookie-value"
+            :placeholder="t('admin.accounts.xai.keepExistingCookie')"
+          ></textarea>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cfCookies') }}</label>
+          <textarea
+            v-model="editGrokCfCookies"
+            rows="2"
+            class="input font-mono"
+            autocomplete="new-password"
+            data-testid="edit-grok-cf-cookies"
+            :placeholder="t('admin.accounts.xai.keepExistingCfCookies')"
+          ></textarea>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.xai.cfClearance') }}</label>
+          <input
+            v-model="editGrokCfClearance"
+            type="password"
+            class="input font-mono"
+            autocomplete="new-password"
+            data-testid="edit-grok-cf-clearance"
+            :placeholder="t('admin.accounts.xai.keepExistingValue')"
+          />
+        </div>
+        <label class="flex items-center gap-2">
+          <input
+            v-model="editGrokDisableSearch"
+            type="checkbox"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            data-testid="edit-grok-disable-search"
+          />
+          <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.disableSearch') }}</span>
+        </label>
       </div>
 
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
@@ -2440,6 +2502,7 @@ const authStore = useAuthStore()
 const baseUrlHint = computed(() => {
   if (!props.account) return t('admin.accounts.baseUrlHint')
   if (props.account.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
+  if (props.account.platform === 'xai') return t('admin.accounts.xai.baseUrlHint')
   if (props.account.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
   return t('admin.accounts.baseUrlHint')
 })
@@ -2464,6 +2527,11 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const editGrokCookieBaseUrl = ref('https://grok.com')
+const editGrokCookieValue = ref('')
+const editGrokCfCookies = ref('')
+const editGrokCfClearance = ref('')
+const editGrokDisableSearch = ref(false)
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -2841,6 +2909,7 @@ const tempUnschedPresets = computed(() => [
 // Computed: default base URL based on platform
 const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
+  if (props.account?.platform === 'xai') return 'https://api.x.ai'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
   return 'https://api.anthropic.com'
 })
@@ -3095,6 +3164,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
+        : newAccount.platform === 'xai'
+          ? 'https://api.x.ai'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3118,6 +3189,13 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     } else {
       selectedErrorCodes.value = []
     }
+  } else if (newAccount.platform === 'xai' && newAccount.type === 'cookie' && newAccount.credentials) {
+    const credentials = newAccount.credentials as Record<string, unknown>
+    editGrokCookieBaseUrl.value = (credentials.base_url as string) || 'https://grok.com'
+    editGrokDisableSearch.value = credentials.disable_search === true
+    editGrokCookieValue.value = ''
+    editGrokCfCookies.value = ''
+    editGrokCfClearance.value = ''
   } else if (newAccount.type === 'bedrock' && newAccount.credentials) {
     const bedrockCreds = newAccount.credentials as Record<string, unknown>
     const authMode = (bedrockCreds.auth_mode as string) || 'sigv4'
@@ -3163,6 +3241,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
+        : newAccount.platform === 'xai'
+          ? 'https://api.x.ai'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3759,6 +3839,38 @@ const handleSubmit = async () => {
         return
       }
 
+      updatePayload.credentials = newCredentials
+    } else if (props.account.platform === 'xai' && props.account.type === 'cookie') {
+      const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
+      const newCredentials: Record<string, unknown> = {
+        ...currentCredentials,
+        base_url: editGrokCookieBaseUrl.value.trim() || 'https://grok.com',
+        disable_search: editGrokDisableSearch.value
+      }
+      const hasExistingCookie =
+        props.account.credentials_status?.has_cookie ||
+        props.account.credentials_status?.has_sso_token ||
+        props.account.credentials_status?.has_sso ||
+        Boolean(currentCredentials.cookie || currentCredentials.sso_token || currentCredentials.sso)
+      const cookieValue = editGrokCookieValue.value.trim()
+      if (cookieValue) {
+        if (cookieValue.includes('sso=')) {
+          newCredentials.cookie = cookieValue
+          delete newCredentials.sso_token
+        } else {
+          newCredentials.sso_token = cookieValue
+          delete newCredentials.cookie
+        }
+      } else if (!hasExistingCookie) {
+        appStore.showError(t('admin.accounts.xai.cookieRequired'))
+        return
+      }
+      if (editGrokCfCookies.value.trim()) {
+        newCredentials.cf_cookies = editGrokCfCookies.value.trim()
+      }
+      if (editGrokCfClearance.value.trim()) {
+        newCredentials.cf_clearance = editGrokCfClearance.value.trim()
+      }
       updatePayload.credentials = newCredentials
     } else if (props.account.type === 'upstream') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
