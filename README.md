@@ -658,8 +658,6 @@ AySub/
 
 This project is licensed under the [GNU Lesser General Public License v3.0](LICENSE) (or later).
 
-Copyright (c) 2026 Wesley Liddick
-
 ---
 
 <div align="center">
