@@ -39,7 +39,16 @@ The workflow at `.github/workflows/docker.yml` builds AySub from this repository
 ghcr.io/aiallaboutyou/aysub:latest
 ```
 
-It runs on pushes to `main`, tags matching `v*`, and manual `workflow_dispatch` runs from the GitHub Actions UI.
+It runs on pushes to `main`, tags matching `v*`, and manual Docker workflow runs from the GitHub Actions UI.
+
+GitHub Releases are created by `.github/workflows/release.yml`, not by every commit. A Release is created when a `v*` tag is pushed, or when the `Release` workflow is run manually with an existing `v*` tag. The Release uploads binary archives named `aysub_<version>_<os>_<arch>.tar.gz` and `checksums.txt`; `deploy/install.sh` and the in-app update check use those assets.
+
+Create a Release:
+
+```bash
+git tag -a v0.1.134 -m "AySub v0.1.134"
+git push origin v0.1.134
+```
 
 Deploy the prebuilt image:
 

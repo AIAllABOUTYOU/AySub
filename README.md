@@ -127,13 +127,25 @@ GitHub Actions publishes the image to:
 ghcr.io/aiallaboutyou/aysub:latest
 ```
 
-Build trigger:
+Docker image trigger:
 
-- push to `main`
-- `v*` tags
-- manual workflow dispatch
+- push to `main`: publishes `ghcr.io/aiallaboutyou/aysub:latest`
+- `v*` tags: publishes the matching GHCR version tag
+- manual Docker workflow dispatch
 
 The workflow uses the root [`Dockerfile`](Dockerfile). Compose files in `deploy/` also build from the repository root Dockerfile.
+
+GitHub Release trigger:
+
+- push a version tag such as `v0.1.134`
+- or run the `Release` workflow manually with an existing `v*` tag
+
+Normal commits to `main` do not create GitHub Releases. A Release uploads `aysub_<version>_<os>_<arch>.tar.gz` binaries and `checksums.txt`, which are used by the binary installer and the in-app update check.
+
+```bash
+git tag -a v0.1.134 -m "AySub v0.1.134"
+git push origin v0.1.134
+```
 
 Use the prebuilt image:
 

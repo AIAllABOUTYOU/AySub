@@ -127,13 +127,25 @@ GitHub Actions は以下の image を公開します:
 ghcr.io/aiallaboutyou/aysub:latest
 ```
 
-トリガー:
+Docker image のトリガー:
 
-- `main` への push
-- `v*` tag
-- 手動 workflow dispatch
+- `main` への push: `ghcr.io/aiallaboutyou/aysub:latest` を公開
+- `v*` tag: 対応する GHCR version tag を公開
+- Docker workflow の手動実行
 
 workflow はルートの [`Dockerfile`](Dockerfile) を使用します。`deploy/` の compose ファイルもリポジトリルートの Dockerfile からビルドします。
+
+GitHub Release のトリガー:
+
+- `v0.1.134` のような version tag を push
+- または既存の `v*` tag を指定して `Release` workflow を手動実行
+
+通常の `main` への commit では GitHub Release は作成されません。Release には `aysub_<version>_<os>_<arch>.tar.gz` binary と `checksums.txt` がアップロードされ、binary installer とアプリ内 update check が使用します。
+
+```bash
+git tag -a v0.1.134 -m "AySub v0.1.134"
+git push origin v0.1.134
+```
 
 GHCR image を使う場合:
 

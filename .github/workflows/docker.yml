@@ -44,6 +44,18 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=sha-
 
+      - name: Resolve build version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "${GITHUB_OUTPUT}"
+          else
+            version="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+            echo "value=${version}" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -54,4 +66,5 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            VERSION=${{ steps.version.outputs.value }}
             COMMIT=${{ github.sha }}

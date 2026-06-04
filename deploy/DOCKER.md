@@ -6,11 +6,22 @@ AySub Docker images are built from the current AySub repository source. Local so
 
 The workflow in `.github/workflows/docker.yml` builds and pushes a multi-platform image for `linux/amd64` and `linux/arm64`.
 
-It runs on:
+Docker image publishing runs on:
 
 - Pushes to `main`: publishes `ghcr.io/aiallaboutyou/aysub:latest`
 - Tags matching `v*`: publishes the matching version tag
-- Manual `workflow_dispatch`: runs from the GitHub Actions UI
+- Manual Docker `workflow_dispatch`: runs from the GitHub Actions UI
+
+GitHub Releases are handled by `.github/workflows/release.yml`. A Release is created only when a `v*` tag is pushed, or when the `Release` workflow is run manually with an existing `v*` tag. Normal commits to `main` do not create GitHub Releases.
+
+Create a release tag:
+
+```bash
+git tag -a v0.1.134 -m "AySub v0.1.134"
+git push origin v0.1.134
+```
+
+The Release workflow uploads binary archives named `aysub_<version>_<os>_<arch>.tar.gz` plus `checksums.txt`. Those assets are used by `deploy/install.sh` and the in-app update check. Docker images are still published by the Docker workflow.
 
 Use a published image:
 

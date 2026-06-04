@@ -12,8 +12,8 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 
 FROM ${ALPINE_IMAGE}
 
-LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
-LABEL description="AySub - AI API Gateway Platform"
+LABEL maintainer="aiaay.com"
+LABEL description="AySub - All Your AI Sub Hub"
 LABEL org.opencontainers.image.source="https://github.com/AIAllABOUTYOU/AySub"
 
 # Install runtime dependencies

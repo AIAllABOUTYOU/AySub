@@ -127,13 +127,25 @@ GitHub Actions 发布镜像到：
 ghcr.io/aiallaboutyou/aysub:latest
 ```
 
-触发条件：
+Docker 镜像触发条件：
 
-- 推送到 `main`
-- 推送 `v*` 标签
-- 手动运行 workflow
+- 推送到 `main`：发布 `ghcr.io/aiallaboutyou/aysub:latest`
+- 推送 `v*` 标签：发布对应的 GHCR 版本标签
+- 手动运行 Docker workflow
 
 workflow 使用根目录 [`Dockerfile`](Dockerfile)。`deploy/` 下的 compose 文件也从仓库根目录 Dockerfile 构建。
+
+GitHub Release 触发条件：
+
+- 推送 `v0.1.134` 这类版本标签
+- 或手动运行 `Release` workflow，并填写一个已存在的 `v*` 标签
+
+普通提交到 `main` 不会创建 GitHub Release。Release 会上传 `aysub_<version>_<os>_<arch>.tar.gz` 二进制包和 `checksums.txt`，供二进制安装脚本和应用内检查更新使用。
+
+```bash
+git tag -a v0.1.134 -m "AySub v0.1.134"
+git push origin v0.1.134
+```
 
 使用 GHCR 镜像：
 
