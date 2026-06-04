@@ -17,6 +17,7 @@ This directory contains files for deploying AySub on Linux servers.
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
 | `docker-compose.image.yml` | Docker Compose configuration using the prebuilt GHCR image |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
+| `update-from-github.sh` | Fixed-directory GitHub source update script for Docker deployments |
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | AySub Docker documentation |
 | `install.sh` | One-click binary installation script |
@@ -128,6 +129,22 @@ docker compose -f docker-compose.local.yml logs -f aysub
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
 **Recommendation:** Use `docker-compose.image.yml` when deploying GitHub-built images, or `docker-compose.local.yml` when building from local source.
+
+### Fixed-Directory Updates from GitHub
+
+For source-built Docker deployments, keep one stable deployment root and update it from GitHub:
+
+```bash
+# First-time switch from an existing deploy directory:
+sudo ./deploy/update-from-github.sh \
+  --root /opt/AySub-current \
+  --data-source /opt/AySub/deploy
+
+# Later updates:
+sudo /opt/AySub-current/deploy/update-from-github.sh
+```
+
+The script pulls `main`, builds `aysub:latest`, recreates the Compose services, waits for health, and smoke-tests the main public pages. It reuses the existing `.env`, `data`, `postgres_data`, and `redis_data` directories. It stops on tracked local code changes unless `--force` is provided.
 
 ### How Auto-Setup Works
 

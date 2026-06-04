@@ -57,6 +57,20 @@ docker compose -f docker-compose.local.yml up -d --build
 docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
+Fixed-directory GitHub source updates:
+
+```bash
+# First-time setup on a server that already has deploy/.env and data directories:
+sudo ./deploy/update-from-github.sh \
+  --root /opt/AySub-current \
+  --data-source /opt/AySub/deploy
+
+# Later updates:
+sudo /opt/AySub-current/deploy/update-from-github.sh
+```
+
+The script pulls `main` from GitHub, builds `aysub:latest`, recreates the Compose services, waits for container health, and smoke-tests `/health`, `/status`, `/models`, and `/playground`. It keeps `.env`, `data`, `postgres_data`, and `redis_data` in place. If the fixed deployment directory has tracked local code changes, the script stops unless `--force` is passed.
+
 Named-volume deployment:
 
 ```bash
