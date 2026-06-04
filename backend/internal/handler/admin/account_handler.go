@@ -2003,6 +2003,38 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	// Handle xAI/Grok accounts
+	if account.IsXAI() {
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			response.Success(c, openai.XAIDefaultModels)
+			return
+		}
+
+		var models []openai.Model
+		for requestedModel := range mapping {
+			var found bool
+			for _, dm := range openai.XAIDefaultModels {
+				if dm.ID == requestedModel {
+					models = append(models, dm)
+					found = true
+					break
+				}
+			}
+			if !found {
+				models = append(models, openai.Model{
+					ID:          requestedModel,
+					Object:      "model",
+					OwnedBy:     "xai",
+					Type:        "model",
+					DisplayName: requestedModel,
+				})
+			}
+		}
+		response.Success(c, models)
+		return
+	}
+
 	// Handle Gemini accounts
 	if account.IsGemini() {
 		// For OAuth accounts: return default Gemini models

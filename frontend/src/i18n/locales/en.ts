@@ -1395,6 +1395,14 @@ export default {
       empty: 'Send a message to start',
       placeholder: 'Enter a message for the model...'
     },
+    sessions: {
+      title: 'Sessions',
+      new: 'New chat',
+      empty: 'No chat sessions yet',
+      untitled: 'Untitled session',
+      delete: 'Delete session',
+      noKey: 'No key recorded'
+    },
     image: {
       empty: 'Generated images will appear here',
       placeholder: 'Describe the image you want to generate...'
@@ -6059,7 +6067,7 @@ export default {
         emailSuffixWhitelistInputHint: 'Leave empty for no restriction. Use *.edu.cn to match edu.cn and its subdomains.',
         emailAliasRestriction: 'Block Email Aliases',
         emailAliasRestrictionHint:
-          'Reject plus aliases such as user+tag@example.com and Gmail/Googlemail dot aliases.',
+          "Reject plus aliases such as user+tag{'@'}example.com and Gmail/Googlemail dot aliases.",
         emailDomainBlacklist: 'Email Domain Blacklist',
         emailDomainBlacklistHint:
           "Blacklist wins over whitelist. Supports {'@'}disposable.com and *.disposable.com.",

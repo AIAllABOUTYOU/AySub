@@ -60,6 +60,7 @@ type Handlers struct {
 	PublicStatus     *PublicStatusHandler
 	Checkin          *CheckinHandler
 	UserSecurity     *UserSecurityHandler
+	Playground       *PlaygroundSessionHandler
 }
 
 // BuildInfo contains build-time information

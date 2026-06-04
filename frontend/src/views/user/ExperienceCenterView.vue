@@ -186,6 +186,68 @@
           <div class="rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">
             {{ t('experienceCenter.controls.keyHint') }}
           </div>
+
+          <div v-if="activeTab === 'chat'" class="flex min-h-0 flex-1 flex-col border-t border-gray-100 pt-4 dark:border-dark-700">
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
+                {{ t('experienceCenter.sessions.title') }}
+              </h2>
+              <button type="button" class="btn btn-secondary btn-sm" @click="startNewChat">
+                <Icon name="plus" size="sm" />
+                {{ t('experienceCenter.sessions.new') }}
+              </button>
+            </div>
+            <div
+              v-if="sessionsLoading"
+              class="rounded-lg border border-gray-200 p-3 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+            >
+              {{ t('common.loading') }}
+            </div>
+            <div
+              v-else-if="chatSessions.length === 0"
+              class="rounded-lg border border-dashed border-gray-200 p-3 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+            >
+              {{ t('experienceCenter.sessions.empty') }}
+            </div>
+            <div v-else class="min-h-0 space-y-2 overflow-y-auto pr-1">
+              <button
+                v-for="session in chatSessions"
+                :key="session.id"
+                type="button"
+                class="group w-full rounded-lg border p-3 text-left transition-colors"
+                :class="
+                  currentSessionId === session.id
+                    ? 'border-primary-300 bg-primary-50 dark:border-primary-800 dark:bg-primary-900/20'
+                    : 'border-gray-200 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700/50'
+                "
+                @click="selectSession(session.id)"
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="truncate text-sm font-medium text-gray-900 dark:text-white">
+                      {{ session.title || t('experienceCenter.sessions.untitled') }}
+                    </div>
+                    <div class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                      {{ session.model || t('experienceCenter.controls.selectModel') }}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded-md p-1 text-gray-400 opacity-100 transition-colors hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                    :title="t('experienceCenter.sessions.delete')"
+                    :disabled="deletingSessionId === session.id"
+                    @click.stop="removeSession(session.id)"
+                  >
+                    <Icon name="trash" size="sm" />
+                  </button>
+                </div>
+                <div class="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span class="truncate">{{ session.api_key_name || t('experienceCenter.sessions.noKey') }}</span>
+                  <span>{{ formatSessionTime(session.updated_at) }}</span>
+                </div>
+              </button>
+            </div>
+          </div>
         </aside>
 
         <main class="card overflow-hidden lg:min-h-0">
@@ -223,8 +285,8 @@
                 :placeholder="t('experienceCenter.chat.placeholder')"
               />
               <div class="mt-3 flex justify-end gap-2">
-                <button type="button" class="btn btn-secondary" @click="messages = []">
-                  {{ t('experienceCenter.actions.clear') }}
+                <button type="button" class="btn btn-secondary" @click="clearCurrentChat">
+                  {{ currentSessionId ? t('experienceCenter.sessions.new') : t('experienceCenter.actions.clear') }}
                 </button>
                 <button type="submit" class="btn btn-primary" :disabled="submitting">
                   <Icon name="chat" size="sm" />
@@ -393,17 +455,24 @@ import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
 import userChannelsAPI, { type UserAvailableChannel } from '@/api/channels'
 import {
+  appendPlaygroundMessage,
+  createPlaygroundSession,
   createChatCompletion,
   createAudioSpeech,
   createAudioTranscription,
   createAudioTranslation,
   createImageGeneration,
   createVideoJob,
+  deletePlaygroundSession,
+  getPlaygroundSession,
   getVideoContentObjectUrl,
   getVideoJob,
+  listPlaygroundSessions,
   resolveGatewayBaseUrl,
   type ChatMessage,
   type GeneratedImage,
+  type PlaygroundSession,
+  type PlaygroundSessionPayload,
   type VideoJob,
 } from '@/api/playground'
 import { useAppStore } from '@/stores/app'
@@ -428,6 +497,8 @@ const apiKeys = ref<ApiKey[]>([])
 const channels = ref<UserAvailableChannel[]>([])
 const loading = ref(false)
 const submitting = ref(false)
+const sessionsLoading = ref(false)
+const deletingSessionId = ref<number | null>(null)
 const selectedKeyId = ref(0)
 const selectedModel = ref('')
 const baseUrl = ref('')
@@ -436,6 +507,8 @@ const imageSize = ref('1024x1024')
 const chatInput = ref('')
 const imagePrompt = ref('')
 const messages = ref<ChatMessage[]>([])
+const chatSessions = ref<PlaygroundSession[]>([])
+const currentSessionId = ref<number | null>(null)
 const generatedImages = ref<GeneratedImage[]>([])
 const videoSeconds = ref(6)
 const videoSize = ref('720x1280')
@@ -509,13 +582,15 @@ const videoErrorMessage = computed(() => {
 async function loadData() {
   loading.value = true
   try {
-    const [keys, availableChannels, settings] = await Promise.all([
+    const [keys, availableChannels, settings, sessions] = await Promise.all([
       keysAPI.list(1, 100, { status: 'active' }),
       userChannelsAPI.getAvailable(),
       appStore.fetchPublicSettings(),
+      listPlaygroundSessions(1, 30),
     ])
     apiKeys.value = keys.items
     channels.value = availableChannels
+    chatSessions.value = sessions.items.filter((session) => session.mode === 'chat')
     baseUrl.value = resolveGatewayBaseUrl(settings?.api_base_url || appStore.apiBaseUrl)
     if (!selectedKeyId.value && activeKeys.value.length > 0) {
       selectedKeyId.value = activeKeys.value[0].id
@@ -525,6 +600,18 @@ async function loadData() {
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadSessions() {
+  sessionsLoading.value = true
+  try {
+    const result = await listPlaygroundSessions(1, 30)
+    chatSessions.value = result.items.filter((session) => session.mode === 'chat')
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+  } finally {
+    sessionsLoading.value = false
   }
 }
 
@@ -538,6 +625,96 @@ function validateRunnable(): string | null {
   if (!selectedKey.value) return t('experienceCenter.errors.selectKey')
   if (!selectedModel.value) return t('experienceCenter.errors.selectModel')
   return null
+}
+
+function makeChatTitle(prompt: string): string {
+  const compact = prompt.replace(/\s+/g, ' ').trim()
+  return compact.length > 36 ? `${compact.slice(0, 36)}...` : compact || t('experienceCenter.sessions.untitled')
+}
+
+function buildSessionPayload(title: string): PlaygroundSessionPayload {
+  return {
+    api_key_id: selectedKeyId.value || null,
+    title,
+    mode: 'chat',
+    model: selectedModel.value,
+    metadata: {
+      temperature: temperature.value,
+    },
+  }
+}
+
+function applySession(session: PlaygroundSession) {
+  currentSessionId.value = session.id
+  if (session.api_key_id && activeKeys.value.some((key) => key.id === session.api_key_id)) {
+    selectedKeyId.value = session.api_key_id
+  }
+  if (session.model && filteredModels.value.includes(session.model)) {
+    selectedModel.value = session.model
+  }
+  const metadata = session.metadata || {}
+  const maybeTemperature = metadata.temperature
+  if (typeof maybeTemperature === 'number' && Number.isFinite(maybeTemperature)) {
+    temperature.value = Math.max(0, Math.min(2, maybeTemperature))
+  }
+  messages.value = (session.messages || [])
+    .filter((message) => message.role === 'system' || message.role === 'user' || message.role === 'assistant')
+    .map((message) => ({ role: message.role, content: message.content }))
+}
+
+async function ensureCurrentSession(prompt: string): Promise<number> {
+  if (currentSessionId.value) return currentSessionId.value
+
+  const session = await createPlaygroundSession(buildSessionPayload(makeChatTitle(prompt)))
+  currentSessionId.value = session.id
+  chatSessions.value = [session, ...chatSessions.value.filter((item) => item.id !== session.id)]
+  return session.id
+}
+
+async function selectSession(sessionID: number) {
+  if (submitting.value || currentSessionId.value === sessionID) return
+  try {
+    const session = await getPlaygroundSession(sessionID)
+    applySession(session)
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+  }
+}
+
+function startNewChat() {
+  currentSessionId.value = null
+  messages.value = []
+  chatInput.value = ''
+}
+
+async function clearCurrentChat() {
+  startNewChat()
+}
+
+async function removeSession(sessionID: number) {
+  deletingSessionId.value = sessionID
+  try {
+    await deletePlaygroundSession(sessionID)
+    chatSessions.value = chatSessions.value.filter((session) => session.id !== sessionID)
+    if (currentSessionId.value === sessionID) {
+      startNewChat()
+    }
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('common.error')))
+  } finally {
+    deletingSessionId.value = null
+  }
+}
+
+function formatSessionTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
 async function sendChat() {
@@ -557,6 +734,8 @@ async function sendChat() {
   chatInput.value = ''
   submitting.value = true
   try {
+    const sessionID = await ensureCurrentSession(prompt)
+    await appendPlaygroundMessage(sessionID, userMessage)
     const reply = await createChatCompletion({
       baseUrl: baseUrl.value,
       apiKey: selectedKey.value!.key,
@@ -564,7 +743,10 @@ async function sendChat() {
       temperature: temperature.value,
       messages: messages.value,
     })
-    messages.value.push({ role: 'assistant', content: reply })
+    const assistantMessage: ChatMessage = { role: 'assistant', content: reply }
+    messages.value.push(assistantMessage)
+    await appendPlaygroundMessage(sessionID, assistantMessage)
+    await loadSessions()
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {

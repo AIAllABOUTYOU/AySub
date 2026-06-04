@@ -1398,6 +1398,14 @@ export default {
       empty: '发送一条消息开始体验',
       placeholder: '输入要发送给模型的内容...'
     },
+    sessions: {
+      title: '会话记录',
+      new: '新会话',
+      empty: '暂无聊天会话',
+      untitled: '未命名会话',
+      delete: '删除会话',
+      noKey: '未记录密钥'
+    },
     image: {
       empty: '生成结果会显示在这里',
       placeholder: '描述你想生成的图片...'
@@ -6218,7 +6226,7 @@ export default {
         emailSuffixWhitelistInputHint: '留空则不限制。使用 *.edu.cn 可匹配 edu.cn 及其子域名。',
         emailAliasRestriction: '拦截邮箱别名注册',
         emailAliasRestrictionHint:
-          '拒绝 user+tag@example.com 这类 + 号别名，以及 Gmail/Googlemail 的点号别名。',
+          "拒绝 user+tag{'@'}example.com 这类 + 号别名，以及 Gmail/Googlemail 的点号别名。",
         emailDomainBlacklist: '邮箱域名黑名单',
         emailDomainBlacklistHint:
           "黑名单优先于白名单。支持 {'@'}disposable.com 和 *.disposable.com。",

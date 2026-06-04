@@ -85,6 +85,18 @@ func RegisterUserRoutes(
 			channels.GET("/available", h.AvailableChannel.List)
 		}
 
+		// 体验中心会话记录
+		playground := authenticated.Group("/playground")
+		{
+			playground.GET("/sessions", h.Playground.List)
+			playground.POST("/sessions", h.Playground.Create)
+			playground.GET("/sessions/:id", h.Playground.Get)
+			playground.PUT("/sessions/:id", h.Playground.Update)
+			playground.DELETE("/sessions/:id", h.Playground.Delete)
+			playground.POST("/sessions/:id/messages", h.Playground.AppendMessage)
+			playground.PUT("/sessions/:id/messages", h.Playground.ReplaceMessages)
+		}
+
 		// 使用记录
 		usage := authenticated.Group("/usage")
 		{

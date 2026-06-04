@@ -293,6 +293,7 @@ const openAITestModeOptions = computed(() => [
 ])
 const previewImageUrl = ref('')
 const prioritizedGeminiModels = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.0-flash']
+const prioritizedXaiModels = ['grok-4.20-auto', 'grok-4.20-0309', 'grok-4.3-high', 'grok-4.3-medium', 'grok-4.3-low', 'grok-4.3-console', 'grok-4', 'grok-4-0709', 'grok-3-beta', 'grok-3-fast-beta', 'grok-3-mini-beta', 'grok-2', 'grok-beta']
 const supportsGeminiImageTest = computed(() => {
   const modelID = selectedModelId.value.toLowerCase()
   if (!modelID.startsWith('gemini-') || !modelID.includes('-image')) return false
@@ -308,8 +309,8 @@ const supportsOpenAIImageTest = computed(() => {
 
 const supportsImageTest = computed(() => supportsGeminiImageTest.value || supportsOpenAIImageTest.value)
 
-const sortTestModels = (models: ClaudeModel[]) => {
-  const priorityMap = new Map(prioritizedGeminiModels.map((id, index) => [id, index]))
+const sortModelsByPriority = (models: ClaudeModel[], priorityIDs: string[]) => {
+  const priorityMap = new Map(priorityIDs.map((id, index) => [id, index]))
 
   return [...models].sort((a, b) => {
     const aPriority = priorityMap.get(a.id) ?? Number.MAX_SAFE_INTEGER
@@ -317,6 +318,32 @@ const sortTestModels = (models: ClaudeModel[]) => {
     if (aPriority !== bPriority) return aPriority - bPriority
     return 0
   })
+}
+
+const getDisplayModels = (models: ClaudeModel[]) => {
+  if (!props.account) return models
+
+  if (props.account.platform === 'gemini' || props.account.platform === 'antigravity') {
+    return sortModelsByPriority(models, prioritizedGeminiModels)
+  }
+
+  if (props.account.platform === 'xai') {
+    const grokModels = models.filter((model) => model.id.toLowerCase().startsWith('grok-'))
+    return sortModelsByPriority(grokModels.length > 0 ? grokModels : models, prioritizedXaiModels)
+  }
+
+  return models
+}
+
+const getDefaultModelID = (models: ClaudeModel[]) => {
+  if (!props.account || models.length === 0) return ''
+
+  if (props.account.platform === 'gemini' || props.account.platform === 'xai') {
+    return models[0].id
+  }
+
+  const sonnetModel = models.find((model) => model.id.includes('sonnet'))
+  return sonnetModel?.id || models[0].id
 }
 
 // Load available models when modal opens
@@ -347,18 +374,10 @@ const loadAvailableModels = async () => {
   selectedModelId.value = '' // Reset selection before loading
   try {
     const models = await adminAPI.accounts.getAvailableModels(props.account.id)
-    availableModels.value = props.account.platform === 'gemini' || props.account.platform === 'antigravity'
-      ? sortTestModels(models)
-      : models
+    availableModels.value = getDisplayModels(models)
     // Default selection by platform
     if (availableModels.value.length > 0) {
-      if (props.account.platform === 'gemini') {
-        selectedModelId.value = availableModels.value[0].id
-      } else {
-        // Try to select Sonnet as default, otherwise use first model
-        const sonnetModel = availableModels.value.find((m) => m.id.includes('sonnet'))
-        selectedModelId.value = sonnetModel?.id || availableModels.value[0].id
-      }
+      selectedModelId.value = getDefaultModelID(availableModels.value)
     }
   } catch (error) {
     console.error('Failed to load available models:', error)

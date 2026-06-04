@@ -7590,7 +7590,9 @@ async function loadWebSearchConfig() {
     webSearchProxies.value = proxiesResp.items || [];
   } catch (err: unknown) {
     // 404 is expected when config hasn't been created yet; show error for other failures
-    const status = (err as { status?: number })?.status;
+    const status =
+      (err as { status?: number })?.status ??
+      (err as { response?: { status?: number } })?.response?.status;
     if (status !== 404 && status !== undefined) {
       appStore.showError(extractApiErrorMessage(err, t("common.error")));
     }

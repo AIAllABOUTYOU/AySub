@@ -1,6 +1,45 @@
+import { apiClient } from './client'
+import type { PaginatedResponse } from '@/types'
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+}
+
+export interface PlaygroundMessage extends ChatMessage {
+  id: number
+  session_id: number
+  user_id: number
+  payload?: Record<string, unknown>
+  created_at: string
+}
+
+export interface PlaygroundSession {
+  id: number
+  user_id: number
+  api_key_id?: number | null
+  api_key_name?: string
+  title: string
+  mode: 'chat' | 'image' | 'video' | 'audio'
+  model: string
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  messages?: PlaygroundMessage[]
+}
+
+export interface PlaygroundSessionPayload {
+  api_key_id?: number | null
+  title: string
+  mode: PlaygroundSession['mode']
+  model: string
+  metadata?: Record<string, unknown>
+}
+
+export interface PlaygroundMessagePayload {
+  role: ChatMessage['role']
+  content: string
+  payload?: Record<string, unknown>
 }
 
 export interface ChatCompletionRequest {
@@ -188,6 +227,46 @@ export async function createChatCompletion(request: ChatCompletionRequest): Prom
     throw new Error('Empty response from gateway')
   }
   return text
+}
+
+export async function listPlaygroundSessions(page = 1, pageSize = 30): Promise<PaginatedResponse<PlaygroundSession>> {
+  const { data } = await apiClient.get<PaginatedResponse<PlaygroundSession>>('/playground/sessions', {
+    params: { page, page_size: pageSize },
+  })
+  return data
+}
+
+export async function createPlaygroundSession(payload: PlaygroundSessionPayload): Promise<PlaygroundSession> {
+  const { data } = await apiClient.post<PlaygroundSession>('/playground/sessions', payload)
+  return data
+}
+
+export async function getPlaygroundSession(id: number): Promise<PlaygroundSession> {
+  const { data } = await apiClient.get<PlaygroundSession>(`/playground/sessions/${id}`)
+  return data
+}
+
+export async function updatePlaygroundSession(id: number, payload: PlaygroundSessionPayload): Promise<PlaygroundSession> {
+  const { data } = await apiClient.put<PlaygroundSession>(`/playground/sessions/${id}`, payload)
+  return data
+}
+
+export async function deletePlaygroundSession(id: number): Promise<{ deleted: boolean }> {
+  const { data } = await apiClient.delete<{ deleted: boolean }>(`/playground/sessions/${id}`)
+  return data
+}
+
+export async function appendPlaygroundMessage(id: number, payload: PlaygroundMessagePayload): Promise<PlaygroundMessage> {
+  const { data } = await apiClient.post<PlaygroundMessage>(`/playground/sessions/${id}/messages`, payload)
+  return data
+}
+
+export async function replacePlaygroundMessages(
+  id: number,
+  messages: PlaygroundMessagePayload[]
+): Promise<PlaygroundSession> {
+  const { data } = await apiClient.put<PlaygroundSession>(`/playground/sessions/${id}/messages`, { messages })
+  return data
 }
 
 export async function createImageGeneration(request: ImageGenerationRequest): Promise<GeneratedImage[]> {
