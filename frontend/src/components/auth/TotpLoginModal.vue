@@ -23,7 +23,7 @@
         </div>
 
         <!-- Code Input -->
-        <div class="mb-6">
+        <div v-if="!useRecoveryCode" class="mb-6">
           <!-- Hidden input for password manager autofill (autocomplete="one-time-code") -->
           <input
             ref="hiddenOtpInputRef"
@@ -60,15 +60,45 @@
           </div>
         </div>
 
-        <!-- Cancel button only -->
-        <button
-          type="button"
-          class="btn btn-secondary w-full"
-          :disabled="verifying"
-          @click="$emit('cancel')"
-        >
-          {{ t('common.cancel') }}
-        </button>
+        <form v-else class="mb-6 space-y-3" @submit.prevent="submitRecoveryCode">
+          <div>
+            <label class="input-label">{{ t('profile.totp.recoveryCode') }}</label>
+            <input
+              v-model.trim="recoveryCode"
+              type="text"
+              autocomplete="one-time-code"
+              class="input font-mono uppercase"
+              :disabled="verifying"
+              :placeholder="t('profile.totp.recoveryCodePlaceholder')"
+            />
+          </div>
+          <button
+            type="submit"
+            class="btn btn-primary w-full"
+            :disabled="verifying || recoveryCode.length < 10"
+          >
+            {{ verifying ? t('common.verifying') : t('profile.totp.verify') }}
+          </button>
+        </form>
+
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            class="btn btn-secondary flex-1"
+            :disabled="verifying"
+            @click="toggleRecoveryMode"
+          >
+            {{ useRecoveryCode ? t('profile.totp.useAuthenticatorCode') : t('profile.totp.useRecoveryCode') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-secondary flex-1"
+            :disabled="verifying"
+            @click="$emit('cancel')"
+          >
+            {{ t('common.cancel') }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -85,7 +115,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  verify: [code: string]
+  verify: [payload: { totpCode?: string; recoveryCode?: string }]
   cancel: []
 }>()
 
@@ -94,6 +124,8 @@ const appStore = useAppStore()
 
 const verifying = ref(false)
 const code = ref<string[]>(['', '', '', '', '', ''])
+const recoveryCode = ref('')
+const useRecoveryCode = ref(false)
 const inputRefs = ref<(HTMLInputElement | null)[]>([])
 const hiddenOtpInputRef = ref<HTMLInputElement | null>(null)
 
@@ -101,8 +133,8 @@ const hiddenOtpInputRef = ref<HTMLInputElement | null>(null)
 watch(
   () => code.value.join(''),
   (newCode) => {
-    if (newCode.length === 6 && !verifying.value) {
-      emit('verify', newCode)
+    if (!useRecoveryCode.value && newCode.length === 6 && !verifying.value) {
+      emit('verify', { totpCode: newCode })
     }
   }
 )
@@ -114,6 +146,7 @@ defineExpose({
       appStore.showError(message)
     }
     code.value = ['', '', '', '', '', '']
+    recoveryCode.value = ''
     // Clear input DOM values
     inputRefs.value.forEach(input => {
       if (input) input.value = ''
@@ -127,6 +160,25 @@ defineExpose({
     })
   }
 })
+
+const toggleRecoveryMode = () => {
+  useRecoveryCode.value = !useRecoveryCode.value
+  code.value = ['', '', '', '', '', '']
+  recoveryCode.value = ''
+  inputRefs.value.forEach(input => {
+    if (input) input.value = ''
+  })
+  nextTick(() => {
+    if (!useRecoveryCode.value) {
+      inputRefs.value[0]?.focus()
+    }
+  })
+}
+
+const submitRecoveryCode = () => {
+  if (verifying.value || recoveryCode.value.length < 10) return
+  emit('verify', { recoveryCode: recoveryCode.value })
+}
 
 const setInputRef = (el: any, index: number) => {
   inputRefs.value[index] = el as HTMLInputElement | null

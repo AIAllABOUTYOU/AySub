@@ -3,10 +3,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -93,6 +98,110 @@ func TestForwardGrokVideosCreatesCompletedJob(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Contains(t, contentURL, "/v1/files/video?id=")
+}
+
+func TestParseOpenAIVideoRequestSupportsExtendedJSONFields(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	body := []byte(`{
+		"model":"grok-imagine-video",
+		"prompt":"animate this",
+		"image":"data:image/png;base64,aGVsbG8=",
+		"image_url":"https://example.com/source.png",
+		"resolution_name":"480p",
+		"preset":"fun",
+		"seconds":10,
+		"video_format":"webm",
+		"upscale_source_id":"asset_123"
+	}`)
+
+	parsed, err := svc.ParseOpenAIVideoRequestWithContentType("application/json", body)
+	require.NoError(t, err)
+	require.Equal(t, "data:image/png;base64,aGVsbG8=", parsed.Image)
+	require.Equal(t, "https://example.com/source.png", parsed.ImageURL)
+	require.Equal(t, "480p", parsed.ResolutionName)
+	require.Equal(t, "fun", parsed.Preset)
+	require.Equal(t, 10, parsed.Seconds)
+	require.Equal(t, "webm", parsed.VideoFormat)
+	require.Equal(t, "asset_123", parsed.UpscaleSourceID)
+
+	payload := buildGrokVideoCreatePayload(parsed, "parent-1")
+	cfg := gjson.GetBytes(mustJSON(t, payload), "responseMetadata.modelConfigOverride.modelMap.videoGenModelConfig")
+	require.Equal(t, "https://example.com/source.png", cfg.Get("imageUrl").String())
+	require.Equal(t, "data:image/png;base64,aGVsbG8=", cfg.Get("image").String())
+	require.Equal(t, "asset_123", cfg.Get("upscaleSourceId").String())
+	require.Equal(t, "webm", cfg.Get("videoFormat").String())
+}
+
+func TestParseOpenAIVideoRequestSupportsMultipartFields(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	require.NoError(t, writer.WriteField("model", "grok-imagine-video"))
+	require.NoError(t, writer.WriteField("prompt", "multipart prompt"))
+	require.NoError(t, writer.WriteField("resolution_name", "720p"))
+	require.NoError(t, writer.WriteField("preset", "spicy"))
+	require.NoError(t, writer.WriteField("seconds", "12"))
+	require.NoError(t, writer.WriteField("video_format", "mp4"))
+	require.NoError(t, writer.WriteField("upscale_source_id", "asset_456"))
+	imagePart, err := writer.CreateFormFile("image", "source.png")
+	require.NoError(t, err)
+	_, err = imagePart.Write([]byte("png-bytes"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	parsed, err := svc.ParseOpenAIVideoRequestWithContentType(writer.FormDataContentType(), body.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, "multipart prompt", parsed.Prompt)
+	require.Equal(t, "720p", parsed.ResolutionName)
+	require.Equal(t, "spicy", parsed.Preset)
+	require.Equal(t, 12, parsed.Seconds)
+	require.Equal(t, "mp4", parsed.VideoFormat)
+	require.Equal(t, "asset_456", parsed.UpscaleSourceID)
+	require.True(t, strings.HasPrefix(parsed.Image, "data:"))
+	require.Contains(t, parsed.Image, ";base64,")
+}
+
+func TestLocalMediaCacheListDeleteAndCleanup(t *testing.T) {
+	t.Setenv("DATA_DIR", t.TempDir())
+	svc := &OpenAIGatewayService{}
+
+	imageID, err := saveLocalImage([]byte("image-bytes"), "image/png", "image-seed")
+	require.NoError(t, err)
+	videoID, err := saveLocalVideo([]byte("video-bytes"), "video-seed")
+	require.NoError(t, err)
+
+	list, err := svc.ListLocalMediaCache(LocalMediaCacheListFilter{Type: "all", Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, 2, list.Total)
+	require.Len(t, list.Items, 2)
+
+	filtered, err := svc.ListLocalMediaCache(LocalMediaCacheListFilter{Type: "video", Search: videoID, Page: 1, PageSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, 1, filtered.Total)
+	require.Equal(t, videoID, filtered.Items[0].ID)
+
+	require.NoError(t, svc.DeleteLocalMediaCacheItem("image", imageID))
+	_, err = LocalImageFile(imageID)
+	require.Error(t, err)
+
+	videoPath := filepath.Join(localMediaDir(localMediaVideo), videoID+".mp4")
+	oldTime := time.Now().Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(videoPath, oldTime, oldTime))
+	result, err := svc.CleanupLocalMediaCache(LocalMediaCacheCleanupInput{
+		Type:   "video",
+		Before: time.Now().Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Deleted)
+	_, err = LocalVideoFile(videoID)
+	require.Error(t, err)
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+	return raw
 }
 
 func TestForwardGrokLiveKitTokenReturnsWebSocketURL(t *testing.T) {

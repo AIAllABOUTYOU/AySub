@@ -59,7 +59,7 @@ func (h *OpenAIGatewayHandler) Videos(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
 		return
 	}
-	parsed, err := h.gatewayService.ParseOpenAIVideoRequest(body)
+	parsed, err := h.gatewayService.ParseOpenAIVideoRequestWithContentType(c.GetHeader("Content-Type"), body)
 	if err != nil {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return

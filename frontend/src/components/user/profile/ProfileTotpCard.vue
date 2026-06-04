@@ -32,7 +32,7 @@
       </div>
 
       <!-- 2FA Enabled -->
-      <div v-else-if="status?.enabled" class="flex items-center justify-between">
+      <div v-else-if="status?.enabled" class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex items-center gap-4">
           <div class="flex-shrink-0 rounded-full bg-green-100 p-3 dark:bg-green-900/30">
             <svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -46,15 +46,27 @@
             <p v-if="status.enabled_at" class="text-sm text-gray-500 dark:text-gray-400">
               {{ t('profile.totp.enabledAt') }}: {{ formatDate(status.enabled_at) }}
             </p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {{ t('profile.totp.recoveryCodesRemaining') }}: {{ status.recovery_codes ?? 0 }}
+            </p>
           </div>
         </div>
-        <button
-          type="button"
-          class="btn btn-outline-danger"
-          @click="showDisableDialog = true"
-        >
-          {{ t('profile.totp.disable') }}
-        </button>
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="openRegenerateDialog"
+          >
+            {{ t('profile.totp.regenerateRecoveryCodes') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-outline-danger"
+            @click="showDisableDialog = true"
+          >
+            {{ t('profile.totp.disable') }}
+          </button>
+        </div>
       </div>
 
       <!-- 2FA Not Enabled -->
@@ -97,6 +109,71 @@
       @close="showDisableDialog = false"
       @success="handleDisableSuccess"
     />
+
+    <div v-if="showRegenerateDialog" class="fixed inset-0 z-50 overflow-y-auto" @click.self="closeRegenerateDialog">
+      <div class="flex min-h-full items-center justify-center p-4">
+        <div class="fixed inset-0 bg-black/50 transition-opacity" @click="closeRegenerateDialog"></div>
+        <div class="relative w-full max-w-md transform rounded-xl bg-white p-6 shadow-xl transition-all dark:bg-dark-800">
+          <div class="mb-5">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+              {{ t('profile.totp.regenerateRecoveryCodes') }}
+            </h3>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {{ generatedRecoveryCodes.length > 0 ? t('profile.totp.recoveryCodesOnceHint') : t('profile.totp.regenerateRecoveryCodesHint') }}
+            </p>
+          </div>
+
+          <form v-if="generatedRecoveryCodes.length === 0" class="space-y-4" @submit.prevent="handleRegenerateRecoveryCodes">
+            <div>
+              <label class="input-label">{{ t('profile.totp.enterCode') }}</label>
+              <input
+                v-model.trim="regenerateTotpCode"
+                type="text"
+                maxlength="6"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="one-time-code"
+                class="input font-mono"
+                :disabled="regeneratingRecoveryCodes"
+                :placeholder="t('profile.totp.enterCode')"
+              />
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" class="btn btn-secondary" :disabled="regeneratingRecoveryCodes" @click="closeRegenerateDialog">
+                {{ t('common.cancel') }}
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                :disabled="regeneratingRecoveryCodes || regenerateTotpCode.length !== 6"
+              >
+                {{ regeneratingRecoveryCodes ? t('common.processing') : t('profile.totp.regenerateRecoveryCodes') }}
+              </button>
+            </div>
+          </form>
+
+          <div v-else class="space-y-4">
+            <div class="grid grid-cols-2 gap-2">
+              <code
+                v-for="item in generatedRecoveryCodes"
+                :key="item"
+                class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center font-mono text-sm tracking-wide text-gray-900 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-100"
+              >
+                {{ item }}
+              </code>
+            </div>
+            <div class="flex justify-end gap-3">
+              <button type="button" class="btn btn-secondary" @click="copyGeneratedRecoveryCodes">
+                {{ t('profile.totp.copyRecoveryCodes') }}
+              </button>
+              <button type="button" class="btn btn-primary" @click="closeRegenerateDialog">
+                {{ t('common.close') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -105,15 +182,21 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { totpAPI } from '@/api'
 import type { TotpStatus } from '@/types'
+import { useAppStore } from '@/stores/app'
 import TotpSetupModal from './TotpSetupModal.vue'
 import TotpDisableDialog from './TotpDisableDialog.vue'
 
 const { t } = useI18n()
+const appStore = useAppStore()
 
 const loading = ref(true)
 const status = ref<TotpStatus | null>(null)
 const showSetupModal = ref(false)
 const showDisableDialog = ref(false)
+const showRegenerateDialog = ref(false)
+const regenerateTotpCode = ref('')
+const regeneratingRecoveryCodes = ref(false)
+const generatedRecoveryCodes = ref<string[]>([])
 
 const loadStatus = async () => {
   loading.value = true
@@ -134,6 +217,44 @@ const handleSetupSuccess = () => {
 const handleDisableSuccess = () => {
   showDisableDialog.value = false
   loadStatus()
+}
+
+const openRegenerateDialog = () => {
+  regenerateTotpCode.value = ''
+  generatedRecoveryCodes.value = []
+  showRegenerateDialog.value = true
+}
+
+const closeRegenerateDialog = () => {
+  if (regeneratingRecoveryCodes.value) return
+  showRegenerateDialog.value = false
+  regenerateTotpCode.value = ''
+  generatedRecoveryCodes.value = []
+  loadStatus()
+}
+
+const handleRegenerateRecoveryCodes = async () => {
+  if (regenerateTotpCode.value.length !== 6) return
+  regeneratingRecoveryCodes.value = true
+  try {
+    const result = await totpAPI.regenerateRecoveryCodes(regenerateTotpCode.value)
+    generatedRecoveryCodes.value = result.codes || []
+    regenerateTotpCode.value = ''
+    appStore.showSuccess(t('profile.totp.recoveryCodesRegenerated'))
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.message || t('profile.totp.regenerateRecoveryCodesFailed'))
+  } finally {
+    regeneratingRecoveryCodes.value = false
+  }
+}
+
+const copyGeneratedRecoveryCodes = async () => {
+  try {
+    await navigator.clipboard.writeText(generatedRecoveryCodes.value.join('\n'))
+    appStore.showSuccess(t('common.copied'))
+  } catch {
+    appStore.showError(t('common.copyFailed'))
+  }
 }
 
 const formatDate = (timestamp: number) => {

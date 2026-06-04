@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,13 +56,17 @@ var grokVideoPresetFlags = map[string]string{
 }
 
 type OpenAIVideoRequest struct {
-	Model          string
-	Prompt         string
-	Seconds        int
-	Size           string
-	Quality        string
-	ResolutionName string
-	Preset         string
+	Model           string
+	Prompt          string
+	Image           string
+	ImageURL        string
+	Seconds         int
+	Size            string
+	Quality         string
+	ResolutionName  string
+	Preset          string
+	VideoFormat     string
+	UpscaleSourceID string
 }
 
 type GrokLiveKitTokenRequest struct {
@@ -94,6 +102,9 @@ type OpenAIVideoJob struct {
 	Seconds     string         `json:"seconds"`
 	Size        string         `json:"size"`
 	Quality     string         `json:"quality"`
+	Resolution  string         `json:"resolution_name"`
+	Preset      string         `json:"preset"`
+	VideoFormat string         `json:"video_format"`
 	CompletedAt *int64         `json:"completed_at,omitempty"`
 	Error       map[string]any `json:"error,omitempty"`
 	VideoURL    string         `json:"-"`
@@ -120,16 +131,19 @@ func (j *OpenAIVideoJob) PublicPayload() map[string]any {
 		return nil
 	}
 	payload := map[string]any{
-		"id":         j.ID,
-		"object":     j.Object,
-		"created_at": j.CreatedAt,
-		"status":     j.Status,
-		"model":      j.Model,
-		"progress":   j.Progress,
-		"prompt":     j.Prompt,
-		"seconds":    j.Seconds,
-		"size":       j.Size,
-		"quality":    j.Quality,
+		"id":              j.ID,
+		"object":          j.Object,
+		"created_at":      j.CreatedAt,
+		"status":          j.Status,
+		"model":           j.Model,
+		"progress":        j.Progress,
+		"prompt":          j.Prompt,
+		"seconds":         j.Seconds,
+		"size":            j.Size,
+		"quality":         j.Quality,
+		"resolution_name": j.Resolution,
+		"preset":          j.Preset,
+		"video_format":    j.VideoFormat,
 	}
 	if j.CompletedAt != nil {
 		payload["completed_at"] = *j.CompletedAt
@@ -141,53 +155,135 @@ func (j *OpenAIVideoJob) PublicPayload() map[string]any {
 }
 
 func (s *OpenAIGatewayService) ParseOpenAIVideoRequest(body []byte) (*OpenAIVideoRequest, error) {
+	return s.ParseOpenAIVideoRequestWithContentType("", body)
+}
+
+func (s *OpenAIGatewayService) ParseOpenAIVideoRequestWithContentType(contentType string, body []byte) (*OpenAIVideoRequest, error) {
+	fields, err := parseOpenAIVideoRequestFields(contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenAIVideoFields(fields)
+}
+
+func parseOpenAIVideoRequestFields(contentType string, body []byte) (map[string]string, error) {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err == nil && strings.HasPrefix(strings.ToLower(mediaType), "multipart/") {
+		boundary := strings.TrimSpace(params["boundary"])
+		if boundary == "" {
+			return nil, errors.New("multipart boundary is required")
+		}
+		return parseOpenAIVideoMultipartFields(body, boundary)
+	}
 	if !gjson.ValidBytes(body) {
 		return nil, errors.New("Failed to parse request body")
 	}
-	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	fields := map[string]string{}
+	for _, name := range []string{
+		"model", "prompt", "image", "image_url", "seconds", "size", "quality",
+		"resolution_name", "preset", "video_format", "upscale_source_id",
+	} {
+		if value := strings.TrimSpace(gjson.GetBytes(body, name).String()); value != "" {
+			fields[name] = value
+		}
+	}
+	return fields, nil
+}
+
+func parseOpenAIVideoMultipartFields(body []byte, boundary string) (map[string]string, error) {
+	reader := multipart.NewReader(bytes.NewReader(body), boundary)
+	fields := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, errors.New("Failed to parse multipart request body")
+		}
+		name := strings.TrimSpace(part.FormName())
+		if name == "" {
+			_ = part.Close()
+			continue
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(part, 16<<20))
+		_ = part.Close()
+		if readErr != nil {
+			return nil, errors.New("Failed to read multipart field")
+		}
+		if part.FileName() != "" {
+			contentType := responseContentType(&http.Response{Header: http.Header{"Content-Type": []string{part.Header.Get("Content-Type")}}}, "application/octet-stream")
+			fields[name] = "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(raw)
+			continue
+		}
+		fields[name] = strings.TrimSpace(string(raw))
+	}
+	return fields, nil
+}
+
+func parseOpenAIVideoFields(fields map[string]string) (*OpenAIVideoRequest, error) {
+	model := strings.TrimSpace(fields["model"])
 	if model == "" {
 		return nil, errors.New("model is required")
 	}
-	prompt := strings.TrimSpace(gjson.GetBytes(body, "prompt").String())
+	prompt := strings.TrimSpace(fields["prompt"])
 	if prompt == "" {
 		return nil, errors.New("prompt is required")
 	}
-	seconds := int(gjson.GetBytes(body, "seconds").Int())
+	seconds := 0
+	if raw := strings.TrimSpace(fields["seconds"]); raw != "" {
+		parsedSeconds, err := strconv.Atoi(raw)
+		if err != nil {
+			return nil, errors.New("seconds must be one of [6, 10, 12, 16, 20]")
+		}
+		seconds = parsedSeconds
+	}
 	if seconds == 0 {
 		seconds = 6
 	}
 	if !isSupportedGrokVideoSeconds(seconds) {
 		return nil, errors.New("seconds must be one of [6, 10, 12, 16, 20]")
 	}
-	size := strings.TrimSpace(gjson.GetBytes(body, "size").String())
+	size := strings.TrimSpace(fields["size"])
 	if size == "" {
 		size = "720x1280"
 	}
 	if _, ok := grokVideoSizeMap[size]; !ok {
 		return nil, errors.New("size must be one of [720x1280, 1280x720, 1024x1024, 1024x1792, 1792x1024]")
 	}
-	resolution := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "resolution_name").String()))
+	resolution := strings.ToLower(strings.TrimSpace(fields["resolution_name"]))
 	if resolution == "" {
 		resolution = grokVideoSizeMap[size].Resolution
 	}
 	if resolution != "480p" && resolution != "720p" {
 		return nil, errors.New("resolution_name must be one of [480p, 720p]")
 	}
-	preset := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "preset").String()))
+	preset := strings.ToLower(strings.TrimSpace(fields["preset"]))
 	if preset == "" {
 		preset = "custom"
 	}
 	if _, ok := grokVideoPresetFlags[preset]; !ok {
 		return nil, errors.New("preset must be one of [custom, fun, normal, spicy]")
 	}
+	videoFormat := strings.ToLower(strings.TrimSpace(fields["video_format"]))
+	if videoFormat == "" {
+		videoFormat = "mp4"
+	}
+	if videoFormat != "mp4" && videoFormat != "webm" && videoFormat != "gif" {
+		return nil, errors.New("video_format must be one of [mp4, webm, gif]")
+	}
 	return &OpenAIVideoRequest{
-		Model:          model,
-		Prompt:         prompt,
-		Seconds:        seconds,
-		Size:           size,
-		Quality:        grokVideoQuality,
-		ResolutionName: resolution,
-		Preset:         preset,
+		Model:           model,
+		Prompt:          prompt,
+		Image:           strings.TrimSpace(fields["image"]),
+		ImageURL:        strings.TrimSpace(fields["image_url"]),
+		Seconds:         seconds,
+		Size:            size,
+		Quality:         grokVideoQuality,
+		ResolutionName:  resolution,
+		Preset:          preset,
+		VideoFormat:     videoFormat,
+		UpscaleSourceID: strings.TrimSpace(fields["upscale_source_id"]),
 	}, nil
 }
 
@@ -446,16 +542,19 @@ func (s *OpenAIGatewayService) ForwardVideos(ctx context.Context, c *gin.Context
 	}
 
 	job := &OpenAIVideoJob{
-		ID:        "video_" + uuid.NewString(),
-		Object:    "video",
-		CreatedAt: time.Now().Unix(),
-		Status:    "in_progress",
-		Model:     requestModel,
-		Progress:  1,
-		Prompt:    parsed.Prompt,
-		Seconds:   fmt.Sprintf("%d", parsed.Seconds),
-		Size:      parsed.Size,
-		Quality:   parsed.Quality,
+		ID:          "video_" + uuid.NewString(),
+		Object:      "video",
+		CreatedAt:   time.Now().Unix(),
+		Status:      "in_progress",
+		Model:       requestModel,
+		Progress:    1,
+		Prompt:      parsed.Prompt,
+		Seconds:     fmt.Sprintf("%d", parsed.Seconds),
+		Size:        parsed.Size,
+		Quality:     parsed.Quality,
+		Resolution:  parsed.ResolutionName,
+		Preset:      parsed.Preset,
+		VideoFormat: parsed.VideoFormat,
 	}
 	storeGrokVideoJob(job)
 
@@ -735,6 +834,24 @@ func (s *OpenAIGatewayService) buildGrokWebJSONRequest(ctx context.Context, acco
 
 func buildGrokVideoCreatePayload(parsed *OpenAIVideoRequest, parentPostID string) map[string]any {
 	size := grokVideoSizeMap[parsed.Size]
+	videoConfig := map[string]any{
+		"parentPostId":   parentPostID,
+		"aspectRatio":    size.AspectRatio,
+		"videoLength":    parsed.Seconds,
+		"resolutionName": parsed.ResolutionName,
+	}
+	if parsed.ImageURL != "" {
+		videoConfig["imageUrl"] = parsed.ImageURL
+	}
+	if parsed.Image != "" {
+		videoConfig["image"] = parsed.Image
+	}
+	if parsed.UpscaleSourceID != "" {
+		videoConfig["upscaleSourceId"] = parsed.UpscaleSourceID
+	}
+	if parsed.VideoFormat != "" {
+		videoConfig["videoFormat"] = parsed.VideoFormat
+	}
 	return map[string]any{
 		"temporary":        true,
 		"modelName":        grokVideoModelName,
@@ -744,12 +861,7 @@ func buildGrokVideoCreatePayload(parsed *OpenAIVideoRequest, parentPostID string
 			"experiments": []any{},
 			"modelConfigOverride": map[string]any{
 				"modelMap": map[string]any{
-					"videoGenModelConfig": map[string]any{
-						"parentPostId":   parentPostID,
-						"aspectRatio":    size.AspectRatio,
-						"videoLength":    parsed.Seconds,
-						"resolutionName": parsed.ResolutionName,
-					},
+					"videoGenModelConfig": videoConfig,
 				},
 			},
 		},

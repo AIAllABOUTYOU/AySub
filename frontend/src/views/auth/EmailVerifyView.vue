@@ -165,6 +165,7 @@ import { apiClient } from '@/api/client'
 import { buildAuthErrorMessage } from '@/utils/authError'
 import {
   formatRegistrationEmailSuffixWhitelistForMessage,
+  hasRegistrationEmailAlias,
   isRegistrationEmailSuffixAllowed,
   normalizeRegistrationEmailSuffixWhitelist
 } from '@/utils/registrationEmailPolicy'
@@ -231,6 +232,7 @@ const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const siteName = ref<string>('AySub')
 const registrationEmailSuffixWhitelist = ref<string[]>([])
+const registrationEmailAliasRestrictionEnabled = ref<boolean>(false)
 
 // Turnstile for resend
 const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
@@ -299,6 +301,8 @@ onMounted(async () => {
     registrationEmailSuffixWhitelist.value = normalizeRegistrationEmailSuffixWhitelist(
       settings.registration_email_suffix_whitelist || []
     )
+    registrationEmailAliasRestrictionEnabled.value =
+      settings.registration_email_alias_restriction_enabled === true
   } catch (error) {
     console.error('Failed to load public settings:', error)
   }
@@ -401,8 +405,9 @@ async function sendCode(): Promise<void> {
   errorMessage.value = ''
 
   try {
-    if (!shouldBypassRegistrationEmailPolicy() && !isRegistrationEmailSuffixAllowed(email.value, registrationEmailSuffixWhitelist.value)) {
-      errorMessage.value = buildEmailSuffixNotAllowedMessage()
+    const emailPolicyMessage = buildRegistrationEmailPolicyErrorMessage()
+    if (emailPolicyMessage) {
+      errorMessage.value = emailPolicyMessage
       appStore.showError(errorMessage.value)
       return
     }
@@ -494,8 +499,9 @@ async function handleVerify(): Promise<void> {
   isLoading.value = true
 
   try {
-    if (!shouldBypassRegistrationEmailPolicy() && !isRegistrationEmailSuffixAllowed(email.value, registrationEmailSuffixWhitelist.value)) {
-      errorMessage.value = buildEmailSuffixNotAllowedMessage()
+    const emailPolicyMessage = buildRegistrationEmailPolicyErrorMessage()
+    if (emailPolicyMessage) {
+      errorMessage.value = emailPolicyMessage
       appStore.showError(errorMessage.value)
       return
     }
@@ -581,6 +587,22 @@ function buildEmailSuffixNotAllowedMessage(): string {
       more: (count) => t('auth.emailSuffixAllowedMore', { count })
     })
   })
+}
+
+function buildRegistrationEmailPolicyErrorMessage(): string {
+  if (shouldBypassRegistrationEmailPolicy()) {
+    return ''
+  }
+  if (!isRegistrationEmailSuffixAllowed(email.value, registrationEmailSuffixWhitelist.value)) {
+    return buildEmailSuffixNotAllowedMessage()
+  }
+  if (
+    registrationEmailAliasRestrictionEnabled.value &&
+    hasRegistrationEmailAlias(email.value)
+  ) {
+    return t('auth.emailAliasNotAllowed')
+  }
+  return ''
 }
 </script>
 

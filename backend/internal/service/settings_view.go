@@ -12,18 +12,20 @@ func firstNonEmpty(values ...string) string {
 }
 
 type SystemSettings struct {
-	RegistrationEnabled              bool
-	EmailVerifyEnabled               bool
-	RegistrationEmailSuffixWhitelist []string
-	PromoCodeEnabled                 bool
-	PasswordResetEnabled             bool
-	FrontendURL                      string
-	InvitationCodeEnabled            bool
-	TotpEnabled                      bool // TOTP 双因素认证
-	LoginAgreementEnabled            bool
-	LoginAgreementMode               string
-	LoginAgreementUpdatedAt          string
-	LoginAgreementDocuments          []LoginAgreementDocument
+	RegistrationEnabled                      bool
+	EmailVerifyEnabled                       bool
+	RegistrationEmailSuffixWhitelist         []string
+	RegistrationEmailDomainBlacklist         []string
+	RegistrationEmailAliasRestrictionEnabled bool
+	PromoCodeEnabled                         bool
+	PasswordResetEnabled                     bool
+	FrontendURL                              string
+	InvitationCodeEnabled                    bool
+	TotpEnabled                              bool // TOTP 双因素认证
+	LoginAgreementEnabled                    bool
+	LoginAgreementMode                       string
+	LoginAgreementUpdatedAt                  string
+	LoginAgreementDocuments                  []LoginAgreementDocument
 
 	SMTPHost               string
 	SMTPPort               int
@@ -183,6 +185,10 @@ type SystemSettings struct {
 	PublicStatusShowChannels        bool `json:"public_status_show_channels"`
 	PublicStatusShowRecentIncidents bool `json:"public_status_show_recent_incidents"`
 
+	// Daily check-in reward feature
+	CheckinEnabled      bool    `json:"checkin_enabled"`
+	CheckinRewardAmount float64 `json:"checkin_reward_amount"`
+
 	// Claude Code version check
 	MinClaudeCodeVersion string
 	MaxClaudeCodeVersion string
@@ -237,29 +243,30 @@ type DefaultSubscriptionSetting struct {
 }
 
 type PublicSettings struct {
-	RegistrationEnabled              bool
-	EmailVerifyEnabled               bool
-	ForceEmailOnThirdPartySignup     bool
-	RegistrationEmailSuffixWhitelist []string
-	PromoCodeEnabled                 bool
-	PasswordResetEnabled             bool
-	InvitationCodeEnabled            bool
-	TotpEnabled                      bool // TOTP 双因素认证
-	LoginAgreementEnabled            bool
-	LoginAgreementMode               string
-	LoginAgreementUpdatedAt          string
-	LoginAgreementRevision           string
-	LoginAgreementDocuments          []LoginAgreementDocument
-	TurnstileEnabled                 bool
-	TurnstileSiteKey                 string
-	SiteName                         string
-	SiteLogo                         string
-	SiteSubtitle                     string
-	APIBaseURL                       string
-	ContactInfo                      string
-	DocURL                           string
-	HomeContent                      string
-	HideCcsImportButton              bool
+	RegistrationEnabled                      bool
+	EmailVerifyEnabled                       bool
+	ForceEmailOnThirdPartySignup             bool
+	RegistrationEmailSuffixWhitelist         []string
+	RegistrationEmailAliasRestrictionEnabled bool
+	PromoCodeEnabled                         bool
+	PasswordResetEnabled                     bool
+	InvitationCodeEnabled                    bool
+	TotpEnabled                              bool // TOTP 双因素认证
+	LoginAgreementEnabled                    bool
+	LoginAgreementMode                       string
+	LoginAgreementUpdatedAt                  string
+	LoginAgreementRevision                   string
+	LoginAgreementDocuments                  []LoginAgreementDocument
+	TurnstileEnabled                         bool
+	TurnstileSiteKey                         string
+	SiteName                                 string
+	SiteLogo                                 string
+	SiteSubtitle                             string
+	APIBaseURL                               string
+	ContactInfo                              string
+	DocURL                                   string
+	HomeContent                              string
+	HideCcsImportButton                      bool
 
 	PurchaseSubscriptionEnabled bool
 	PurchaseSubscriptionURL     string
@@ -299,6 +306,10 @@ type PublicSettings struct {
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
+
+	// Daily check-in reward feature
+	CheckinEnabled      bool    `json:"checkin_enabled"`
+	CheckinRewardAmount float64 `json:"checkin_reward_amount"`
 }
 
 type LoginAgreementDocument struct {

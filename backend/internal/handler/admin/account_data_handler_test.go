@@ -69,6 +69,8 @@ func setupAccountDataRouter() (*gin.Engine, *stubAdminService) {
 
 	router.GET("/api/v1/admin/accounts/data", h.ExportData)
 	router.POST("/api/v1/admin/accounts/data", h.ImportData)
+	router.GET("/api/v1/admin/accounts/xai-cookie-tokens", h.ExportXaiCookieTokens)
+	router.POST("/api/v1/admin/accounts/xai-cookie-tokens", h.ImportXaiCookieTokens)
 	return router, adminSvc
 }
 
@@ -274,4 +276,102 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 	require.Len(t, adminSvc.createdProxies, 0)
 	require.Len(t, adminSvc.createdAccounts, 1)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
+}
+
+func TestImportXaiCookieTokensCreatesAccountsAndSkipsDuplicates(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	adminSvc.accounts = []service.Account{
+		{
+			ID:          1,
+			Name:        "existing",
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"sso_token": "existing-token"},
+		},
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"tokens": []string{
+			"new-token",
+			"sso=existing-token",
+			"session=abc; sso=cookie-token; other=1",
+			"new-token",
+			" ",
+		},
+		"name_prefix": "Imported Grok",
+		"base_url":    "https://grok.example",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/xai-cookie-tokens", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Code int                        `json:"code"`
+		Data XaiCookieTokenImportResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.Equal(t, 2, resp.Data.Created)
+	require.Equal(t, 2, resp.Data.Skipped)
+	require.Equal(t, 1, resp.Data.Failed)
+	require.Len(t, adminSvc.createdAccounts, 2)
+	require.Equal(t, service.PlatformXAI, adminSvc.createdAccounts[0].Platform)
+	require.Equal(t, service.AccountTypeCookie, adminSvc.createdAccounts[0].Type)
+	require.Equal(t, "new-token", adminSvc.createdAccounts[0].Credentials["sso_token"])
+	require.Equal(t, "https://grok.example", adminSvc.createdAccounts[0].Credentials["base_url"])
+	require.Equal(t, "cookie-token", adminSvc.createdAccounts[1].Credentials["sso_token"])
+	require.Equal(t, 10, adminSvc.createdAccounts[0].Concurrency)
+	require.Equal(t, 1, adminSvc.createdAccounts[0].Priority)
+}
+
+func TestExportXaiCookieTokensFiltersAndExtractsTokens(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	adminSvc.accounts = []service.Account{
+		{
+			ID:          1,
+			Name:        "xai-token",
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"sso_token": "token-a"},
+		},
+		{
+			ID:          2,
+			Name:        "xai-cookie",
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"cookie": "foo=bar; sso=token-b; baz=1"},
+		},
+		{
+			ID:          3,
+			Name:        "xai-apikey",
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeAPIKey,
+			Credentials: map[string]any{"api_key": "xai-key"},
+		},
+		{
+			ID:          4,
+			Name:        "openai-cookie",
+			Platform:    service.PlatformOpenAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"sso_token": "not-xai"},
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/xai-cookie-tokens?platform=openai&type=oauth", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Code int                        `json:"code"`
+		Data XaiCookieTokenExportResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.Equal(t, []string{"token-a", "token-b"}, resp.Data.Tokens)
+	require.Equal(t, 2, resp.Data.Count)
+	require.Equal(t, service.PlatformXAI, adminSvc.lastListAccounts.platform)
+	require.Equal(t, service.AccountTypeCookie, adminSvc.lastListAccounts.accountType)
 }

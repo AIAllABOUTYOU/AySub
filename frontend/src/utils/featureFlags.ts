@@ -119,6 +119,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Affiliate',
   }),
+  checkin: defineFlag({
+    key: 'checkin_enabled',
+    mode: 'opt-in',
+    label: 'Check-in',
+  }),
 } as const
 
 export type RegisteredFeatureFlag = keyof typeof FeatureFlags

@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -23,6 +25,46 @@ var localMediaIDRE = regexp.MustCompile(`^[0-9a-fA-F-]{16,64}$`)
 type LocalMediaFile struct {
 	Path        string
 	ContentType string
+}
+
+type LocalMediaCacheItem struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	FileName    string `json:"file_name"`
+	Path        string `json:"path"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	ModifiedAt  int64  `json:"modified_at"`
+	URL         string `json:"url"`
+}
+
+type LocalMediaCacheListFilter struct {
+	Type          string
+	Search        string
+	Before        time.Time
+	Page          int
+	PageSize      int
+	IncludeImages bool
+	IncludeVideos bool
+}
+
+type LocalMediaCacheListResult struct {
+	Items    []LocalMediaCacheItem `json:"items"`
+	Total    int                   `json:"total"`
+	Page     int                   `json:"page"`
+	PageSize int                   `json:"page_size"`
+}
+
+type LocalMediaCacheCleanupInput struct {
+	Type   string
+	Before time.Time
+	Limit  int
+}
+
+type LocalMediaCacheCleanupResult struct {
+	Deleted int      `json:"deleted"`
+	Skipped int      `json:"skipped"`
+	Errors  []string `json:"errors,omitempty"`
 }
 
 func saveLocalImage(raw []byte, contentType, seed string) (string, error) {
@@ -189,4 +231,223 @@ func (s *OpenAIGatewayService) GetLocalVideoFile(id string) (*LocalMediaFile, er
 		return nil, localMediaNotFound(localMediaVideo, id)
 	}
 	return file, err
+}
+
+func (s *OpenAIGatewayService) ListLocalMediaCache(filter LocalMediaCacheListFilter) (*LocalMediaCacheListResult, error) {
+	items, err := listLocalMediaCacheItems(filter)
+	if err != nil {
+		return nil, err
+	}
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := filter.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	total := len(items)
+	start := (page - 1) * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+	return &LocalMediaCacheListResult{
+		Items:    items[start:end],
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+func (s *OpenAIGatewayService) DeleteLocalMediaCacheItem(mediaType, id string) error {
+	path, err := localMediaCachePath(mediaType, id)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return localMediaNotFound(mediaType, id)
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *OpenAIGatewayService) CleanupLocalMediaCache(input LocalMediaCacheCleanupInput) (*LocalMediaCacheCleanupResult, error) {
+	items, err := listLocalMediaCacheItems(LocalMediaCacheListFilter{
+		Type:   input.Type,
+		Before: input.Before,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if input.Limit > 0 && len(items) > input.Limit {
+		items = items[:input.Limit]
+	}
+	result := &LocalMediaCacheCleanupResult{}
+	for _, item := range items {
+		if err := os.Remove(item.Path); err != nil {
+			result.Skipped++
+			result.Errors = append(result.Errors, err.Error())
+			continue
+		}
+		result.Deleted++
+	}
+	return result, nil
+}
+
+func (s *OpenAIGatewayService) CleanupLocalMediaOrphans() (*LocalMediaCacheCleanupResult, error) {
+	result := &LocalMediaCacheCleanupResult{}
+	for _, mediaType := range []string{localMediaImage, localMediaVideo} {
+		dir := localMediaDir(mediaType)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			path := filepath.Join(dir, entry.Name())
+			name := entry.Name()
+			id := strings.TrimSuffix(name, filepath.Ext(name))
+			orphan := strings.HasSuffix(name, ".tmp") || !localMediaIDRE.MatchString(id)
+			if !orphan {
+				result.Skipped++
+				continue
+			}
+			if err := os.Remove(path); err != nil {
+				result.Skipped++
+				result.Errors = append(result.Errors, err.Error())
+				continue
+			}
+			result.Deleted++
+		}
+	}
+	return result, nil
+}
+
+func listLocalMediaCacheItems(filter LocalMediaCacheListFilter) ([]LocalMediaCacheItem, error) {
+	mediaTypes, err := localMediaCacheTypes(filter)
+	if err != nil {
+		return nil, err
+	}
+	search := strings.ToLower(strings.TrimSpace(filter.Search))
+	items := []LocalMediaCacheItem{}
+	for _, mediaType := range mediaTypes {
+		dir := localMediaDir(mediaType)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || strings.HasSuffix(entry.Name(), ".tmp") {
+				continue
+			}
+			id := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			if !localMediaIDRE.MatchString(id) {
+				continue
+			}
+			if search != "" && !strings.Contains(strings.ToLower(entry.Name()), search) && !strings.Contains(strings.ToLower(id), search) {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return nil, err
+			}
+			if !filter.Before.IsZero() && !info.ModTime().Before(filter.Before) {
+				continue
+			}
+			ext := filepath.Ext(entry.Name())
+			contentType := mime.TypeByExtension(ext)
+			if contentType == "" {
+				if mediaType == localMediaVideo {
+					contentType = "video/mp4"
+				} else {
+					contentType = "application/octet-stream"
+				}
+			}
+			item := LocalMediaCacheItem{
+				ID:          strings.ToLower(id),
+				Type:        mediaType,
+				FileName:    entry.Name(),
+				Path:        filepath.Join(dir, entry.Name()),
+				ContentType: contentType,
+				Size:        info.Size(),
+				ModifiedAt:  info.ModTime().Unix(),
+			}
+			if mediaType == localMediaVideo {
+				item.URL = localVideoURL(item.ID)
+			} else {
+				item.URL = localImageURL(item.ID)
+			}
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].ModifiedAt == items[j].ModifiedAt {
+			return items[i].FileName < items[j].FileName
+		}
+		return items[i].ModifiedAt > items[j].ModifiedAt
+	})
+	return items, nil
+}
+
+func localMediaCacheTypes(filter LocalMediaCacheListFilter) ([]string, error) {
+	mediaType := strings.ToLower(strings.TrimSpace(filter.Type))
+	if filter.IncludeImages || filter.IncludeVideos {
+		out := []string{}
+		if filter.IncludeImages {
+			out = append(out, localMediaImage)
+		}
+		if filter.IncludeVideos {
+			out = append(out, localMediaVideo)
+		}
+		return out, nil
+	}
+	switch mediaType {
+	case "", "all":
+		return []string{localMediaImage, localMediaVideo}, nil
+	case localMediaImage, localMediaVideo:
+		return []string{mediaType}, nil
+	default:
+		return nil, fmt.Errorf("media type must be one of [%s, %s, all]", localMediaImage, localMediaVideo)
+	}
+}
+
+func localMediaCachePath(mediaType, id string) (string, error) {
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	id = strings.ToLower(strings.TrimSpace(id))
+	if !localMediaIDRE.MatchString(id) {
+		return "", errors.New("invalid media file id")
+	}
+	switch mediaType {
+	case localMediaImage:
+		file, err := LocalImageFile(id)
+		if err != nil {
+			return "", err
+		}
+		return file.Path, nil
+	case localMediaVideo:
+		file, err := LocalVideoFile(id)
+		if err != nil {
+			return "", err
+		}
+		return file.Path, nil
+	default:
+		return "", fmt.Errorf("media type must be one of [%s, %s]", localMediaImage, localMediaVideo)
+	}
 }

@@ -266,6 +266,8 @@ export default {
     filter: 'Filter',
     export: 'Export',
     import: 'Import',
+    startDate: 'Start Date',
+    endDate: 'End Date',
     actions: 'Actions',
     status: 'Status',
     name: 'Name',
@@ -351,7 +353,11 @@ export default {
     apiKeys: 'API Keys',
     usage: 'Usage',
     requestLogs: 'Request Logs',
+    securityCenter: 'Security Center',
+    securityAudit: 'Security Audit',
+    mediaCache: 'Media Cache',
     redeem: 'Redeem',
+    checkin: 'Daily Check-in',
     affiliate: 'Affiliate Rebates',
     affiliateManagement: 'Affiliate Rebates',
     affiliateInviteRecords: 'Invite Records',
@@ -427,6 +433,8 @@ export default {
     emailSuffixNotAllowedWithAllowed:
       'This email domain is not allowed. Allowed domains: {suffixes}',
     emailSuffixAllowedMore: 'and {count} more',
+    emailAliasNotAllowed:
+      'This email address uses an alias pattern. Use an address without plus aliases or Gmail dot aliases.',
     loginSuccess: 'Login successful! Welcome back.',
     accountCreatedSuccess: 'Account created successfully! Welcome to {siteName}.',
     reloginRequired: 'Session expired. Please log in again.',
@@ -669,7 +677,29 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    dailyCheckin: 'Daily Check-in',
+    dailyCheckinReward: 'Claim {amount} reward'
+  },
+
+  checkin: {
+    title: 'Daily Check-in',
+    description: 'Check in once per day to claim reward balance. Your balance updates after a successful check-in.',
+    reward: 'Today Reward',
+    todayStatus: 'Today Status',
+    checkedIn: 'Checked in',
+    notCheckedIn: 'Ready',
+    streak: 'Streak',
+    streakDays: '{days} days',
+    nextAvailable: 'Next Available',
+    tomorrow: 'Tomorrow',
+    checkinButton: 'Check in now',
+    submitting: 'Checking in...',
+    alreadyCheckedIn: 'Already checked in today',
+    success: 'Check-in successful',
+    failed: 'Check-in failed',
+    loadFailed: 'Failed to load check-in status',
+    newBalance: 'Current balance',
   },
 
   // Groups (shared)
@@ -1030,6 +1060,90 @@ export default {
       error: 'Error',
       client: 'Client',
       actions: 'Actions'
+    }
+  },
+
+  securityCenter: {
+    failedToLoad: 'Failed to load security events',
+    user: {
+      title: 'Security Center',
+      description: 'Review recent account security events and open Profile to manage password, two-factor authentication, and linked accounts.'
+    },
+    actions: {
+      password: 'Password',
+      totp: 'Two-factor authentication',
+      bindings: 'Linked accounts',
+      profileLinkHint: 'Open Profile'
+    },
+    apiKeys: {
+      title: 'API Key Revocation',
+      description: 'Review recently used keys and revoke a key immediately when it looks abnormal.',
+      empty: 'No API keys',
+      revoke: 'Revoke',
+      revokeConfirm: 'Revoke this API key? This cannot be undone.',
+      revoked: 'API key revoked',
+      loadFailed: 'Failed to load API keys',
+      revokeFailed: 'Failed to revoke API key'
+    },
+    sensitiveVerify: {
+      title: 'Step-up Verification',
+      description: 'Verify your identity before revoking API key "{name}".',
+      method: 'Verification method',
+      password: 'Login password',
+      passwordPlaceholder: 'Enter your current password',
+      totp: 'Authenticator code',
+      totpCode: '6-digit code',
+      totpPlaceholder: 'Enter the 6-digit authenticator code',
+      recoveryCode: 'Recovery code',
+      recoveryPlaceholder: 'Enter a one-time recovery code',
+      revokeWarning: 'After revocation this API key stops working immediately. Existing calls will be rejected and the key cannot be restored.',
+      failed: 'Step-up verification failed'
+    },
+    stats: {
+      total: 'Total events',
+      pageHighRisk: 'Page high risk'
+    },
+    filters: {
+      result: 'Result',
+      riskLevel: 'Risk level',
+      action: 'Action',
+      actionPlaceholder: 'e.g. login / totp',
+      actorType: 'Actor type',
+      actorId: 'Actor ID',
+      subjectType: 'Subject type',
+      subjectId: 'Subject ID',
+      userSearchPlaceholder: 'Search action, reason, IP, endpoint, or request ID',
+      adminSearchPlaceholder: 'Search actor, subject, action, reason, IP, endpoint, or request ID'
+    },
+    fields: {
+      time: 'Time',
+      action: 'Action',
+      actor: 'Actor',
+      subject: 'Subject',
+      result: 'Result',
+      risk: 'Risk',
+      client: 'Client',
+      ip: 'IP',
+      endpoint: 'Endpoint',
+      requestId: 'Request ID',
+      unknownAction: 'Security event'
+    },
+    result: {
+      all: 'All results',
+      success: 'Success',
+      denied: 'Denied',
+      failure: 'Failed'
+    },
+    risk: {
+      all: 'All risks',
+      low: 'Low',
+      medium: 'Medium',
+      high: 'High',
+      critical: 'Critical'
+    },
+    empty: {
+      title: 'No security events',
+      description: 'No records match the current filters.'
     }
   },
 
@@ -1478,6 +1592,18 @@ export default {
       loginTitle: 'Two-Factor Authentication',
       loginHint: 'Enter the 6-digit code from your authenticator app',
       loginFailed: 'Verification failed, please try again',
+      recoveryCode: 'Recovery code',
+      recoveryCodePlaceholder: 'Enter a one-time recovery code',
+      useAuthenticatorCode: 'Use authenticator code',
+      useRecoveryCode: 'Use recovery code',
+      recoveryCodesTitle: 'Save recovery codes',
+      recoveryCodesOnceHint: 'Recovery codes are shown only once. Save them in a secure place now. Each code can be used once.',
+      copyRecoveryCodes: 'Copy recovery codes',
+      recoveryCodesRemaining: 'Recovery codes remaining',
+      regenerateRecoveryCodes: 'Regenerate recovery codes',
+      regenerateRecoveryCodesHint: 'Enter the 6-digit code from your authenticator app. Existing recovery codes will be invalidated.',
+      recoveryCodesRegenerated: 'Recovery codes regenerated',
+      regenerateRecoveryCodesFailed: 'Failed to regenerate recovery codes',
       // New translations for email verification
       verifyEmailFirst: 'Please verify your email first',
       verifyPasswordFirst: 'Please verify your identity first',
@@ -1689,6 +1815,138 @@ export default {
       requestsShort: 'Req',
       tokensShort: 'Tok',
       failedToLoad: 'Failed to load dashboard statistics'
+    },
+
+    securityCenter: {
+      title: 'Security Audit',
+      description: 'Review account security events and admin audit records with filters for risk, result, actor, and subject.',
+      failedToLoad: 'Failed to load security audit logs',
+      entitiesFailedToLoad: 'Failed to load security center data',
+      incidents: {
+        title: 'Risk Incidents',
+        description: 'Risk incidents produced from audit logs and blocking policies.',
+        empty: 'No risk incidents'
+      },
+      policies: {
+        title: 'Policy Rules',
+        description: 'Observe or block requests by user, API key, endpoint, model, IP, or User-Agent.',
+        name: 'Rule name',
+        code: 'Rule code',
+        descriptionField: 'Rule description',
+        enabled: 'Enable rule',
+        empty: 'No policy rules',
+        invalidConditions: 'Conditions must be a valid JSON object',
+        nameCodeRequired: 'Rule name and code are required',
+        created: 'Policy rule created',
+        updated: 'Policy rule updated',
+        deleted: 'Policy rule deleted',
+        saveFailed: 'Failed to save policy rule',
+        deleteFailed: 'Failed to delete policy rule',
+        deleteConfirm: 'Delete policy rule {name}?'
+      },
+      locks: {
+        title: 'Subject Locks',
+        description: 'Manually lock or unlock users and API keys. Active locks block requests at the gateway boundary.',
+        subjectId: 'Subject ID',
+        reason: 'Reason',
+        create: 'Create lock',
+        empty: 'No active locks',
+        unlock: 'Unlock',
+        subjectRequired: 'Subject ID is required',
+        created: 'Lock created',
+        unlocked: 'Lock removed',
+        createFailed: 'Failed to create lock',
+        unlockFailed: 'Failed to unlock'
+      },
+      exports: {
+        title: 'Audit Exports',
+        description: 'Create CSV files from the current filters. Export records are kept for 7 days.',
+        create: 'Create export from current filters',
+        createShort: 'Create export',
+        creating: 'Creating...',
+        created: 'Audit export created',
+        createFailed: 'Failed to create audit export',
+        empty: 'No export records',
+        rows: 'rows',
+        download: 'Download CSV',
+        downloading: 'Downloading...',
+        downloadFailed: 'Failed to download audit export',
+        status: {
+          pending: 'Processing',
+          completed: 'Completed',
+          failed: 'Failed'
+        }
+      },
+      policyActions: {
+        observe: 'Observe',
+        block: 'Block',
+        temporaryLock: 'Temporary lock',
+        disableApiKey: 'Disable API key',
+        disableUser: 'Disable user',
+        notifyAdmin: 'Notify admin',
+        notifyUser: 'Notify user'
+      },
+      integrity: {
+        title: 'Audit Chain Integrity',
+        description: 'Verify that the security audit hash chain is continuous.',
+        check: 'Run check',
+        checking: 'Checking...',
+        valid: 'Valid',
+        invalid: 'Broken',
+        checked: 'Checked records',
+        brokenAt: 'Broken record',
+        notChecked: 'No check has run yet',
+        validToast: 'Audit chain integrity is valid',
+        invalidToast: 'Audit chain integrity is broken',
+        failed: 'Integrity check failed'
+      }
+    },
+
+    mediaCache: {
+      title: 'Media Cache',
+      description: 'Manage image and video files stored under the local DATA_DIR by generation tasks.',
+      loadFailed: 'Failed to load media cache',
+      pageSizeTotal: 'This page',
+      deleted: 'Media cache deleted',
+      deleteFailed: 'Failed to delete media cache',
+      deleteConfirm: 'Delete cached file {file}?',
+      filters: {
+        type: 'Type',
+        searchPlaceholder: 'Search file name or cache ID',
+        olderThan: 'Older than'
+      },
+      types: {
+        all: 'All',
+        image: 'Image',
+        video: 'Video'
+      },
+      olderThan: {
+        none: 'Any time',
+        day: 'More than 1 day',
+        week: 'More than 7 days',
+        month: 'More than 30 days'
+      },
+      columns: {
+        preview: 'Preview',
+        file: 'File',
+        type: 'Type',
+        size: 'Size',
+        modifiedAt: 'Modified'
+      },
+      empty: {
+        title: 'No media cache',
+        description: 'No local image or video cache matches the current filters.'
+      },
+      cleanup: {
+        filtered: 'Clean by filter',
+        filteredConfirm: 'Clean media cache matching the current type and time filters? This cannot be undone.',
+        orphans: 'Clean orphan files',
+        orphansConfirm: 'Clean .tmp files and files with invalid media IDs?',
+        requireOlderThan: 'Choose a time condition before batch cleanup',
+        limit: 'Cleanup limit',
+        result: 'Cleanup finished: deleted {deleted}, skipped {skipped}',
+        failed: 'Failed to clean media cache'
+      }
     },
 
     backup: {
@@ -3290,6 +3548,29 @@ export default {
       dataExportSelected: 'Export Selected',
       dataExportIncludeProxies: 'Include proxies linked to the exported accounts',
       dataImport: 'Import',
+      xaiCookieTokenImport: 'Import Grok Token TXT',
+      xaiCookieTokenExport: 'Export Grok Token TXT',
+      xaiCookieTokenExportSelected: 'Export selected Grok Tokens',
+      xaiCookieTokenExportEmpty: 'No xAI Cookie tokens available to export',
+      xaiCookieTokenExported: 'Exported {count} Grok tokens',
+      xaiCookieTokenExportFailed: 'Failed to export Grok tokens',
+      xaiCookieTokenImportTitle: 'Import Grok Token TXT',
+      xaiCookieTokenImportHint: 'Upload a txt file to create xAI / Grok Cookie accounts in bulk; use one token per line. sso=token and full Cookie fragments are also accepted.',
+      xaiCookieTokenImportWarning: 'Import creates new xAI Cookie accounts. Existing or duplicate tokens are skipped automatically.',
+      xaiCookieTokenImportFile: 'Token file',
+      xaiCookieTokenImportSelectFile: 'Please select a TXT file',
+      xaiCookieTokenNamePrefix: 'Account name prefix',
+      xaiCookieTokenDefaultNamePrefix: 'Grok imported account',
+      xaiCookieTokenBaseUrl: 'Grok URL',
+      xaiCookieTokenImportResult: 'Import Result',
+      xaiCookieTokenImportResultSummary: 'Created {created}, skipped {skipped}, failed {failed}',
+      xaiCookieTokenImportErrorLine: 'Line {line}',
+      xaiCookieTokenImportButton: 'Start Import',
+      xaiCookieTokenImporting: 'Importing...',
+      xaiCookieTokenImportEmptyFile: 'No importable tokens found in the file',
+      xaiCookieTokenImportSuccess: 'Import completed: created {created}, skipped {skipped}',
+      xaiCookieTokenImportCompletedWithErrors: 'Import completed with errors: created {created}, skipped {skipped}, failed {failed}',
+      xaiCookieTokenImportFailed: 'Failed to import Grok tokens',
       moreActions: 'More Actions',
       dataActions: 'Data',
       toolActions: 'Tools',
@@ -5678,6 +5959,14 @@ export default {
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
+        checkin: {
+          title: 'Daily Check-in',
+          description: 'Allow users to claim a balance reward once per day. Disabled by default.',
+          enabled: 'Enable Daily Check-in',
+          enabledHint: 'When off, the user sidebar and dashboard entries are hidden, and direct visits redirect back to the dashboard.',
+          rewardAmount: 'Check-in Reward Amount',
+          rewardAmountHint: 'Amount credited to user balance after a successful check-in. 0 records the check-in without granting balance.',
+        },
         publicStatus: {
           title: 'Public Status Page',
           description: 'Show anonymous visitors a redacted health summary, model count, channel health, and recent events. Disabled by default.',
@@ -5768,6 +6057,15 @@ export default {
           "Only email addresses from the specified domains can register (for example, {'@'}qq.com, {'@'}gmail.com, *.edu.cn)",
         emailSuffixWhitelistPlaceholder: "{'@'}example.com, *.edu.cn",
         emailSuffixWhitelistInputHint: 'Leave empty for no restriction. Use *.edu.cn to match edu.cn and its subdomains.',
+        emailAliasRestriction: 'Block Email Aliases',
+        emailAliasRestrictionHint:
+          'Reject plus aliases such as user+tag@example.com and Gmail/Googlemail dot aliases.',
+        emailDomainBlacklist: 'Email Domain Blacklist',
+        emailDomainBlacklistHint:
+          "Blacklist wins over whitelist. Supports {'@'}disposable.com and *.disposable.com.",
+        emailDomainBlacklistPlaceholder: "{'@'}disposable.com, *.mail-temp.com",
+        emailDomainBlacklistInputHint:
+          'Press Enter after each domain. The blacklist is not exposed through anonymous public settings.',
         promoCode: 'Promo Code',
         promoCodeHint: 'Allow users to use promo codes during registration',
         invitationCode: 'Invitation Code Registration',

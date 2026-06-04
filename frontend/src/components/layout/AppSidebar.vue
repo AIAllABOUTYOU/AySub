@@ -669,6 +669,7 @@ const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
 const flagAffiliate = makeSidebarFlag(FeatureFlags.affiliate)
+const flagCheckin = makeSidebarFlag(FeatureFlags.checkin)
 const flagRiskControl = makeSidebarFlag(FeatureFlags.riskControl)
 const flagOpsMonitoring = () => adminSettingsStore.opsMonitoringEnabled
 const flagAdminPayment = () => adminSettingsStore.paymentEnabled
@@ -684,9 +685,11 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     items.push({ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon })
   }
   items.push(
+    { path: '/checkin', label: t('nav.checkin'), icon: GiftIcon, featureFlag: flagCheckin },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/request-logs', label: t('nav.requestLogs'), icon: OrderListIcon, hideInSimpleMode: true },
+    { path: '/security', label: t('nav.securityCenter'), icon: ShieldIcon, hideInSimpleMode: true },
     { path: '/models', label: t('nav.modelMarketplace'), icon: ModelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/playground', label: t('nav.experienceCenter'), icon: PriceTagIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
@@ -787,7 +790,9 @@ const adminNavItems = computed((): NavItem[] => {
       ],
     },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
-    { path: '/admin/request-logs', label: t('nav.requestLogs'), icon: OrderListIcon }
+    { path: '/admin/request-logs', label: t('nav.requestLogs'), icon: OrderListIcon },
+    { path: '/admin/security', label: t('nav.securityAudit'), icon: ShieldIcon },
+    { path: '/admin/media-cache', label: t('nav.mediaCache'), icon: FolderIcon, hideInSimpleMode: true }
   ]
 
   const visible = applyFeatureFlags(baseItems)

@@ -44,6 +44,9 @@ func RegisterAdminRoutes(
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
+		// 媒体缓存管理
+		registerMediaCacheRoutes(admin, h)
+
 		// 卡密管理
 		registerRedeemCodeRoutes(admin, h)
 
@@ -95,8 +98,30 @@ func RegisterAdminRoutes(
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
 
+		// 安全审计中心
+		registerSecurityRoutes(admin, h)
+
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
+	}
+}
+
+func registerSecurityRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	security := admin.Group("/security")
+	{
+		security.GET("/audit-logs", h.Admin.Security.ListAuditLogs)
+		security.GET("/incidents", h.Admin.Security.ListIncidents)
+		security.GET("/policies", h.Admin.Security.ListPolicies)
+		security.POST("/policies", h.Admin.Security.CreatePolicy)
+		security.PUT("/policies/:id", h.Admin.Security.UpdatePolicy)
+		security.DELETE("/policies/:id", h.Admin.Security.DeletePolicy)
+		security.GET("/locks", h.Admin.Security.ListLocks)
+		security.POST("/locks", h.Admin.Security.CreateLock)
+		security.POST("/locks/:id/unlock", h.Admin.Security.UnlockLock)
+		security.GET("/integrity/check", h.Admin.Security.IntegrityCheck)
+		security.GET("/exports", h.Admin.Security.ListExports)
+		security.POST("/exports", h.Admin.Security.CreateExport)
+		security.GET("/exports/:id/download", h.Admin.Security.DownloadExport)
 	}
 }
 
@@ -309,6 +334,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		accounts.POST("/batch", h.Admin.Account.BatchCreate)
 		accounts.GET("/data", h.Admin.Account.ExportData)
 		accounts.POST("/data", h.Admin.Account.ImportData)
+		accounts.GET("/xai-cookie-tokens", h.Admin.Account.ExportXaiCookieTokens)
+		accounts.POST("/xai-cookie-tokens", h.Admin.Account.ImportXaiCookieTokens)
 		accounts.POST("/batch-update-credentials", h.Admin.Account.BatchUpdateCredentials)
 		accounts.POST("/batch-refresh-tier", h.Admin.Account.BatchRefreshTier)
 		accounts.POST("/bulk-update", h.Admin.Account.BulkUpdate)
@@ -386,6 +413,16 @@ func registerProxyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		proxies.GET("/:id/accounts", h.Admin.Proxy.GetProxyAccounts)
 		proxies.POST("/batch-delete", h.Admin.Proxy.BatchDelete)
 		proxies.POST("/batch", h.Admin.Proxy.BatchCreate)
+	}
+}
+
+func registerMediaCacheRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	mediaCache := admin.Group("/media-cache")
+	{
+		mediaCache.GET("", h.OpenAIGateway.AdminListMediaCache)
+		mediaCache.POST("/cleanup", h.OpenAIGateway.AdminCleanupMediaCache)
+		mediaCache.POST("/orphans/cleanup", h.OpenAIGateway.AdminCleanupMediaOrphans)
+		mediaCache.DELETE("/:type/:id", h.OpenAIGateway.AdminDeleteMediaCacheItem)
 	}
 }
 

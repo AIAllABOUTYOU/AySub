@@ -25,6 +25,7 @@ type TotpStatusResponse struct {
 	Enabled        bool   `json:"enabled"`
 	EnabledAt      *int64 `json:"enabled_at,omitempty"` // Unix timestamp
 	FeatureEnabled bool   `json:"feature_enabled"`
+	RecoveryCodes  int    `json:"recovery_codes"`
 }
 
 // GetStatus returns the TOTP status for the current user
@@ -45,6 +46,7 @@ func (h *TotpHandler) GetStatus(c *gin.Context) {
 	resp := TotpStatusResponse{
 		Enabled:        status.Enabled,
 		FeatureEnabled: status.FeatureEnabled,
+		RecoveryCodes:  status.RecoveryCodes,
 	}
 
 	if status.EnabledAt != nil {
@@ -119,12 +121,17 @@ func (h *TotpHandler) Enable(c *gin.Context) {
 		return
 	}
 
-	if err := h.totpService.CompleteSetup(c.Request.Context(), subject.UserID, req.TotpCode, req.SetupToken); err != nil {
+	result, err := h.totpService.CompleteSetupWithRecoveryCodes(c.Request.Context(), subject.UserID, req.TotpCode, req.SetupToken)
+	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	response.Success(c, gin.H{"success": true})
+	resp := gin.H{"success": true}
+	if result != nil && len(result.RecoveryCodes) > 0 {
+		resp["recovery_codes"] = result.RecoveryCodes
+	}
+	response.Success(c, resp)
 }
 
 // TotpDisableRequest represents the request to disable TOTP
@@ -178,4 +185,31 @@ func (h *TotpHandler) SendVerifyCode(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"success": true})
+}
+
+type TotpRegenerateRecoveryCodesRequest struct {
+	TotpCode string `json:"totp_code" binding:"required,len=6"`
+}
+
+// RegenerateRecoveryCodes replaces the current user's TOTP recovery codes.
+// POST /api/v1/user/totp/recovery-codes/regenerate
+func (h *TotpHandler) RegenerateRecoveryCodes(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	var req TotpRegenerateRecoveryCodesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	result, err := h.totpService.RegenerateRecoveryCodes(c.Request.Context(), subject.UserID, req.TotpCode)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }

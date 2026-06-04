@@ -33,6 +33,12 @@ func RegisterUserRoutes(
 			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
+			user.GET("/checkin", h.Checkin.Status)
+			user.GET("/checkin/status", h.Checkin.Status)
+			user.POST("/checkin", h.Checkin.Claim)
+			user.GET("/security/events", h.UserSecurity.ListEvents)
+			user.POST("/security/verify-sensitive-operation", h.UserSecurity.VerifySensitiveOperation)
+			user.POST("/security/api-keys/:id/revoke", h.UserSecurity.RevokeAPIKey)
 
 			// 通知邮箱管理
 			notifyEmail := user.Group("/notify-email")
@@ -52,6 +58,7 @@ func RegisterUserRoutes(
 				totp.POST("/setup", h.Totp.InitiateSetup)
 				totp.POST("/enable", h.Totp.Enable)
 				totp.POST("/disable", h.Totp.Disable)
+				totp.POST("/recovery-codes/regenerate", h.Totp.RegenerateRecoveryCodes)
 			}
 		}
 

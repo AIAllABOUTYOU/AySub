@@ -2,494 +2,199 @@
 
 <div align="center">
 
-[![Go](https://img.shields.io/badge/Go-1.25.7-00ADD8.svg)](https://golang.org/)
+[![Go](https://img.shields.io/badge/Go-1.26.3-00ADD8.svg)](https://golang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3.4+-4FC08D.svg)](https://vuejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7+-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-**AySub 三位一体 AI API ゲートウェイ**
+**All Your AI Sub Hub**
 
 [English](README.md) | [中文](README_CN.md) | 日本語
 
 </div>
 
-> AySub はアカウントスケジューリング、NewAPI 風の運用機能、Grok リバースアダプターを統合しています。既存コードとの互換性のため、Go module は上流の `github.com/Wei-Shaw/sub2api` import path を維持しますが、実行時名、Docker image、service、container、network、volume はデフォルトで AySub 名を使用します。
+AySub は、セルフホスト向けの AI API ゲートウェイです。アカウントスケジューリング、OpenAI 互換 API、NewAPI 風の運用機能、Grok/xAI アダプターを扱います。互換性維持のため Go module path は `github.com/Wei-Shaw/sub2api` のままです。実行時名、Docker image、container、service、network、volume は AySub 名を使います。
 
----
+著作権表記: `aiaay.com`。
 
-## 現在の状態
+## 現在の範囲
 
-現在の実装場所: `/Volumes/llovky/AitchTey/code/AySub`。
+現在のコードベースで実装済み:
 
-メインゲートウェイ、NewAPI 風の運用機能、xAI/Grok 公式 API Key、Grok Cookie リバースアダプター、Console モデルアダプター、生成メディアのローカルキャッシュは現在のコードベースに統合済みです。このリポジトリにはまだ AySub 専用の公開デモはありません。セルフホスト時はセットアップウィザード、または `ADMIN_EMAIL` / `ADMIN_PASSWORD` で管理者アカウントを作成してください。
+- アカウントプール、スティッキーセッション、フェイルオーバー、同時実行制御、レート制限、クォータ確認、使用量課金。
+- OpenAI 互換 `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1/embeddings`、`/v1/images/*`、`/v1/videos`、`/v1/audio/*`、LiveKit、Gemini native routes。
+- API Key 単位のモデル/エンドポイント権限。判定はバックエンドのゲートウェイミドルウェアで強制。
+- ユーザー/管理者向けのリクエストログと使用量レポート。
+- `/models` モデルマーケット、価格計算機、利用可能チャネル、管理側チャネル戦略ビュー。
+- `/playground` 体験センター。ユーザー自身の API Key でチャット、画像生成、動画タスク、音声 speech/transcription/translation を実行。
+- `/status` 公開ステータスページと匿名 read-only `/api/v1/status/public`。
+- `/setup` セットアップウィザード。Docker では `AUTO_SETUP` と `ADMIN_EMAIL` / `ADMIN_PASSWORD` を利用可能。
+- デイリーチェックイン。設定キーは `checkin_enabled` と `checkin_reward_amount`。
+- TOTP リカバリーコード、センシティブ操作の再認証、ユーザー側 API Key 失効。
+- 登録制御: 登録スイッチ、メールドメイン許可リスト、メールドメインブロックリスト、メールエイリアス制限。
+- セキュリティ監査センター: 監査ログ、ポリシールール、ロック対象、ハッシュチェーン整合性チェック。
+- コンテンツモデレーション/リスク管理。モデレーションイベントは監査/ログ経路へ接続。
+- 内蔵決済: プラン、注文、決済インスタンス、callback、返金、決済運用メトリクス。
+- xAI 公式 API Key。Grok Cookie/Console アダプターは chat、responses、messages、images、videos、LiveKit token/RTC、quota、model list に対応。
+- 生成メディアのローカルキャッシュ: `DATA_DIR/files/images`、`DATA_DIR/files/videos`。管理画面で一覧、削除、条件付きクリーンアップ、孤児ファイル削除が可能。
+- 任意の proxy compose profile: `deploy/docker-compose.proxy-profiles.yml` に Privoxy、FlareSolverr、WARP を定義。
 
-## 概要
+README で完了済みとは扱わない項目:
 
-AySub は、アカウントスケジューリング、NewAPI 風の商用運用機能、Grok Cookie リバースアクセスを Go 実装として統合した AI API ゲートウェイです。ユーザーはプラットフォームが生成した API キーを通じて上流 AI サービスへアクセスし、AySub が認証、アカウントスケジューリング、モデル価格、課金、クォータ制御、メディア生成ルーティング、リクエスト転送を処理します。
+- Passkey/WebAuthn。
+- 汎用 custom OAuth Provider CRUD。現在は GitHub、Google、OIDC、DingTalk、WeChat、LinuxDo の固定フロー。
+- 既存のモデル/チャネル/価格データとは別の完全なモデル集合テンプレートと provider catalog。
+- Grok2API の Masonry gallery と ChatKit voice UI の完全 parity。
+- 実 xAI/Grok Cookie/Console/media/LiveKit アカウント、実決済事業者 callback の本番検証。
 
-## 機能
+詳細は以下に記録しています:
 
-- **AySub スケジューリングコア** - アカウントプール、スティッキーセッション、サーキットブレーカー、同時実行制御、レート制限、トークン単位の使用量記録をサポート。
-- **NewAPI 風の運用機能** - ユーザー残高、プラットフォーム別クォータ、グループ、バックエンドで強制される API Key 権限、リクエストログ、運用レポート、注文、チャージプラン、決済インスタンス、決済コールバック、決済運用ダッシュボードをサポート。
-- **モデルと価格管理** - デフォルトモデル価格、チャネル別モデル許可リスト、モデル同期候補、チャネル価格 UI、トークン/画像/リクエスト単位の課金モード、ユーザー向け `/models` マーケット、価格計算機、管理側チャネル戦略ビュー、チャネル一括運用に対応。
-- **体験センター** - ユーザー向け `/playground` で自分の API Key を使ったチャット、画像生成、動画タスクフロー、音声 speech/transcription/translation を試せます。すべてのタブは API Key 権限、ログ、課金経路に従い、上流アカウントが対象能力を明示的にサポートしている必要があります。
-- **マルチプロバイダーゲートウェイ** - OpenAI 互換、Claude/Anthropic 互換、Gemini 互換、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key、カスタム上流チャネルをサポート。
-- **xAI 公式 API Key** - xAI プラットフォームを追加し、Chat Completions、Responses fallback、Anthropic Messages fallback、モデル一覧、エンドポイント統計、チャネル監視に対応。
-- **Grok Cookie リバースアダプター** - Grok Web Cookie アカウントで Chat Completions、Responses、Anthropic Messages、検索引用、thinking ストリーム、マルチモーダル画像アップロード、画像生成/編集、動画生成、クォータ照会をサポート。
-- **Grok Console モデル** - Cookie アカウントから `console.x.ai/v1/responses` 経由で `grok-4.3-console`、`grok-4.3-low/medium/high`、`grok-4.20-*`、`grok-4.20-multi-agent-*`、`grok-build-console` を呼び出し、Chat、Responses、Messages エントリへ変換。
-- **生成メディアのローカルキャッシュ** - Grok 生成画像/動画を `DATA_DIR/files/images` と `DATA_DIR/files/videos` に保存し、`/v1/files/image` と `/v1/files/video` から配信可能。
-- **内蔵決済システム** - EasyPay、Alipay、WeChat Pay、Stripe、セルフサービスチャージ、コールバック可観測性、返金/注文整合性メトリクスなどに対応し、別途決済サービスは不要（[設定ガイド](docs/PAYMENT.md)）。
-- **公開ステータスページ** - 任意の匿名 `/status` ページで、サニタイズ済みのシステム状態、利用可能モデル、チャネルヘルス概要、24 時間エラー率、レイテンシ範囲、最近のイベント概要を表示できます。
-- **管理ダッシュボード** - ユーザー、アカウント、チャネル、価格、グループ、決済、使用量、監視、データ管理、システム設定を Web UI で管理。
-- **外部システム連携** - チケット管理などの外部システムを iframe で管理ダッシュボードに埋め込み可能。
+- [NewAPI feature roadmap](docs/NEWAPI_FEATURE_ROADMAP_CN.md)
+- [Security audit roadmap](docs/SECURITY_AUDIT_ROADMAP_CN.md)
+- [Grok2API parity roadmap](docs/GROK2API_PARITY_CN.md)
 
-## 統合状況
+## 主なページ
 
-| 領域 | 現在の状態 |
-|------|-------------|
-| AySub コア | スケジューリング、アカウントプール、スティッキーセッション、使用量課金、レート制限、ゲートウェイルートは実装済み。 |
-| NewAPI モデル/価格 | モデル価格、チャネル許可リスト、価格同期、利用可能チャネル表示、管理側チャネル価格、ユーザー向け `/models` マーケット、価格計算機、チャネル戦略可視化、チャネル一括運用を実装済み。 |
-| NewAPI 体験センター | `/playground` はチャット、画像生成、`/v1/videos` のタスク送信/ポーリング/コンテンツダウンロード、OpenAI 互換の `/v1/audio/speech`、`/v1/audio/transcriptions`、`/v1/audio/translations` をサポートします。 |
-| NewAPI 商用運用 | ユーザー、残高、クォータ、グループ、バックエンドで強制される API Key モデル/エンドポイント権限、リクエストログ、運用レポート、注文、チャージプラン、決済インスタンス、コールバック、決済運用ダッシュボードは実装済み。実決済事業者設定は本番環境での検証が必要です。 |
-| 公開ステータス | 任意の `/status` ページと匿名 read-only API で、サニタイズ済みのヘルス、モデル、チャネル、24 時間エラー率、レイテンシ、最近のイベント概要を公開できます。アカウントシークレットや内部スタックは返しません。 |
-| フロントエンド/モバイル | NewAPI 風ページは AySub/Sub2API のレスポンシブ方針に従い、デスクトップでは高密度テーブル、小画面ではカード一覧と自然な縦流れのコントロールを使用します。 |
-| Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、モデル一覧、LiveKit token、LiveKit RTC proxy、Console モデル、ローカルメディアキャッシュは Go に移植済み。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP、FlareSolverr は直接統合していません。 |
-| E2E 検証 | 単体テストとフロントエンド型チェックは通過済み。実 xAI/Grok Cookie/Console/メディア/LiveKit アカウントでの検証は本番前に必要です。 |
+| 領域 | ページ |
+| --- | --- |
+| セットアップ | `/setup` |
+| API Key | `/keys` |
+| デイリーチェックイン | `/checkin` |
+| ユーザーリクエストログ | `/request-logs` |
+| ユーザーセキュリティ | `/user/security` |
+| モデルマーケット | `/models` |
+| 体験センター | `/playground` |
+| 公開ステータス | `/status` |
+| 管理リクエストログ | `/admin/request-logs` |
+| 管理セキュリティセンター | `/admin/security` |
+| メディアキャッシュ | `/admin/media-cache` |
+| リスク管理 | `/admin/risk-control` |
+| 決済ダッシュボード | `/admin/orders/dashboard` |
 
-## 技術スタック
+## API
 
-| コンポーネント | 技術 |
-|-----------|------------|
-| バックエンド | Go 1.25.7, Gin, Ent |
-| フロントエンド | Vue 3.4+, Vite 5+, TailwindCSS |
-| データベース | PostgreSQL 15+ |
-| キャッシュ/キュー | Redis 7+ |
+ゲートウェイルートは AySub API Key で認証します:
 
----
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/responses/*`
+- `GET /v1/responses`
+- `POST /v1/messages`
+- `GET /v1/models`
+- `GET /v1/usage`
+- `POST /v1/embeddings`
+- `POST /v1/images/generations`
+- `POST /v1/images/edits`
+- `POST /v1/videos`
+- `GET /v1/videos/{id}`
+- `GET /v1/videos/{id}/content`
+- `POST /v1/audio/speech`
+- `POST /v1/audio/transcriptions`
+- `POST /v1/audio/translations`
+- `GET /v1/files/image?id=...`
+- `GET /v1/files/video?id=...`
 
-## Nginx リバースプロキシに関する注意
+現在の AySub 追加 API:
 
-AySub（または CRS）を Nginx でリバースプロキシし、Codex CLI と組み合わせて使用する場合、Nginx の `http` ブロックに以下の設定を追加してください:
+- `GET /api/v1/user/checkin`
+- `GET /api/v1/user/checkin/status`
+- `POST /api/v1/user/checkin`
+- `GET /api/v1/user/security/events`
+- `POST /api/v1/user/security/verify-sensitive-operation`
+- `POST /api/v1/user/security/api-keys/:id/revoke`
+- `GET /api/v1/admin/security/audit-logs`
+- `GET /api/v1/admin/security/incidents`
+- `GET /api/v1/admin/security/policies`
+- `POST /api/v1/admin/security/policies`
+- `PUT /api/v1/admin/security/policies/:id`
+- `DELETE /api/v1/admin/security/policies/:id`
+- `GET /api/v1/admin/security/locks`
+- `POST /api/v1/admin/security/locks`
+- `POST /api/v1/admin/security/locks/:id/unlock`
+- `GET /api/v1/admin/security/integrity/check`
+- `GET /api/v1/admin/media-cache`
+- `POST /api/v1/admin/media-cache/cleanup`
+- `POST /api/v1/admin/media-cache/orphans/cleanup`
+- `DELETE /api/v1/admin/media-cache/:type/:id`
+- `GET /api/v1/status/public`
 
-```nginx
-underscores_in_headers on;
-```
+## Docker
 
-Nginx はデフォルトでアンダースコアを含むヘッダー（例: `session_id`）を破棄するため、マルチアカウント構成でのスティッキーセッションルーティングに支障をきたします。
-
----
-
-## デプロイ
-
-### 方法1: スクリプトによるインストール
-
-ワンクリックインストーラーは AySub のパスにバイナリ、設定、システムユーザー、systemd サービスを配置します。コンテナデプロイでは Docker Compose を推奨します。
-
-#### 前提条件
-
-- Linux サーバー（amd64 または arm64）
-- PostgreSQL 15+（インストール済みかつ稼働中）
-- Redis 7+（インストール済みかつ稼働中）
-- root 権限
-
-#### インストール手順
-
-```bash
-curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/install.sh | sudo bash
-```
-
-スクリプトは以下を実行します:
-1. システムアーキテクチャの検出
-2. 最新リリースのダウンロード
-3. バイナリを `/opt/aysub` にインストール
-4. systemd サービスの作成
-5. システムユーザーと権限の設定
-
-#### インストール後の作業
-
-```bash
-# 1. サービスを起動
-sudo systemctl start aysub
-
-# 2. 起動時の自動起動を有効化
-sudo systemctl enable aysub
-
-# 3. ブラウザでセットアップウィザードを開く
-# http://YOUR_SERVER_IP:8080
-```
-
-セットアップウィザードでは以下の設定を行います:
-- データベース設定
-- Redis 設定
-- 管理者アカウントの作成
-
-#### アップグレード
-
-**管理ダッシュボード**の左上にある**アップデートを確認**ボタンをクリックすることで、ダッシュボードから直接アップグレードできます。
-
-Web インターフェースでは以下が可能です:
-- 新しいバージョンの自動確認
-- ワンクリックでのアップデートのダウンロードと適用
-- 必要に応じたロールバック
-
-#### よく使うコマンド
+GitHub Actions は以下の image を公開します:
 
 ```bash
-# ステータスを確認
-sudo systemctl status aysub
-
-# ログを表示
-sudo journalctl -u aysub -f
-
-# サービスを再起動
-sudo systemctl restart aysub
-
-# アンインストール
-curl -sSL https://raw.githubusercontent.com/AIAllABOUTYOU/AySub/main/deploy/install.sh | sudo bash -s -- uninstall -y
+ghcr.io/aiallaboutyou/aysub:latest
 ```
 
----
+トリガー:
 
-### 方法2: Docker Compose（AySub 推奨）
+- `main` への push
+- `v*` tag
+- 手動 workflow dispatch
 
-AySub を Docker Compose でデプロイします。PostgreSQL と Redis のコンテナも含まれます。GitHub でビルドされた GHCR イメージを使うことも、このリポジトリから `aysub:latest` をローカルビルドすることもできます。
+workflow はルートの [`Dockerfile`](Dockerfile) を使用します。`deploy/` の compose ファイルもリポジトリルートの Dockerfile からビルドします。
 
-#### 前提条件
-
-- Docker 20.10+
-- Docker Compose v2+
-
-#### クイックスタート
-
-GitHub でビルドされたイメージを使う場合:
+GHCR image を使う場合:
 
 ```bash
-# AySub をクローン
 git clone https://github.com/AIAllABOUTYOU/AySub.git
-
-# デプロイ設定を準備
 cd AySub/deploy
 cp .env.example .env
 nano .env
 mkdir -p data postgres_data redis_data
-
-# GHCR イメージを取得してサービスを起動
 docker compose -f docker-compose.image.yml pull
 docker compose -f docker-compose.image.yml up -d
-
-# ログを表示
-docker compose -f docker-compose.image.yml logs -f aysub
 ```
 
-GitHub Actions は `main` への push、`v*` タグ、または手動 workflow 実行で `ghcr.io/aiallaboutyou/aysub:latest` をビルドします。初回公開後に外部から pull できない場合は、GitHub Packages で package visibility を public に設定してください。
-
-現在のリポジトリからローカルビルドする場合:
+ローカルソースからビルドする場合:
 
 ```bash
-# AySub をクローン
 git clone https://github.com/AIAllABOUTYOU/AySub.git
-
-# デプロイ設定を準備
 cd AySub/deploy
 cp .env.example .env
 nano .env
 mkdir -p data postgres_data redis_data
-
-# ビルドしてサービスを起動
 docker compose -f docker-compose.local.yml up -d --build
-
-# ログを表示
-docker compose -f docker-compose.local.yml logs -f aysub
 ```
 
-本番環境では、`JWT_SECRET`、`TOTP_ENCRYPTION_KEY`、`POSTGRES_PASSWORD` に安全な値を設定してください。
-
-#### 手動デプロイ
-
-手動でセットアップする場合:
+本番では最低限以下を設定してください:
 
 ```bash
-# 1. リポジトリをクローン
-git clone https://github.com/AIAllABOUTYOU/AySub.git
-cd AySub/deploy
-
-# 2. 環境設定ファイルをコピー
-cp .env.example .env
-
-# 3. 設定を編集（セキュアなパスワードを生成）
-nano .env
-```
-
-**`.env` の必須設定:**
-
-```bash
-# PostgreSQL パスワード（必須）
-POSTGRES_PASSWORD=your_secure_password_here
-
-# JWT シークレット（推奨 - 再起動後もユーザーのログイン状態を保持）
-JWT_SECRET=your_jwt_secret_here
-
-# TOTP 暗号化キー（推奨 - 再起動後も二要素認証を維持）
-TOTP_ENCRYPTION_KEY=your_totp_key_here
-
-# オプション: 管理者アカウント
+POSTGRES_PASSWORD=replace-with-random-password
+JWT_SECRET=replace-with-openssl-rand-hex-32
+TOTP_ENCRYPTION_KEY=replace-with-openssl-rand-hex-32
 ADMIN_EMAIL=admin@example.com
-ADMIN_PASSWORD=your_admin_password
-
-# オプション: カスタムポート
+ADMIN_PASSWORD=replace-with-admin-password
 SERVER_PORT=8080
 ```
 
-**セキュアなシークレットの生成方法:**
-```bash
-# JWT_SECRET を生成
-openssl rand -hex 32
+Docker auto setup で `ADMIN_PASSWORD` が空の場合、AySub は管理者パスワードを生成して container log に出力します。
 
-# TOTP_ENCRYPTION_KEY を生成
-openssl rand -hex 32
-
-# POSTGRES_PASSWORD を生成
-openssl rand -hex 32
-```
+## ソースビルド
 
 ```bash
-# 4. データディレクトリを作成（ローカルバージョンの場合）
-mkdir -p data postgres_data redis_data
-
-# 5. ビルドしてすべてのサービスを起動
-# オプション A: ローカルディレクトリバージョン（推奨 - 移行が容易）
-docker compose -f docker-compose.local.yml up -d --build
-
-# オプション B: 名前付きボリュームバージョン（シンプルなセットアップ）
-docker compose up -d --build
-
-# 6. ステータスを確認
-docker compose -f docker-compose.local.yml ps
-
-# 7. ログを表示
-docker compose -f docker-compose.local.yml logs -f aysub
-```
-
-#### デプロイバージョン
-
-| バージョン | データストレージ | 移行 | 推奨用途 |
-|---------|-------------|-----------|----------|
-| **docker-compose.image.yml** | ローカルディレクトリ | ✅ 容易（ディレクトリ全体を tar） | GitHub ビルド済みイメージによる本番デプロイ |
-| **docker-compose.local.yml** | ローカルディレクトリ | ✅ 容易（ディレクトリ全体を tar） | 本番環境、頻繁なバックアップ |
-| **docker-compose.yml** | 名前付きボリューム | ⚠️ docker コマンドが必要 | シンプルなセットアップ |
-
-**推奨:** GitHub ビルド済みイメージを使う場合は `docker-compose.image.yml`、ローカルソースからビルドする場合は `docker-compose.local.yml` を使用してください。
-
-#### アクセス
-
-ブラウザで `http://YOUR_SERVER_IP:8080` を開いてください。
-
-管理者パスワードが自動生成された場合は、ログで確認できます:
-```bash
-docker compose -f docker-compose.local.yml logs aysub | grep "admin password"
-```
-
-#### アップグレード
-
-```bash
-# 最新の AySub ソースを取得してコンテナを再ビルド/再作成
-git pull
-docker compose -f docker-compose.local.yml up -d --build
-
-# または GitHub ビルド済みイメージで更新
-docker compose -f docker-compose.image.yml pull aysub
-docker compose -f docker-compose.image.yml up -d
-```
-
-#### 簡単な移行（ローカルディレクトリバージョン）
-
-`docker-compose.local.yml` を使用している場合、新しいサーバーへの移行が簡単です:
-
-```bash
-# 移行元サーバーにて
-docker compose -f docker-compose.local.yml down
-cd ..
-tar czf aysub-complete.tar.gz AySub/
-
-# 新しいサーバーに転送
-scp aysub-complete.tar.gz user@new-server:/path/
-
-# 移行先サーバーにて
-tar xzf aysub-complete.tar.gz
-cd AySub/deploy/
-docker compose -f docker-compose.local.yml up -d --build
-```
-
-#### よく使うコマンド
-
-```bash
-# すべてのサービスを停止
-docker compose -f docker-compose.local.yml down
-
-# 再起動
-docker compose -f docker-compose.local.yml restart
-
-# すべてのログを表示
-docker compose -f docker-compose.local.yml logs -f
-
-# すべてのデータを削除（注意！）
-docker compose -f docker-compose.local.yml down
-rm -rf data/ postgres_data/ redis_data/
-```
-
----
-
-### 方法3: ソースからビルド
-
-開発やカスタマイズのためにソースコードからビルドして実行します。
-
-#### 前提条件
-
-- Go 1.21+
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-
-#### ビルド手順
-
-```bash
-# 1. リポジトリをクローン
 git clone https://github.com/AIAllABOUTYOU/AySub.git
-cd AySub
-
-# 2. pnpm をインストール（未インストールの場合）
-npm install -g pnpm
-
-# 3. フロントエンドをビルド
-cd frontend
+cd AySub/frontend
 pnpm install
 pnpm run build
-# 出力先: ../backend/internal/web/dist/
 
-# 4. フロントエンドを組み込んだバックエンドをビルド
 cd ../backend
 go build -tags embed -o aysub ./cmd/server
-
-# 5. 設定ファイルを作成
-cp ../deploy/config.example.yaml ./config.yaml
-
-# 6. 設定を編集
-nano config.yaml
-```
-
-> **注意:** `-tags embed` フラグはフロントエンドをバイナリに組み込みます。このフラグがない場合、バイナリはフロントエンド UI を提供しません。
-
-**`config.yaml` の主要設定:**
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
-  mode: "release"
-
-database:
-  host: "localhost"
-  port: 5432
-  user: "postgres"
-  password: "your_password"
-  dbname: "aysub"
-
-redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-
-jwt:
-  secret: "change-this-to-a-secure-random-string"
-  expire_hour: 24
-
-default:
-  user_concurrency: 5
-  user_balance: 0
-  api_key_prefix: "sk-"
-  rate_multiplier: 1.0
-```
-
-### Sora ステータス（一時的に利用不可）
-
-> ⚠️ Sora 関連の機能は、上流統合およびメディア配信の技術的問題により一時的に利用できません。
-> 現時点では本番環境で Sora に依存しないでください。
-> 既存の `gateway.sora_*` 設定キーは予約されていますが、これらの問題が解決されるまで有効にならない場合があります。
-
-`config.yaml` では追加のセキュリティ関連オプションも利用できます:
-
-- `cors.allowed_origins` - CORS 許可リスト
-- `security.url_allowlist` - 上流/価格/CRS ホストの許可リスト
-- `security.url_allowlist.enabled` - URL バリデーションの無効化（注意して使用）
-- `security.url_allowlist.allow_insecure_http` - バリデーション無効時に HTTP URL を許可
-- `security.url_allowlist.allow_private_hosts` - プライベート/ローカル IP アドレスを許可
-- `security.response_headers.enabled` - 設定可能なレスポンスヘッダーフィルタリングを有効化（無効時はデフォルトの許可リストを使用）
-- `security.csp` - Content-Security-Policy ヘッダーの制御
-- `billing.circuit_breaker` - 課金エラー時にフェイルクローズ
-- `server.trusted_proxies` - X-Forwarded-For パースの有効化
-- `turnstile.required` - リリースモードでの Turnstile 必須化
-
-**⚠️ セキュリティ警告: HTTP URL 設定**
-
-`security.url_allowlist.enabled=false` の場合、システムはデフォルトで最小限の URL バリデーションを行い、**HTTP URL を拒否**して HTTPS のみを許可します。HTTP URL を許可するには（開発環境や内部テスト用など）、以下を明示的に設定する必要があります:
-
-```yaml
-security:
-  url_allowlist:
-    enabled: false                # 許可リストチェックを無効化
-    allow_insecure_http: true     # HTTP URL を許可（⚠️ セキュリティリスクあり）
-```
-
-**または環境変数で設定:**
-
-```bash
-SECURITY_URL_ALLOWLIST_ENABLED=false
-SECURITY_URL_ALLOWLIST_ALLOW_INSECURE_HTTP=true
-```
-
-**HTTP を許可するリスク:**
-- API キーとデータが**平文**で送信される（傍受の危険性）
-- **中間者攻撃（MITM）**を受けやすい
-- **本番環境には不適切**
-
-**HTTP を使用すべき場面:**
-- ✅ ローカルサーバーでの開発・テスト（http://localhost）
-- ✅ 信頼できるエンドポイントを持つ内部ネットワーク
-- ✅ HTTPS 取得前のアカウント接続テスト
-- ❌ 本番環境（HTTPS のみを使用）
-
-**この設定なしで表示されるエラー例:**
-```
-Invalid base URL: invalid url scheme: http
-```
-
-URL バリデーションまたはレスポンスヘッダーフィルタリングを無効にする場合は、ネットワーク層を強化してください:
-- 上流ドメイン/IP のエグレス許可リストを適用
-- プライベート/ループバック/リンクローカル範囲をブロック
-- TLS のみのアウトバウンドトラフィックを強制
-- プロキシで機密性の高い上流レスポンスヘッダーを除去
-
-```bash
-# 6. アプリケーションを実行
 ./aysub
 ```
 
-#### 開発モード
+ローカル開発:
 
 ```bash
-# バックエンド（ホットリロード付き）
 cd backend
 go run ./cmd/server
 
-# フロントエンド（ホットリロード付き）
-cd frontend
+cd ../frontend
 pnpm run dev
 ```
 
-#### コード生成
-
-`backend/ent/schema` を編集した場合、Ent + Wire を再生成してください:
+Ent schema または Wire provider を変更した場合:
 
 ```bash
 cd backend
@@ -497,108 +202,30 @@ go generate ./ent
 go generate ./cmd/server
 ```
 
----
+## 設定メモ
 
-## シンプルモード
+- `DATA_DIR` はローカルメディアキャッシュとランタイムデータを制御します。デフォルトは `./data`。
+- `RUN_MODE=simple` は SaaS 系画面を隠し、課金フローをスキップします。本番では `SIMPLE_MODE_CONFIRM=true` も必要です。
+- `X-Forwarded-For` を信頼する前に `server.trusted_proxies` を設定してください。
+- Nginx reverse proxy では `underscores_in_headers on;` が必要です。`session_id` などのヘッダーが落ちます。
+- `security.url_allowlist` と関連環境変数は上流 URL 検証を制御します。
+- `billing.circuit_breaker` は課金書き込み失敗時の fail closed を制御します。
+- `turnstile.required` は release mode で Turnstile を強制できます。
 
-シンプルモードは、フル SaaS 機能を必要とせず、素早くアクセスしたい個人開発者や社内チーム向けに設計されています。
+## 検証
 
-- 有効化: 環境変数 `RUN_MODE=simple` を設定
-- 違い: SaaS 関連機能を非表示にし、課金プロセスをスキップ
-- セキュリティに関する注意: 本番環境では `SIMPLE_MODE_CONFIRM=true` も設定する必要があります
-
----
-
-## Antigravity サポート
-
-AySub は [Antigravity](https://antigravity.so/) アカウントをサポートしています。認証後、Claude および Gemini モデル用の専用エンドポイントが利用可能になります。
-
-### 専用エンドポイント
-
-| エンドポイント | モデル |
-|----------|-------|
-| `/antigravity/v1/messages` | Claude モデル |
-| `/antigravity/v1beta/` | Gemini モデル |
-
-### Claude Code の設定
+この workspace で通過済み:
 
 ```bash
-export ANTHROPIC_BASE_URL="http://localhost:8080/antigravity"
-export ANTHROPIC_AUTH_TOKEN="sk-xxx"
+cd backend && go test ./...
+pnpm --dir frontend test:run
+pnpm --dir frontend build
 ```
 
-### ハイブリッドスケジューリングモード
-
-Antigravity アカウントはオプションの**ハイブリッドスケジューリング**をサポートしています。有効にすると、汎用エンドポイント `/v1/messages` および `/v1beta/` も Antigravity アカウントにリクエストをルーティングします。
-
-> **⚠️ 警告**: Anthropic Claude と Antigravity Claude は**同じ会話コンテキスト内で混在させることはできません**。グループを使用して適切に分離してください。
-
-### 既知の問題
-
-Claude Code では、Plan Mode を自動的に終了できません。（通常、ネイティブの Claude API を使用する場合、計画が完了すると Claude Code はユーザーに計画を承認または拒否するオプションをポップアップ表示します。）
-
-**回避策**: `Shift + Tab` を押して手動で Plan Mode を終了し、計画を承認または拒否するためのレスポンスを入力してください。
-
----
-
-## プロジェクト構成
-
-```
-AySub/
-├── backend/                  # Go バックエンドサービス
-│   ├── cmd/server/           # アプリケーションエントリ
-│   ├── internal/             # 内部モジュール
-│   │   ├── config/           # 設定
-│   │   ├── model/            # データモデル
-│   │   ├── service/          # ビジネスロジック
-│   │   ├── handler/          # HTTP ハンドラー
-│   │   └── gateway/          # API ゲートウェイコア
-│   └── resources/            # 静的リソース
-│
-├── frontend/                 # Vue 3 フロントエンド
-│   └── src/
-│       ├── api/              # API 呼び出し
-│       ├── stores/           # 状態管理
-│       ├── views/            # ページコンポーネント
-│       └── components/       # 再利用可能なコンポーネント
-│
-└── deploy/                   # デプロイファイル
-    ├── docker-compose.yml    # Docker Compose 設定
-    ├── .env.example          # Docker Compose 用環境変数
-    ├── config.example.yaml   # バイナリデプロイ用フル設定ファイル
-    └── install.sh            # ワンクリックインストールスクリプト
-```
-
-## 免責事項
-
-> **本プロジェクトをご利用の前に、以下をよくお読みください:**
->
-> :rotating_light: **利用規約違反のリスク**: 本プロジェクトの使用は Anthropic の利用規約に違反する可能性があります。使用前に Anthropic のユーザー契約をよくお読みください。本プロジェクトの使用に起因するすべてのリスクは、ユーザー自身が負うものとします。
->
-> :book: **免責事項**: 本プロジェクトは技術的な学習および研究目的のみで提供されています。作者は、本プロジェクトの使用によるアカウント停止、サービス中断、その他の損失について一切の責任を負いません。
-
----
-
-## スター履歴
-
-<a href="https://star-history.com/#AIAllABOUTYOU/AySub&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=AIAllABOUTYOU/AySub&type=Date" />
- </picture>
-</a>
-
----
+`docker build -t aysub:local-verify .` はこのローカル環境では未実行です。`docker` CLI がインストールされていません（`zsh: command not found: docker`）。Dockerfile path と compose references は静的に確認済みです。
 
 ## ライセンス
 
-本プロジェクトは [GNU Lesser General Public License v3.0](LICENSE)（またはそれ以降のバージョン）の下でライセンスされています。
+License: [GNU Lesser General Public License v3.0](LICENSE) or later.
 
----
-
-<div align="center">
-
-**このプロジェクトが役に立ったら、ぜひスターをお願いします！**
-
-</div>
+Copyright: `aiaay.com`.

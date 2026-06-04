@@ -266,6 +266,8 @@ export default {
     filter: '筛选',
     export: '导出',
     import: '导入',
+    startDate: '开始日期',
+    endDate: '结束日期',
     actions: '操作',
     status: '状态',
     name: '名称',
@@ -351,7 +353,11 @@ export default {
     apiKeys: 'API 密钥',
     usage: '使用记录',
     requestLogs: '请求日志',
+    securityCenter: '安全中心',
+    securityAudit: '安全审计',
+    mediaCache: '媒体缓存',
     redeem: '兑换',
+    checkin: '每日签到',
     affiliate: '邀请返利',
     affiliateManagement: '邀请返利',
     affiliateInviteRecords: '邀请记录',
@@ -426,6 +432,7 @@ export default {
     emailSuffixNotAllowed: '该邮箱域名不在允许注册范围内。',
     emailSuffixNotAllowedWithAllowed: '该邮箱域名不被允许。可用域名：{suffixes}',
     emailSuffixAllowedMore: '等 {count} 项',
+    emailAliasNotAllowed: '该邮箱地址使用了别名规则，请使用不带 + 号或 Gmail 点号别名的邮箱。',
     loginSuccess: '登录成功！欢迎回来。',
     accountCreatedSuccess: '账户创建成功！欢迎使用 {siteName}。',
     reloginRequired: '会话已过期，请重新登录。',
@@ -668,7 +675,29 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    dailyCheckin: '每日签到',
+    dailyCheckinReward: '领取 {amount} 奖励'
+  },
+
+  checkin: {
+    title: '每日签到',
+    description: '每天签到领取奖励额度，余额会在签到成功后自动更新。',
+    reward: '今日奖励',
+    todayStatus: '今日状态',
+    checkedIn: '已签到',
+    notCheckedIn: '待签到',
+    streak: '连续签到',
+    streakDays: '{days} 天',
+    nextAvailable: '下次可签到',
+    tomorrow: '明天',
+    checkinButton: '立即签到',
+    submitting: '签到中...',
+    alreadyCheckedIn: '今日已签到',
+    success: '签到成功',
+    failed: '签到失败',
+    loadFailed: '加载签到状态失败',
+    newBalance: '当前余额',
   },
 
   // Groups (shared)
@@ -1034,6 +1063,90 @@ export default {
       error: '错误',
       client: '客户端',
       actions: '操作'
+    }
+  },
+
+  securityCenter: {
+    failedToLoad: '加载安全事件失败',
+    user: {
+      title: '安全中心',
+      description: '查看账号最近安全事件，并前往个人资料管理密码、双因素认证和第三方绑定。'
+    },
+    actions: {
+      password: '密码',
+      totp: '双因素认证',
+      bindings: '账号绑定',
+      profileLinkHint: '前往个人资料'
+    },
+    apiKeys: {
+      title: 'API Key 撤销',
+      description: '查看最近使用的 Key，发现异常时可立即撤销。',
+      empty: '暂无 API Key',
+      revoke: '撤销',
+      revokeConfirm: '确认撤销这个 API Key？撤销后不能恢复。',
+      revoked: 'API Key 已撤销',
+      loadFailed: '加载 API Key 失败',
+      revokeFailed: '撤销 API Key 失败'
+    },
+    sensitiveVerify: {
+      title: '二次验证',
+      description: '撤销 API Key「{name}」前需要完成一次二次验证。',
+      method: '验证方式',
+      password: '登录密码',
+      passwordPlaceholder: '输入当前登录密码',
+      totp: '认证器验证码',
+      totpCode: '6 位验证码',
+      totpPlaceholder: '输入认证器显示的 6 位验证码',
+      recoveryCode: '恢复码',
+      recoveryPlaceholder: '输入一次性恢复码',
+      revokeWarning: '撤销后该 API Key 立即失效，已有调用会被拒绝，不能恢复。',
+      failed: '二次验证失败'
+    },
+    stats: {
+      total: '事件总数',
+      pageHighRisk: '本页高风险'
+    },
+    filters: {
+      result: '结果',
+      riskLevel: '风险等级',
+      action: '动作',
+      actionPlaceholder: '例如 login / totp',
+      actorType: '操作者类型',
+      actorId: '操作者 ID',
+      subjectType: '对象类型',
+      subjectId: '对象 ID',
+      userSearchPlaceholder: '搜索动作、原因、IP、端点或请求 ID',
+      adminSearchPlaceholder: '搜索操作者、对象、动作、原因、IP、端点或请求 ID'
+    },
+    fields: {
+      time: '时间',
+      action: '动作',
+      actor: '操作者',
+      subject: '对象',
+      result: '结果',
+      risk: '风险',
+      client: '客户端',
+      ip: 'IP',
+      endpoint: '端点',
+      requestId: '请求 ID',
+      unknownAction: '安全事件'
+    },
+    result: {
+      all: '全部结果',
+      success: '成功',
+      denied: '拒绝',
+      failure: '失败'
+    },
+    risk: {
+      all: '全部风险',
+      low: '低',
+      medium: '中',
+      high: '高',
+      critical: '严重'
+    },
+    empty: {
+      title: '暂无安全事件',
+      description: '当前筛选条件下没有记录。'
     }
   },
 
@@ -1482,6 +1595,18 @@ export default {
       loginTitle: '双因素认证',
       loginHint: '请输入您认证器应用显示的 6 位验证码',
       loginFailed: '验证失败，请重试',
+      recoveryCode: '恢复码',
+      recoveryCodePlaceholder: '输入一次性恢复码',
+      useAuthenticatorCode: '使用认证器验证码',
+      useRecoveryCode: '使用恢复码',
+      recoveryCodesTitle: '保存恢复码',
+      recoveryCodesOnceHint: '恢复码只会展示一次，请立即保存到安全位置。每个恢复码只能使用一次。',
+      copyRecoveryCodes: '复制恢复码',
+      recoveryCodesRemaining: '剩余恢复码',
+      regenerateRecoveryCodes: '重生成恢复码',
+      regenerateRecoveryCodesHint: '输入认证器显示的 6 位验证码。重生成后，旧恢复码会全部失效。',
+      recoveryCodesRegenerated: '恢复码已重生成',
+      regenerateRecoveryCodesFailed: '重生成恢复码失败',
       // New translations for email verification
       verifyEmailFirst: '请先验证您的邮箱',
       verifyPasswordFirst: '请先验证您的身份',
@@ -1710,6 +1835,138 @@ export default {
       systemSettings: '系统设置',
       configureSystem: '配置系统设置',
       failedToLoad: '加载仪表盘数据失败'
+    },
+
+    securityCenter: {
+      title: '安全审计',
+      description: '查看账号安全事件和管理操作审计记录，按风险、结果、操作者和对象筛选。',
+      failedToLoad: '加载安全审计日志失败',
+      entitiesFailedToLoad: '加载安全中心数据失败',
+      incidents: {
+        title: '风险事件',
+        description: '由审计日志和封控策略产生的风险事件。',
+        empty: '暂无风险事件'
+      },
+      policies: {
+        title: '策略规则',
+        description: '按用户、API Key、端点、模型、IP 或 User-Agent 观察或拦截请求。',
+        name: '规则名称',
+        code: '规则代码',
+        descriptionField: '规则说明',
+        enabled: '启用规则',
+        empty: '暂无策略规则',
+        invalidConditions: '条件必须是合法 JSON 对象',
+        nameCodeRequired: '规则名称和代码不能为空',
+        created: '策略规则已创建',
+        updated: '策略规则已更新',
+        deleted: '策略规则已删除',
+        saveFailed: '保存策略规则失败',
+        deleteFailed: '删除策略规则失败',
+        deleteConfirm: '确认删除策略规则 {name}？'
+      },
+      locks: {
+        title: '封控对象',
+        description: '手动锁定或解除用户、API Key。Active 锁会在网关入口拦截请求。',
+        subjectId: '对象 ID',
+        reason: '原因',
+        create: '创建封控',
+        empty: '暂无活动封控',
+        unlock: '解除封控',
+        subjectRequired: '对象 ID 不能为空',
+        created: '封控已创建',
+        unlocked: '封控已解除',
+        createFailed: '创建封控失败',
+        unlockFailed: '解除封控失败'
+      },
+      exports: {
+        title: '审计导出',
+        description: '按当前筛选条件生成 CSV 文件，导出记录保留 7 天。',
+        create: '按当前筛选创建导出',
+        createShort: '创建导出',
+        creating: '正在创建...',
+        created: '审计导出已生成',
+        createFailed: '创建审计导出失败',
+        empty: '暂无导出记录',
+        rows: '行',
+        download: '下载 CSV',
+        downloading: '下载中...',
+        downloadFailed: '下载审计导出失败',
+        status: {
+          pending: '处理中',
+          completed: '已完成',
+          failed: '失败'
+        }
+      },
+      policyActions: {
+        observe: '观察',
+        block: '拦截',
+        temporaryLock: '临时锁定',
+        disableApiKey: '禁用 API Key',
+        disableUser: '禁用用户',
+        notifyAdmin: '通知管理员',
+        notifyUser: '通知用户'
+      },
+      integrity: {
+        title: '审计链完整性',
+        description: '校验安全审计日志的哈希链是否连续。',
+        check: '运行校验',
+        checking: '校验中...',
+        valid: '完整',
+        invalid: '异常',
+        checked: '已检查记录',
+        brokenAt: '断点记录',
+        notChecked: '尚未运行校验',
+        validToast: '审计链完整性正常',
+        invalidToast: '审计链完整性异常',
+        failed: '完整性校验失败'
+      }
+    },
+
+    mediaCache: {
+      title: '媒体缓存',
+      description: '管理由图片、视频任务生成并落到本地 DATA_DIR 的媒体文件缓存。',
+      loadFailed: '加载媒体缓存失败',
+      pageSizeTotal: '本页占用',
+      deleted: '媒体缓存已删除',
+      deleteFailed: '删除媒体缓存失败',
+      deleteConfirm: '确认删除缓存文件 {file}？',
+      filters: {
+        type: '类型',
+        searchPlaceholder: '搜索文件名或缓存 ID',
+        olderThan: '早于'
+      },
+      types: {
+        all: '全部',
+        image: '图片',
+        video: '视频'
+      },
+      olderThan: {
+        none: '不限时间',
+        day: '超过 1 天',
+        week: '超过 7 天',
+        month: '超过 30 天'
+      },
+      columns: {
+        preview: '预览',
+        file: '文件',
+        type: '类型',
+        size: '大小',
+        modifiedAt: '更新时间'
+      },
+      empty: {
+        title: '暂无媒体缓存',
+        description: '当前筛选条件下没有本地图片或视频缓存。'
+      },
+      cleanup: {
+        filtered: '按筛选清理',
+        filteredConfirm: '确认按当前类型和时间条件清理媒体缓存？该操作不可恢复。',
+        orphans: '清理孤儿文件',
+        orphansConfirm: '确认清理 .tmp 或非法 ID 的孤儿媒体文件？',
+        requireOlderThan: '批量清理前必须选择时间条件',
+        limit: '清理上限',
+        result: '清理完成：删除 {deleted} 个，跳过 {skipped} 个',
+        failed: '清理媒体缓存失败'
+      }
     },
 
     backup: {
@@ -3366,6 +3623,29 @@ export default {
       dataExportSelected: '导出选中',
       dataExportIncludeProxies: '导出代理（导出账号关联的代理）',
       dataImport: '导入',
+      xaiCookieTokenImport: '导入 Grok Token TXT',
+      xaiCookieTokenExport: '导出 Grok Token TXT',
+      xaiCookieTokenExportSelected: '导出选中 Grok Token',
+      xaiCookieTokenExportEmpty: '没有可导出的 xAI Cookie Token',
+      xaiCookieTokenExported: '已导出 {count} 个 Grok Token',
+      xaiCookieTokenExportFailed: 'Grok Token 导出失败',
+      xaiCookieTokenImportTitle: '导入 Grok Token TXT',
+      xaiCookieTokenImportHint: '上传 txt 文件批量创建 xAI / Grok Cookie 账号；每行一个 token，也兼容 sso=token 或完整 Cookie 片段。',
+      xaiCookieTokenImportWarning: '导入会创建新的 xAI Cookie 账号；已存在或重复的 token 会自动跳过。',
+      xaiCookieTokenImportFile: 'Token 文件',
+      xaiCookieTokenImportSelectFile: '请选择 TXT 文件',
+      xaiCookieTokenNamePrefix: '账号名前缀',
+      xaiCookieTokenDefaultNamePrefix: 'Grok 导入账号',
+      xaiCookieTokenBaseUrl: 'Grok 地址',
+      xaiCookieTokenImportResult: '导入结果',
+      xaiCookieTokenImportResultSummary: '创建 {created}，跳过 {skipped}，失败 {failed}',
+      xaiCookieTokenImportErrorLine: '第 {line} 行',
+      xaiCookieTokenImportButton: '开始导入',
+      xaiCookieTokenImporting: '导入中...',
+      xaiCookieTokenImportEmptyFile: '文件中没有可导入的 Token',
+      xaiCookieTokenImportSuccess: '导入完成：创建 {created}，跳过 {skipped}',
+      xaiCookieTokenImportCompletedWithErrors: '导入完成但有错误：创建 {created}，跳过 {skipped}，失败 {failed}',
+      xaiCookieTokenImportFailed: 'Grok Token 导入失败',
       moreActions: '更多操作',
       dataActions: '数据操作',
       toolActions: '工具',
@@ -5838,6 +6118,14 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        checkin: {
+          title: '每日签到',
+          description: '允许用户每天签到领取余额奖励。默认关闭。',
+          enabled: '启用每日签到',
+          enabledHint: '关闭后用户端侧边栏和仪表盘入口隐藏，直达签到页会返回仪表盘。',
+          rewardAmount: '签到奖励金额',
+          rewardAmountHint: '每次成功签到发放到用户余额的金额。0 表示只记录签到，不发放余额。',
+        },
         publicStatus: {
           title: '公开状态页',
           description: '向未登录访客展示脱敏后的系统健康摘要、模型数量、渠道健康和近期事件。默认关闭。',
@@ -5928,6 +6216,14 @@ export default {
           "仅允许使用指定域名的邮箱注册账号（例如 {'@'}qq.com, {'@'}gmail.com, *.edu.cn）",
         emailSuffixWhitelistPlaceholder: "{'@'}example.com, *.edu.cn",
         emailSuffixWhitelistInputHint: '留空则不限制。使用 *.edu.cn 可匹配 edu.cn 及其子域名。',
+        emailAliasRestriction: '拦截邮箱别名注册',
+        emailAliasRestrictionHint:
+          '拒绝 user+tag@example.com 这类 + 号别名，以及 Gmail/Googlemail 的点号别名。',
+        emailDomainBlacklist: '邮箱域名黑名单',
+        emailDomainBlacklistHint:
+          "黑名单优先于白名单。支持 {'@'}disposable.com 和 *.disposable.com。",
+        emailDomainBlacklistPlaceholder: "{'@'}disposable.com, *.mail-temp.com",
+        emailDomainBlacklistInputHint: '输入域名后按回车添加；黑名单不会暴露给匿名 public settings。',
         promoCode: '优惠码',
         promoCodeHint: '允许用户在注册时使用优惠码',
         invitationCode: '邀请码注册',

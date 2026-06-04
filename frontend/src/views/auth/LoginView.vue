@@ -518,13 +518,13 @@ async function handleLogin(): Promise<void> {
 
 // ==================== 2FA Handlers ====================
 
-async function handle2FAVerify(code: string): Promise<void> {
+async function handle2FAVerify(payload: { totpCode?: string; recoveryCode?: string }): Promise<void> {
   if (totpModalRef.value) {
     totpModalRef.value.setVerifying(true)
   }
 
   try {
-    await authStore.login2FA(totpTempToken.value, code)
+    await authStore.login2FA(totpTempToken.value, payload)
 
     // Close modal and show success
     show2FAModal.value = false

@@ -43,14 +43,72 @@ func IsRegistrationEmailSuffixAllowed(email string, whitelist []string) bool {
 	return false
 }
 
+// IsRegistrationEmailDomainBlocked checks whether an email matches a blacklist
+// entry. Entries use the same exact "@domain" and wildcard "*.domain" grammar
+// as the suffix whitelist.
+func IsRegistrationEmailDomainBlocked(email string, blacklist []string) bool {
+	if len(blacklist) == 0 {
+		return false
+	}
+	_, domain, ok := splitEmailForPolicy(email)
+	if !ok {
+		return false
+	}
+	suffix := "@" + domain
+	for _, blocked := range blacklist {
+		blocked = strings.ToLower(strings.TrimSpace(blocked))
+		if strings.HasPrefix(blocked, "@") && suffix == blocked {
+			return true
+		}
+		if strings.HasPrefix(blocked, "*.") && registrationEmailDomainMatchesWildcard(domain, blocked) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasRegistrationEmailAlias returns true for aliasing patterns that commonly
+// bypass one-account-per-email controls. It intentionally rejects rather than
+// canonicalizes aliases so existing user uniqueness semantics do not change.
+func HasRegistrationEmailAlias(email string) bool {
+	local, domain, ok := splitEmailForPolicy(email)
+	if !ok {
+		return false
+	}
+	if strings.Contains(local, "+") {
+		return true
+	}
+	switch domain {
+	case "gmail.com", "googlemail.com":
+		return strings.Contains(local, ".")
+	default:
+		return false
+	}
+}
+
 // NormalizeRegistrationEmailSuffixWhitelist normalizes and validates suffix whitelist items.
 func NormalizeRegistrationEmailSuffixWhitelist(raw []string) ([]string, error) {
+	return normalizeRegistrationEmailSuffixWhitelist(raw, true)
+}
+
+// NormalizeRegistrationEmailDomainBlacklist normalizes and validates blacklist items.
+func NormalizeRegistrationEmailDomainBlacklist(raw []string) ([]string, error) {
 	return normalizeRegistrationEmailSuffixWhitelist(raw, true)
 }
 
 // ParseRegistrationEmailSuffixWhitelist parses persisted JSON into normalized suffixes.
 // Invalid entries are ignored to keep old misconfigurations from breaking runtime reads.
 func ParseRegistrationEmailSuffixWhitelist(raw string) []string {
+	return parseRegistrationEmailSuffixList(raw)
+}
+
+// ParseRegistrationEmailDomainBlacklist parses persisted JSON into normalized blacklist entries.
+// Invalid entries are ignored to keep old misconfigurations from breaking runtime reads.
+func ParseRegistrationEmailDomainBlacklist(raw string) []string {
+	return parseRegistrationEmailSuffixList(raw)
+}
+
+func parseRegistrationEmailSuffixList(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return []string{}

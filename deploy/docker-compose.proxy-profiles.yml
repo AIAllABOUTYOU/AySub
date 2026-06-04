@@ -1,0 +1,42 @@
+services:
+  privoxy:
+    image: vimagick/privoxy:latest
+    profiles:
+      - proxy-tools
+    restart: unless-stopped
+    ports:
+      - "${PRIVOXY_BIND_HOST:-127.0.0.1}:${PRIVOXY_PORT:-8118}:8118"
+    networks:
+      - aysub-proxy-tools
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    profiles:
+      - proxy-tools
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      - TZ=${TZ:-Asia/Shanghai}
+    ports:
+      - "${FLARESOLVERR_BIND_HOST:-127.0.0.1}:${FLARESOLVERR_PORT:-8191}:8191"
+    networks:
+      - aysub-proxy-tools
+
+  warp:
+    image: caomingjun/warp:latest
+    profiles:
+      - warp
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      - "${WARP_BIND_HOST:-127.0.0.1}:${WARP_SOCKS_PORT:-1080}:1080"
+    networks:
+      - aysub-proxy-tools
+
+networks:
+  aysub-proxy-tools:
+    driver: bridge

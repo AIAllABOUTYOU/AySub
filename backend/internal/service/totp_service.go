@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/pquerna/otp/totp"
@@ -21,6 +23,8 @@ var (
 	ErrTotpInvalidCode     = infraerrors.BadRequest("TOTP_INVALID_CODE", "invalid totp code")
 	ErrTotpSetupExpired    = infraerrors.BadRequest("TOTP_SETUP_EXPIRED", "totp setup session expired")
 	ErrTotpTooManyAttempts = infraerrors.TooManyRequests("TOTP_TOO_MANY_ATTEMPTS", "too many verification attempts, please try again later")
+	ErrTotpRecoveryInvalid = infraerrors.BadRequest("TOTP_RECOVERY_CODE_INVALID", "invalid recovery code")
+	ErrTotpRecoveryMissing = infraerrors.BadRequest("TOTP_RECOVERY_CODE_REQUIRED", "recovery code is required")
 	ErrVerifyCodeRequired  = infraerrors.BadRequest("VERIFY_CODE_REQUIRED", "email verification code is required")
 	ErrPasswordRequired    = infraerrors.BadRequest("PASSWORD_REQUIRED", "password is required")
 )
@@ -49,6 +53,12 @@ type SecretEncryptor interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
+type TotpRecoveryCodeRepository interface {
+	Replace(ctx context.Context, userID int64, codeHashes []string) error
+	CountAvailable(ctx context.Context, userID int64) (int, error)
+	MarkUsed(ctx context.Context, userID int64, codeHash string) (bool, error)
+}
+
 // TotpSetupSession represents a TOTP setup session
 type TotpSetupSession struct {
 	Secret     string // Plain text TOTP secret (not encrypted yet)
@@ -74,6 +84,7 @@ type TotpStatus struct {
 	Enabled        bool       `json:"enabled"`
 	EnabledAt      *time.Time `json:"enabled_at,omitempty"`
 	FeatureEnabled bool       `json:"feature_enabled"`
+	RecoveryCodes  int        `json:"recovery_codes"`
 }
 
 // TotpSetupResponse represents the response for initiating TOTP setup
@@ -84,12 +95,22 @@ type TotpSetupResponse struct {
 	Countdown  int    `json:"countdown"` // seconds until setup expires
 }
 
+type TotpEnableResult struct {
+	RecoveryCodes []string `json:"recovery_codes"`
+}
+
+type TotpRecoveryCodesResult struct {
+	Codes []string `json:"codes"`
+	Count int      `json:"count"`
+}
+
 const (
-	totpSetupTTL    = 5 * time.Minute
-	totpLoginTTL    = 5 * time.Minute
-	totpAttemptsTTL = 15 * time.Minute
-	maxTotpAttempts = 5
-	totpIssuer      = "AySub"
+	totpSetupTTL          = 5 * time.Minute
+	totpLoginTTL          = 5 * time.Minute
+	totpAttemptsTTL       = 15 * time.Minute
+	maxTotpAttempts       = 5
+	totpIssuer            = "AySub"
+	totpRecoveryCodeCount = 10
 )
 
 // TotpService handles TOTP operations
@@ -97,6 +118,7 @@ type TotpService struct {
 	userRepo          UserRepository
 	encryptor         SecretEncryptor
 	cache             TotpCache
+	recoveryRepo      TotpRecoveryCodeRepository
 	settingService    *SettingService
 	emailService      *EmailService
 	emailQueueService *EmailQueueService
@@ -110,11 +132,17 @@ func NewTotpService(
 	settingService *SettingService,
 	emailService *EmailService,
 	emailQueueService *EmailQueueService,
+	recoveryRepos ...TotpRecoveryCodeRepository,
 ) *TotpService {
+	var recoveryRepo TotpRecoveryCodeRepository
+	if len(recoveryRepos) > 0 {
+		recoveryRepo = recoveryRepos[0]
+	}
 	return &TotpService{
 		userRepo:          userRepo,
 		encryptor:         encryptor,
 		cache:             cache,
+		recoveryRepo:      recoveryRepo,
 		settingService:    settingService,
 		emailService:      emailService,
 		emailQueueService: emailQueueService,
@@ -130,11 +158,17 @@ func (s *TotpService) GetStatus(ctx context.Context, userID int64) (*TotpStatus,
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
-	return &TotpStatus{
+	status := &TotpStatus{
 		Enabled:        user.TotpEnabled,
 		EnabledAt:      user.TotpEnabledAt,
 		FeatureEnabled: featureEnabled,
-	}, nil
+	}
+	if user.TotpEnabled && s.recoveryRepo != nil {
+		if count, countErr := s.recoveryRepo.CountAvailable(ctx, userID); countErr == nil {
+			status.RecoveryCodes = count
+		}
+	}
+	return status, nil
 }
 
 // InitiateSetup starts the TOTP setup process
@@ -210,29 +244,34 @@ func (s *TotpService) InitiateSetup(ctx context.Context, userID int64, emailCode
 
 // CompleteSetup completes the TOTP setup by verifying the code
 func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode, setupToken string) error {
+	_, err := s.CompleteSetupWithRecoveryCodes(ctx, userID, totpCode, setupToken)
+	return err
+}
+
+func (s *TotpService) CompleteSetupWithRecoveryCodes(ctx context.Context, userID int64, totpCode, setupToken string) (*TotpEnableResult, error) {
 	// Check if TOTP feature is enabled globally
 	if !s.settingService.IsTotpEnabled(ctx) {
-		return ErrTotpNotEnabled
+		return nil, ErrTotpNotEnabled
 	}
 
 	// Get the setup session
 	session, err := s.cache.GetSetupSession(ctx, userID)
 	if err != nil {
-		return ErrTotpSetupExpired
+		return nil, ErrTotpSetupExpired
 	}
 
 	if session == nil {
-		return ErrTotpSetupExpired
+		return nil, ErrTotpSetupExpired
 	}
 
 	// Verify the setup token (constant-time comparison)
 	if subtle.ConstantTimeCompare([]byte(session.SetupToken), []byte(setupToken)) != 1 {
-		return ErrTotpSetupExpired
+		return nil, ErrTotpSetupExpired
 	}
 
 	// Verify the TOTP code
 	if !totp.Validate(totpCode, session.Secret) {
-		return ErrTotpInvalidCode
+		return nil, ErrTotpInvalidCode
 	}
 
 	setupSecretPrefix := "N/A"
@@ -247,7 +286,7 @@ func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode,
 	// Encrypt the secret
 	encryptedSecret, err := s.encryptor.Encrypt(session.Secret)
 	if err != nil {
-		return fmt.Errorf("encrypt totp secret: %w", err)
+		return nil, fmt.Errorf("encrypt totp secret: %w", err)
 	}
 
 	slog.Debug("totp_complete_setup_encrypted",
@@ -275,18 +314,30 @@ func (s *TotpService) CompleteSetup(ctx context.Context, userID int64, totpCode,
 
 	// Update user with encrypted TOTP secret
 	if err := s.userRepo.UpdateTotpSecret(ctx, userID, &encryptedSecret); err != nil {
-		return fmt.Errorf("update totp secret: %w", err)
+		return nil, fmt.Errorf("update totp secret: %w", err)
 	}
 
 	// Enable TOTP for the user
 	if err := s.userRepo.EnableTotp(ctx, userID); err != nil {
-		return fmt.Errorf("enable totp: %w", err)
+		return nil, fmt.Errorf("enable totp: %w", err)
+	}
+
+	result := &TotpEnableResult{}
+	if s.recoveryRepo != nil {
+		codes, hashes, genErr := generateTotpRecoveryCodes(userID)
+		if genErr != nil {
+			return nil, fmt.Errorf("generate totp recovery codes: %w", genErr)
+		}
+		if err := s.recoveryRepo.Replace(ctx, userID, hashes); err != nil {
+			return nil, fmt.Errorf("store totp recovery codes: %w", err)
+		}
+		result.RecoveryCodes = codes
 	}
 
 	// Clean up the setup session
 	_ = s.cache.DeleteSetupSession(ctx, userID)
 
-	return nil
+	return result, nil
 }
 
 // Disable disables TOTP for a user
@@ -324,6 +375,11 @@ func (s *TotpService) Disable(ctx context.Context, userID int64, emailCode, pass
 	// Disable TOTP
 	if err := s.userRepo.DisableTotp(ctx, userID); err != nil {
 		return fmt.Errorf("disable totp: %w", err)
+	}
+	if s.recoveryRepo != nil {
+		if err := s.recoveryRepo.Replace(ctx, userID, nil); err != nil {
+			return fmt.Errorf("delete totp recovery codes: %w", err)
+		}
 	}
 
 	return nil
@@ -399,6 +455,63 @@ func (s *TotpService) VerifyCode(ctx context.Context, userID int64, code string)
 	_ = s.cache.ClearVerifyAttempts(ctx, userID)
 
 	return nil
+}
+
+func (s *TotpService) VerifyRecoveryCode(ctx context.Context, userID int64, recoveryCode string) error {
+	if s.recoveryRepo == nil {
+		return ErrTotpRecoveryInvalid
+	}
+	normalized := normalizeTotpRecoveryCode(recoveryCode)
+	if normalized == "" {
+		return ErrTotpRecoveryMissing
+	}
+	attempts, err := s.cache.GetVerifyAttempts(ctx, userID)
+	if err == nil && attempts >= maxTotpAttempts {
+		return ErrTotpTooManyAttempts
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return infraerrors.InternalServer("TOTP_RECOVERY_VERIFY_ERROR", "failed to verify recovery code")
+	}
+	if !user.TotpEnabled {
+		return ErrTotpNotSetup
+	}
+
+	used, err := s.recoveryRepo.MarkUsed(ctx, userID, hashTotpRecoveryCode(userID, normalized))
+	if err != nil {
+		return fmt.Errorf("mark totp recovery code used: %w", err)
+	}
+	if !used {
+		_, _ = s.cache.IncrementVerifyAttempts(ctx, userID)
+		return ErrTotpRecoveryInvalid
+	}
+	_ = s.cache.ClearVerifyAttempts(ctx, userID)
+	return nil
+}
+
+func (s *TotpService) RegenerateRecoveryCodes(ctx context.Context, userID int64, totpCode string) (*TotpRecoveryCodesResult, error) {
+	if s.recoveryRepo == nil {
+		return nil, infraerrors.InternalServer("TOTP_RECOVERY_NOT_CONFIGURED", "totp recovery code repository is not configured")
+	}
+	if err := s.VerifyCode(ctx, userID, totpCode); err != nil {
+		return nil, err
+	}
+	codes, hashes, err := generateTotpRecoveryCodes(userID)
+	if err != nil {
+		return nil, fmt.Errorf("generate totp recovery codes: %w", err)
+	}
+	if err := s.recoveryRepo.Replace(ctx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("store totp recovery codes: %w", err)
+	}
+	return &TotpRecoveryCodesResult{Codes: codes, Count: len(codes)}, nil
+}
+
+func (s *TotpService) CountRecoveryCodes(ctx context.Context, userID int64) (int, error) {
+	if s.recoveryRepo == nil {
+		return 0, nil
+	}
+	return s.recoveryRepo.CountAvailable(ctx, userID)
 }
 
 // CreateLoginSession creates a temporary login session for 2FA
@@ -501,6 +614,47 @@ func generateRandomToken(byteLength int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func generateTotpRecoveryCodes(userID int64) ([]string, []string, error) {
+	codes := make([]string, 0, totpRecoveryCodeCount)
+	hashes := make([]string, 0, totpRecoveryCodeCount)
+	seen := make(map[string]struct{}, totpRecoveryCodeCount)
+	for len(codes) < totpRecoveryCodeCount {
+		raw, err := generateRandomToken(5)
+		if err != nil {
+			return nil, nil, err
+		}
+		code := strings.ToUpper(raw[:5] + "-" + raw[5:])
+		normalized := normalizeTotpRecoveryCode(code)
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		codes = append(codes, code)
+		hashes = append(hashes, hashTotpRecoveryCode(userID, normalized))
+	}
+	return codes, hashes, nil
+}
+
+func normalizeTotpRecoveryCode(code string) string {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	code = strings.ReplaceAll(code, "-", "")
+	code = strings.ReplaceAll(code, " ", "")
+	if len(code) != 10 {
+		return ""
+	}
+	for _, ch := range code {
+		if (ch < '0' || ch > '9') && (ch < 'A' || ch > 'F') {
+			return ""
+		}
+	}
+	return code
+}
+
+func hashTotpRecoveryCode(userID int64, normalizedCode string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", userID, normalizedCode)))
+	return hex.EncodeToString(sum[:])
 }
 
 // VerificationMethod represents the method required for TOTP operations

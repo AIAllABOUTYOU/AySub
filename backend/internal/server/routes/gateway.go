@@ -21,7 +21,9 @@ func RegisterGatewayRoutes(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	cfg *config.Config,
+	auditServices ...*service.SecurityAuditService,
 ) {
+	auditService := firstGatewaySecurityAuditService(auditServices)
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
 	clientRequestID := middleware.ClientRequestID()
 	opsErrorLogger := handler.OpsErrorLoggerMiddleware(opsService)
@@ -53,7 +55,7 @@ func RegisterGatewayRoutes(
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
-	gateway.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto))
+	gateway.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto, auditService))
 	gateway.Use(requireGroupAnthropic)
 	{
 		// /v1/messages: auto-route based on group platform
@@ -256,8 +258,8 @@ func RegisterGatewayRoutes(
 	gemini.Use(clientRequestID)
 	gemini.Use(opsErrorLogger)
 	gemini.Use(endpointNorm)
-	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
-	gemini.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle))
+	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg, auditService))
+	gemini.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle, auditService))
 	gemini.Use(requireGroupGoogle)
 	{
 		gemini.GET("/models", h.Gateway.GeminiV1BetaListModels)
@@ -275,8 +277,8 @@ func RegisterGatewayRoutes(
 		}
 		h.Gateway.Responses(c)
 	}
-	permissionAnthropic := requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto)
-	permissionGoogle := requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle)
+	permissionAnthropic := requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto, auditService)
+	permissionGoogle := requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle, auditService)
 	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
 	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
 	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
@@ -462,7 +464,7 @@ func RegisterGatewayRoutes(
 	antigravityV1Beta.Use(opsErrorLogger)
 	antigravityV1Beta.Use(endpointNorm)
 	antigravityV1Beta.Use(middleware.ForcePlatform(service.PlatformAntigravity))
-	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg, auditService))
 	antigravityV1Beta.Use(permissionGoogle)
 	antigravityV1Beta.Use(requireGroupGoogle)
 	{

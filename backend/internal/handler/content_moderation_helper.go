@@ -16,7 +16,7 @@ func (h *GatewayHandler) checkContentModeration(c *gin.Context, reqLog *zap.Logg
 	if h == nil || h.contentModerationService == nil {
 		return nil
 	}
-	return runContentModeration(c, reqLog, h.contentModerationService, apiKey, subject, protocol, model, body)
+	return runContentModeration(c, reqLog, h.contentModerationService, h.securityAuditService, apiKey, subject, protocol, model, body)
 }
 
 func contentModerationStatus(decision *service.ContentModerationDecision) int {
@@ -34,10 +34,10 @@ func (h *OpenAIGatewayHandler) checkContentModeration(c *gin.Context, reqLog *za
 	if h == nil || h.contentModerationService == nil {
 		return nil
 	}
-	return runContentModeration(c, reqLog, h.contentModerationService, apiKey, subject, protocol, model, body)
+	return runContentModeration(c, reqLog, h.contentModerationService, h.securityAuditService, apiKey, subject, protocol, model, body)
 }
 
-func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.ContentModerationService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.ContentModerationDecision {
+func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.ContentModerationService, auditSvc *service.SecurityAuditService, apiKey *service.APIKey, subject middleware2.AuthSubject, protocol string, model string, body []byte) *service.ContentModerationDecision {
 	if svc == nil || c == nil || c.Request == nil {
 		return nil
 	}
@@ -75,6 +75,40 @@ func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.Conte
 			zap.String("highest_category", decision.HighestCategory),
 			zap.Float64("highest_score", decision.HighestScore),
 		)
+	}
+	if decision != nil && (decision.Blocked || decision.Flagged) {
+		result := service.SecurityAuditResultDenied
+		risk := service.SecurityAuditRiskHigh
+		if !decision.Blocked {
+			result = service.SecurityAuditResultSuccess
+			risk = service.SecurityAuditRiskMedium
+		}
+		writeSecurityAuditAsync(c, auditSvc, service.SecurityAuditCreateInput{
+			SubjectType:  "user",
+			SubjectID:    auditUserSubject(subject.UserID),
+			ResourceType: "content_moderation",
+			ResourceID:   input.RequestID,
+			Action:       "content_moderation.hit",
+			Result:       result,
+			RiskLevel:    risk,
+			Reason:       decision.Message,
+			Metadata: map[string]any{
+				"api_key_id":       input.APIKeyID,
+				"api_key_name":     input.APIKeyName,
+				"group_id":         input.GroupID,
+				"group_name":       input.GroupName,
+				"endpoint":         input.Endpoint,
+				"provider":         input.Provider,
+				"protocol":         input.Protocol,
+				"model":            input.Model,
+				"action":           decision.Action,
+				"blocked":          decision.Blocked,
+				"flagged":          decision.Flagged,
+				"highest_category": decision.HighestCategory,
+				"highest_score":    decision.HighestScore,
+				"status_code":      decision.StatusCode,
+			},
+		})
 	}
 	return decision
 }

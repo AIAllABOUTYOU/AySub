@@ -215,6 +215,19 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/checkin',
+    name: 'Checkin',
+    component: () => import('@/views/user/CheckinView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Daily Check-in',
+      titleKey: 'checkin.title',
+      descriptionKey: 'checkin.description',
+      requiresCheckin: true
+    }
+  },
+  {
     path: '/usage',
     name: 'Usage',
     component: () => import('@/views/user/UsageView.vue'),
@@ -236,6 +249,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Request Logs',
       titleKey: 'requestLogs.title',
       descriptionKey: 'requestLogs.description'
+    }
+  },
+  {
+    path: '/security',
+    name: 'SecurityCenter',
+    component: () => import('@/views/user/SecurityCenterView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Security Center',
+      titleKey: 'securityCenter.user.title',
+      descriptionKey: 'securityCenter.user.description'
     }
   },
   {
@@ -633,6 +658,30 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/security',
+    name: 'AdminSecurityCenter',
+    component: () => import('@/views/admin/SecurityCenterView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Security Audit',
+      titleKey: 'admin.securityCenter.title',
+      descriptionKey: 'admin.securityCenter.description'
+    }
+  },
+  {
+    path: '/admin/media-cache',
+    name: 'AdminMediaCache',
+    component: () => import('@/views/admin/MediaCacheView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Media Cache',
+      titleKey: 'admin.mediaCache.title',
+      descriptionKey: 'admin.mediaCache.description'
+    }
+  },
+  {
     path: '/admin/affiliates',
     redirect: '/admin/affiliates/invites'
   },
@@ -880,6 +929,17 @@ router.beforeEach(async (to, _from, next) => {
     const riskControlEnabled = appStore.cachedPublicSettings?.risk_control_enabled === true
     if (!riskControlEnabled) {
       next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+      return
+    }
+  }
+
+  if (to.meta.requiresCheckin) {
+    if (!appStore.publicSettingsLoaded) {
+      await appStore.fetchPublicSettings()
+    }
+    const checkinEnabled = appStore.cachedPublicSettings?.checkin_enabled === true
+    if (!checkinEnabled) {
+      next('/dashboard')
       return
     }
   }

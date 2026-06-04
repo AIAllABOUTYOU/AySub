@@ -6,28 +6,32 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 // APIKeyAuthGoogle is a Google-style error wrapper for API key auth.
-func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
-	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg)
+func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config, auditServices ...*service.SecurityAuditService) gin.HandlerFunc {
+	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg, auditServices...)
 }
 
 // APIKeyAuthWithSubscriptionGoogle behaves like ApiKeyAuthWithSubscription but returns Google-style errors:
 // {"error":{"code":401,"message":"...","status":"UNAUTHENTICATED"}}
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
-func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config, auditServices ...*service.SecurityAuditService) gin.HandlerFunc {
+	auditService := firstSecurityAuditService(auditServices)
 	return func(c *gin.Context) {
 		if v := strings.TrimSpace(c.Query("api_key")); v != "" {
+			auditAPIKeyAuthDenied(c, auditService, nil, "api_key_in_query_deprecated", "Query parameter api_key is deprecated", 400)
 			abortWithGoogleError(c, 400, "Query parameter api_key is deprecated. Use Authorization header or key instead.")
 			return
 		}
 		apiKeyString := extractAPIKeyForGoogle(c)
 		if apiKeyString == "" {
+			auditAPIKeyAuthDenied(c, auditService, nil, "API_KEY_REQUIRED", "API key is required", 401)
 			abortWithGoogleError(c, 401, "API key is required")
 			return
 		}
@@ -35,27 +39,53 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 		apiKey, err := apiKeyService.GetByKey(c.Request.Context(), apiKeyString)
 		if err != nil {
 			if errors.Is(err, service.ErrAPIKeyNotFound) {
+				auditAPIKeyAuthDenied(c, auditService, nil, "INVALID_API_KEY", "Invalid API key", 401)
 				abortWithGoogleError(c, 401, "Invalid API key")
 				return
 			}
+			auditAPIKeyAuthFailure(c, auditService, nil, "INTERNAL_ERROR", "Failed to validate API key", 500)
 			abortWithGoogleError(c, 500, "Failed to validate API key")
 			return
 		}
 
 		if !apiKey.IsActive() {
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_DISABLED", "API key is disabled", 401)
 			abortWithGoogleError(c, 401, "API key is disabled")
 			return
 		}
+		if len(apiKey.IPWhitelist) > 0 || len(apiKey.IPBlacklist) > 0 {
+			clientIP := ip.GetTrustedClientIP(c)
+			if cfg != nil && cfg.TrustForwardedIPForAPIKeyACL() {
+				clientIP = ip.GetClientIP(c)
+			}
+			allowed, _ := ip.CheckIPRestrictionWithCompiledRules(clientIP, apiKey.CompiledIPWhitelist, apiKey.CompiledIPBlacklist)
+			if !allowed {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonIPRestriction)
+				auditAPIKeyAuthDenied(c, auditService, apiKey, "ACCESS_DENIED", "API key IP ACL denied request", 403, map[string]any{
+					"client_ip":     clientIP,
+					"has_whitelist": len(apiKey.IPWhitelist) > 0,
+					"has_blacklist": len(apiKey.IPBlacklist) > 0,
+				})
+				abortWithGoogleError(c, 403, "Access denied")
+				return
+			}
+		}
 		if apiKey.User == nil {
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "USER_NOT_FOUND", "User associated with API key not found", 401)
 			abortWithGoogleError(c, 401, "User associated with API key not found")
 			return
 		}
 		if !apiKey.User.IsActive() {
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "USER_INACTIVE", "User account is not active", 401)
 			abortWithGoogleError(c, 401, "User account is not active")
+			return
+		}
+		if denyBySecurityPolicyGoogle(c, auditService, apiKey) {
 			return
 		}
 		if _, message, ok := validateAPIKeyGroupAvailable(apiKey); !ok {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "GROUP_UNAVAILABLE", message, 403)
 			abortWithGoogleError(c, 403, message)
 			return
 		}
@@ -82,6 +112,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				apiKey.Group.ID,
 			)
 			if err != nil {
+				auditAPIKeyAuthDenied(c, auditService, apiKey, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group", 403)
 				abortWithGoogleError(c, 403, "No active subscription found for this group")
 				return
 			}
@@ -94,6 +125,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 					errors.Is(err, service.ErrMonthlyLimitExceeded) {
 					status = 429
 				}
+				auditAPIKeyAuthDenied(c, auditService, apiKey, "SUBSCRIPTION_INVALID", err.Error(), status)
 				abortWithGoogleError(c, status, err.Error())
 				return
 			}
@@ -106,6 +138,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			}
 		} else {
 			if apiKey.User.Balance <= 0 {
+				auditAPIKeyAuthDenied(c, auditService, apiKey, "INSUFFICIENT_BALANCE", "Insufficient account balance", 403)
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}
@@ -171,4 +204,31 @@ func abortWithGoogleError(c *gin.Context, status int, message string) {
 		},
 	})
 	c.Abort()
+}
+
+func denyBySecurityPolicyGoogle(c *gin.Context, auditService *service.SecurityAuditService, apiKey *service.APIKey) bool {
+	if auditService == nil || apiKey == nil {
+		return false
+	}
+	input := securityPolicyEvaluationInput(c, apiKey)
+	decision, err := auditService.EnforceGatewaySecurity(c.Request.Context(), input)
+	if err != nil && !errors.Is(err, service.ErrSecuritySubjectLocked) {
+		auditAPIKeyAuthFailure(c, auditService, apiKey, "SECURITY_POLICY_ERROR", err.Error(), 500)
+		abortWithGoogleError(c, 500, "Failed to evaluate security policy")
+		return true
+	}
+	if decision == nil || !decision.Blocked {
+		return false
+	}
+	reason := decision.Reason
+	if strings.TrimSpace(reason) == "" {
+		reason = "Blocked by security policy"
+	}
+	auditAPIKeyAuthDenied(c, auditService, apiKey, "SECURITY_POLICY_DENIED", reason, 403, map[string]any{
+		"policy_action":    decision.Action,
+		"policy_rule_code": decision.RuleCode,
+	})
+	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
+	abortWithGoogleError(c, 403, reason)
+	return true
 }

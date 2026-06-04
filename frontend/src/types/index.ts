@@ -191,6 +191,7 @@ export interface PublicSettings {
   email_verify_enabled: boolean
   force_email_on_third_party_signup: boolean
   registration_email_suffix_whitelist: string[]
+  registration_email_alias_restriction_enabled: boolean
   promo_code_enabled: boolean
   password_reset_enabled: boolean
   invitation_code_enabled: boolean
@@ -209,6 +210,8 @@ export interface PublicSettings {
   doc_url: string
   home_content: string
   hide_ccs_import_button: boolean
+  checkin_enabled: boolean
+  checkin_reward_amount: number
   payment_enabled: boolean
   risk_control_enabled: boolean
   table_default_page_size: number
@@ -1174,6 +1177,29 @@ export interface AdminDataImportResult {
   errors?: AdminDataImportError[]
 }
 
+export interface XaiCookieTokenImportRequest {
+  tokens: string[]
+  name_prefix?: string
+  base_url?: string
+}
+
+export interface XaiCookieTokenImportError {
+  line: number
+  message: string
+}
+
+export interface XaiCookieTokenImportResult {
+  created: number
+  skipped: number
+  failed: number
+  errors?: XaiCookieTokenImportError[]
+}
+
+export interface XaiCookieTokenExportResult {
+  tokens: string[]
+  count: number
+}
+
 export interface CodexSessionImportRequest {
   content?: string
   contents?: string[]
@@ -1821,6 +1847,7 @@ export interface TotpStatus {
   enabled: boolean
   enabled_at: number | null  // Unix timestamp in seconds
   feature_enabled: boolean
+  recovery_codes: number
 }
 
 export interface TotpSetupRequest {
@@ -1842,6 +1869,7 @@ export interface TotpEnableRequest {
 
 export interface TotpEnableResponse {
   success: boolean
+  recovery_codes?: string[]
 }
 
 export interface TotpDisableRequest {
@@ -1861,7 +1889,13 @@ export interface TotpLoginResponse {
 
 export interface TotpLogin2FARequest {
   temp_token: string
-  totp_code: string
+  totp_code?: string
+  recovery_code?: string
+}
+
+export interface TotpRecoveryCodesResponse {
+  codes: string[]
+  count: number
 }
 
 // ==================== Scheduled Test Types ====================

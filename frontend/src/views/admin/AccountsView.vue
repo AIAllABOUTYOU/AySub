@@ -98,12 +98,32 @@
                       </span>
                       <span class="flex-1 text-left">{{ t('admin.accounts.dataImport') }}</span>
                     </button>
+                    <button class="account-tools-menu-item" @click="openXaiCookieTokenImport">
+                      <span class="account-tools-menu-icon bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                        <Icon name="upload" size="sm" />
+                      </span>
+                      <span class="flex-1 text-left">{{ t('admin.accounts.xaiCookieTokenImport') }}</span>
+                    </button>
                     <button class="account-tools-menu-item" @click="openExportDataDialogFromMenu">
                       <span class="account-tools-menu-icon bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
                         <Icon name="download" size="sm" />
                       </span>
                       <span class="flex-1 text-left">
                         {{ selIds.length ? t('admin.accounts.dataExportSelected') : t('admin.accounts.dataExport') }}
+                      </span>
+                      <span
+                        v-if="selIds.length"
+                        class="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/40 dark:text-primary-300"
+                      >
+                        {{ t('admin.accounts.selectedCount', { count: selIds.length }) }}
+                      </span>
+                    </button>
+                    <button class="account-tools-menu-item" @click="handleExportXaiCookieTokens">
+                      <span class="account-tools-menu-icon bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                        <Icon name="download" size="sm" />
+                      </span>
+                      <span class="flex-1 text-left">
+                        {{ selIds.length ? t('admin.accounts.xaiCookieTokenExportSelected') : t('admin.accounts.xaiCookieTokenExport') }}
                       </span>
                       <span
                         v-if="selIds.length"
@@ -359,6 +379,7 @@
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
+    <XaiCookieTokenImportModal :show="showXaiCookieTokenImport" @close="showXaiCookieTokenImport = false" @imported="handleXaiCookieTokensImported" />
     <BulkEditAccountModal
       :show="showBulkEdit"
       :account-ids="selIds"
@@ -405,6 +426,7 @@ import AccountTableFilters from '@/components/admin/account/AccountTableFilters.
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
+import XaiCookieTokenImportModal from '@/components/admin/account/XaiCookieTokenImportModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
@@ -474,6 +496,7 @@ const showCreate = ref(false)
 const showEdit = ref(false)
 const showSync = ref(false)
 const showImportData = ref(false)
+const showXaiCookieTokenImport = ref(false)
 const showExportDataDialog = ref(false)
 const includeProxyOnExport = ref(true)
 const showBulkEdit = ref(false)
@@ -854,6 +877,7 @@ const isAnyModalOpen = computed(() => {
     showEdit.value ||
     showSync.value ||
     showImportData.value ||
+    showXaiCookieTokenImport.value ||
     showExportDataDialog.value ||
     showBulkEdit.value ||
     showTempUnsched.value ||
@@ -986,6 +1010,11 @@ const openSyncFromCrs = () => {
 const openImportData = () => {
   closeAccountToolsDropdown()
   showImportData.value = true
+}
+
+const openXaiCookieTokenImport = () => {
+  closeAccountToolsDropdown()
+  showXaiCookieTokenImport.value = true
 }
 
 const openExportDataDialogFromMenu = () => {
@@ -1401,6 +1430,7 @@ const handleBulkUpdated = () => {
   reload()
 }
 const handleDataImported = () => { showImportData.value = false; reload() }
+const handleXaiCookieTokensImported = () => { showXaiCookieTokenImport.value = false; reload() }
 const ACCOUNT_UNGROUPED_GROUP_QUERY_VALUE = 'ungrouped'
 const ACCOUNT_PRIVACY_MODE_UNSET_QUERY_VALUE = '__unset__'
 const buildAccountQueryFilters = () => ({
@@ -1505,6 +1535,15 @@ const formatExportTimestamp = () => {
   const pad2 = (value: number) => String(value).padStart(2, '0')
   return `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`
 }
+const downloadTextFile = (content: string, filename: string, type = 'text/plain') => {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
 const openExportDataDialog = () => {
   includeProxyOnExport.value = true
   showExportDataDialog.value = true
@@ -1523,19 +1562,34 @@ const handleExportData = async () => {
     )
     const timestamp = formatExportTimestamp()
     const filename = `aysub-account-${timestamp}.json`
-    const blob = new Blob([JSON.stringify(dataPayload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadTextFile(JSON.stringify(dataPayload, null, 2), filename, 'application/json')
     appStore.showSuccess(t('admin.accounts.dataExported'))
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.accounts.dataExportFailed'))
   } finally {
     exportingData.value = false
     showExportDataDialog.value = false
+  }
+}
+const handleExportXaiCookieTokens = async () => {
+  closeAccountToolsDropdown()
+  try {
+    const result = await adminAPI.accounts.exportXaiCookieTokens(
+      selIds.value.length > 0
+        ? { ids: selIds.value }
+        : {
+            filters: buildAccountQueryFilters()
+          }
+    )
+    if (!result.tokens.length) {
+      appStore.showError(t('admin.accounts.xaiCookieTokenExportEmpty'))
+      return
+    }
+    const timestamp = formatExportTimestamp()
+    downloadTextFile(result.tokens.join('\n'), `grok-tokens-${timestamp}.txt`)
+    appStore.showSuccess(t('admin.accounts.xaiCookieTokenExported', { count: result.count }))
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.xaiCookieTokenExportFailed'))
   }
 }
 const closeTestModal = () => { showTest.value = false; testingAcc.value = null }

@@ -25,7 +25,8 @@ const (
 	gatewayPermissionProtocolGoogle gatewayPermissionProtocol = "google"
 )
 
-func requireAPIKeyGatewayPermission(protocol gatewayPermissionProtocol) gin.HandlerFunc {
+func requireAPIKeyGatewayPermission(protocol gatewayPermissionProtocol, auditServices ...*service.SecurityAuditService) gin.HandlerFunc {
+	auditService := firstGatewaySecurityAuditService(auditServices)
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
 		if !ok || apiKey == nil {
@@ -40,14 +41,18 @@ func requireAPIKeyGatewayPermission(protocol gatewayPermissionProtocol) gin.Hand
 		}
 		if !apiKey.AllowsEndpoint(endpointID) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeAPIKeyPermissionDenied(c, protocol, endpointID, "", fmt.Sprintf("API key is not permitted to use endpoint %s", endpointID))
+			message := fmt.Sprintf("API key is not permitted to use endpoint %s", endpointID)
+			auditAPIKeyPermissionDenied(c, auditService, apiKey, protocol, endpointID, "", message)
+			writeAPIKeyPermissionDenied(c, protocol, endpointID, "", message)
 			return
 		}
 
 		model := permissionRequestedModel(c)
 		if !apiKey.AllowsModel(model) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeAPIKeyPermissionDenied(c, protocol, endpointID, model, fmt.Sprintf("API key is not permitted to use model %s", model))
+			message := fmt.Sprintf("API key is not permitted to use model %s", model)
+			auditAPIKeyPermissionDenied(c, auditService, apiKey, protocol, endpointID, model, message)
+			writeAPIKeyPermissionDenied(c, protocol, endpointID, model, message)
 			return
 		}
 
@@ -200,4 +205,25 @@ func permissionDeniedParam(endpointID, model string) string {
 		return "endpoint"
 	}
 	return ""
+}
+
+func firstGatewaySecurityAuditService(auditServices []*service.SecurityAuditService) *service.SecurityAuditService {
+	if len(auditServices) == 0 {
+		return nil
+	}
+	return auditServices[0]
+}
+
+func auditAPIKeyPermissionDenied(c *gin.Context, auditService *service.SecurityAuditService, apiKey *service.APIKey, protocol gatewayPermissionProtocol, endpointID, model, reason string) {
+	metadata := map[string]any{
+		"error_code":        "api_key_permission_denied",
+		"status_code":       http.StatusForbidden,
+		"protocol":          string(protocol),
+		"endpoint_id":       endpointID,
+		"requested_model":   model,
+		"permission_mode":   apiKey.PermissionMode,
+		"allowed_models":    apiKey.AllowedModels,
+		"allowed_endpoints": apiKey.AllowedEndpoints,
+	}
+	middleware.WriteAPIKeySecurityAuditAsync(c, auditService, apiKey, "api_key.permission_denied", service.SecurityAuditResultDenied, service.SecurityAuditRiskHigh, reason, metadata)
 }

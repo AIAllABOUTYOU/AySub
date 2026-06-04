@@ -16,6 +16,9 @@ import type {
   TempUnschedulableStatus,
   AdminDataPayload,
   AdminDataImportResult,
+  XaiCookieTokenImportRequest,
+  XaiCookieTokenImportResult,
+  XaiCookieTokenExportResult,
   CodexSessionImportRequest,
   CodexSessionImportResult,
   CheckMixedChannelRequest,
@@ -607,6 +610,38 @@ export async function importData(payload: {
   return data
 }
 
+export async function exportXaiCookieTokens(options?: {
+  ids?: number[]
+  filters?: {
+    status?: string
+    group?: string
+    privacy_mode?: string
+    search?: string
+    sort_by?: string
+    sort_order?: 'asc' | 'desc'
+  }
+}): Promise<XaiCookieTokenExportResult> {
+  const params: Record<string, string> = {}
+  if (options?.ids && options.ids.length > 0) {
+    params.ids = options.ids.join(',')
+  } else if (options?.filters) {
+    const { status, group, privacy_mode, search, sort_by, sort_order } = options.filters
+    if (status) params.status = status
+    if (group) params.group = group
+    if (privacy_mode) params.privacy_mode = privacy_mode
+    if (search) params.search = search
+    if (sort_by) params.sort_by = sort_by
+    if (sort_order) params.sort_order = sort_order
+  }
+  const { data } = await apiClient.get<XaiCookieTokenExportResult>('/admin/accounts/xai-cookie-tokens', { params })
+  return data
+}
+
+export async function importXaiCookieTokens(payload: XaiCookieTokenImportRequest): Promise<XaiCookieTokenImportResult> {
+  const { data } = await apiClient.post<XaiCookieTokenImportResult>('/admin/accounts/xai-cookie-tokens', payload)
+  return data
+}
+
 export async function importCodexSession(payload: CodexSessionImportRequest): Promise<CodexSessionImportResult> {
   const { data } = await apiClient.post<CodexSessionImportResult>('/admin/accounts/import/codex-session', payload)
   return data
@@ -731,6 +766,8 @@ export const accountsAPI = {
   syncFromCrs,
   exportData,
   importData,
+  exportXaiCookieTokens,
+  importXaiCookieTokens,
   importCodexSession,
   getAntigravityDefaultModelMapping,
   batchClearError,

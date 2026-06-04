@@ -11,7 +11,8 @@ import type {
   TotpEnableRequest,
   TotpEnableResponse,
   TotpDisableRequest,
-  TotpVerificationMethod
+  TotpVerificationMethod,
+  TotpRecoveryCodesResponse
 } from '@/types'
 
 /**
@@ -71,13 +72,21 @@ export async function disable(request: TotpDisableRequest): Promise<{ success: b
   return data
 }
 
+export async function regenerateRecoveryCodes(totpCode: string): Promise<TotpRecoveryCodesResponse> {
+  const { data } = await apiClient.post<TotpRecoveryCodesResponse>('/user/totp/recovery-codes/regenerate', {
+    totp_code: totpCode
+  })
+  return data
+}
+
 export const totpAPI = {
   getStatus,
   getVerificationMethod,
   sendVerifyCode,
   initiateSetup,
   enable,
-  disable
+  disable,
+  regenerateRecoveryCodes
 }
 
 export default totpAPI

@@ -24,25 +24,28 @@ import (
 )
 
 var (
-	ErrInvalidCredentials      = infraerrors.Unauthorized("INVALID_CREDENTIALS", "invalid email or password")
-	ErrUserNotActive           = infraerrors.Forbidden("USER_NOT_ACTIVE", "user is not active")
-	ErrEmailExists             = infraerrors.Conflict("EMAIL_EXISTS", "email already exists")
-	ErrEmailReserved           = infraerrors.BadRequest("EMAIL_RESERVED", "email is reserved")
-	ErrInvalidToken            = infraerrors.Unauthorized("INVALID_TOKEN", "invalid token")
-	ErrTokenExpired            = infraerrors.Unauthorized("TOKEN_EXPIRED", "token has expired")
-	ErrAccessTokenExpired      = infraerrors.Unauthorized("ACCESS_TOKEN_EXPIRED", "access token has expired")
-	ErrTokenTooLarge           = infraerrors.BadRequest("TOKEN_TOO_LARGE", "token too large")
-	ErrTokenRevoked            = infraerrors.Unauthorized("TOKEN_REVOKED", "token has been revoked")
-	ErrRefreshTokenInvalid     = infraerrors.Unauthorized("REFRESH_TOKEN_INVALID", "invalid refresh token")
-	ErrRefreshTokenExpired     = infraerrors.Unauthorized("REFRESH_TOKEN_EXPIRED", "refresh token has expired")
-	ErrRefreshTokenReused      = infraerrors.Unauthorized("REFRESH_TOKEN_REUSED", "refresh token has been reused")
-	ErrEmailVerifyRequired     = infraerrors.BadRequest("EMAIL_VERIFY_REQUIRED", "email verification is required")
-	ErrEmailSuffixNotAllowed   = infraerrors.BadRequest("EMAIL_SUFFIX_NOT_ALLOWED", "email suffix is not allowed")
-	ErrRegDisabled             = infraerrors.Forbidden("REGISTRATION_DISABLED", "registration is currently disabled")
-	ErrServiceUnavailable      = infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "service temporarily unavailable")
-	ErrInvitationCodeRequired  = infraerrors.BadRequest("INVITATION_CODE_REQUIRED", "invitation code is required")
-	ErrInvitationCodeInvalid   = infraerrors.BadRequest("INVITATION_CODE_INVALID", "invalid or used invitation code")
-	ErrOAuthInvitationRequired = infraerrors.Forbidden("OAUTH_INVITATION_REQUIRED", "invitation code required to complete oauth registration")
+	ErrInvalidCredentials            = infraerrors.Unauthorized("INVALID_CREDENTIALS", "invalid email or password")
+	ErrUserNotActive                 = infraerrors.Forbidden("USER_NOT_ACTIVE", "user is not active")
+	ErrEmailExists                   = infraerrors.Conflict("EMAIL_EXISTS", "email already exists")
+	ErrEmailReserved                 = infraerrors.BadRequest("EMAIL_RESERVED", "email is reserved")
+	ErrInvalidToken                  = infraerrors.Unauthorized("INVALID_TOKEN", "invalid token")
+	ErrTokenExpired                  = infraerrors.Unauthorized("TOKEN_EXPIRED", "token has expired")
+	ErrAccessTokenExpired            = infraerrors.Unauthorized("ACCESS_TOKEN_EXPIRED", "access token has expired")
+	ErrTokenTooLarge                 = infraerrors.BadRequest("TOKEN_TOO_LARGE", "token too large")
+	ErrTokenRevoked                  = infraerrors.Unauthorized("TOKEN_REVOKED", "token has been revoked")
+	ErrRefreshTokenInvalid           = infraerrors.Unauthorized("REFRESH_TOKEN_INVALID", "invalid refresh token")
+	ErrRefreshTokenExpired           = infraerrors.Unauthorized("REFRESH_TOKEN_EXPIRED", "refresh token has expired")
+	ErrRefreshTokenReused            = infraerrors.Unauthorized("REFRESH_TOKEN_REUSED", "refresh token has been reused")
+	ErrEmailVerifyRequired           = infraerrors.BadRequest("EMAIL_VERIFY_REQUIRED", "email verification is required")
+	ErrEmailSuffixNotAllowed         = infraerrors.BadRequest("EMAIL_SUFFIX_NOT_ALLOWED", "email suffix is not allowed")
+	ErrEmailDomainBlocked            = infraerrors.BadRequest("EMAIL_DOMAIN_BLOCKED", "email domain is blocked")
+	ErrEmailAliasNotAllowed          = infraerrors.BadRequest("EMAIL_ALIAS_NOT_ALLOWED", "email aliases are not allowed")
+	ErrRegDisabled                   = infraerrors.Forbidden("REGISTRATION_DISABLED", "registration is currently disabled")
+	ErrServiceUnavailable            = infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "service temporarily unavailable")
+	ErrInvitationCodeRequired        = infraerrors.BadRequest("INVITATION_CODE_REQUIRED", "invitation code is required")
+	ErrInvitationCodeInvalid         = infraerrors.BadRequest("INVITATION_CODE_INVALID", "invalid or used invitation code")
+	ErrOAuthInvitationRequired       = infraerrors.Forbidden("OAUTH_INVITATION_REQUIRED", "invitation code required to complete oauth registration")
+	ErrSensitiveVerificationRequired = infraerrors.Forbidden("SENSITIVE_VERIFICATION_REQUIRED", "sensitive operation verification is required")
 )
 
 // maxTokenLength 限制 token 大小，避免超长 header 触发解析时的异常内存分配。
@@ -51,12 +54,25 @@ const maxTokenLength = 8192
 // refreshTokenPrefix is the prefix for refresh tokens to distinguish them from access tokens.
 const refreshTokenPrefix = "rt_"
 
+const (
+	sensitiveOperationTokenPurpose = "sensitive_operation"
+	sensitiveOperationTokenTTL     = 5 * time.Minute
+)
+
 // JWTClaims JWT载荷数据
 type JWTClaims struct {
 	UserID       int64  `json:"user_id"`
 	Email        string `json:"email"`
 	Role         string `json:"role"`
 	TokenVersion int64  `json:"token_version"` // Used to invalidate tokens on password change
+	jwt.RegisteredClaims
+}
+
+type SensitiveOperationClaims struct {
+	UserID       int64  `json:"user_id"`
+	Action       string `json:"action"`
+	Purpose      string `json:"purpose"`
+	TokenVersion int64  `json:"token_version"`
 	jwt.RegisteredClaims
 }
 
@@ -1062,9 +1078,16 @@ func (s *AuthService) validateRegistrationEmailPolicy(ctx context.Context, email
 	if s.settingService == nil {
 		return nil
 	}
+	blacklist := s.settingService.GetRegistrationEmailDomainBlacklist(ctx)
+	if IsRegistrationEmailDomainBlocked(email, blacklist) {
+		return ErrEmailDomainBlocked
+	}
 	whitelist := s.settingService.GetRegistrationEmailSuffixWhitelist(ctx)
 	if !IsRegistrationEmailSuffixAllowed(email, whitelist) {
 		return buildEmailSuffixNotAllowedError(whitelist)
+	}
+	if s.settingService.IsRegistrationEmailAliasRestrictionEnabled(ctx) && HasRegistrationEmailAlias(email) {
+		return ErrEmailAliasNotAllowed
 	}
 	return nil
 }
@@ -1200,6 +1223,92 @@ func (s *AuthService) HashPassword(password string) (string, error) {
 func (s *AuthService) CheckPassword(password, hashedPassword string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	return err == nil
+}
+
+func (s *AuthService) GenerateSensitiveOperationToken(ctx context.Context, userID int64, action string) (string, int64, error) {
+	if s == nil || s.cfg == nil {
+		return "", 0, ErrSensitiveVerificationRequired
+	}
+	action = strings.TrimSpace(action)
+	if userID <= 0 || action == "" {
+		return "", 0, infraerrors.BadRequest("INVALID_SENSITIVE_OPERATION", "invalid sensitive operation")
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", 0, err
+	}
+	if !user.IsActive() {
+		return "", 0, ErrUserNotActive
+	}
+	now := time.Now()
+	expiresAt := now.Add(sensitiveOperationTokenTTL)
+	jti, err := randomHexString(16)
+	if err != nil {
+		return "", 0, fmt.Errorf("generate sensitive operation token id: %w", err)
+	}
+	claims := &SensitiveOperationClaims{
+		UserID:       user.ID,
+		Action:       action,
+		Purpose:      sensitiveOperationTokenPurpose,
+		TokenVersion: resolvedTokenVersion(user),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(s.cfg.JWT.Secret))
+	if err != nil {
+		return "", 0, fmt.Errorf("sign sensitive operation token: %w", err)
+	}
+	return tokenString, int64(sensitiveOperationTokenTTL.Seconds()), nil
+}
+
+func (s *AuthService) ValidateSensitiveOperationToken(ctx context.Context, tokenString string, userID int64, action string) error {
+	if s == nil || s.cfg == nil {
+		return ErrSensitiveVerificationRequired
+	}
+	tokenString = strings.TrimSpace(tokenString)
+	action = strings.TrimSpace(action)
+	if tokenString == "" {
+		return ErrSensitiveVerificationRequired
+	}
+	if len(tokenString) > maxTokenLength {
+		return ErrTokenTooLarge
+	}
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
+	token, err := parser.ParseWithClaims(tokenString, &SensitiveOperationClaims{}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(s.cfg.JWT.Secret), nil
+	})
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return ErrSensitiveVerificationRequired
+		}
+		return ErrInvalidToken
+	}
+	claims, ok := token.Claims.(*SensitiveOperationClaims)
+	if !ok || !token.Valid {
+		return ErrInvalidToken
+	}
+	if claims.Purpose != sensitiveOperationTokenPurpose || claims.UserID != userID || claims.Action != action {
+		return ErrSensitiveVerificationRequired
+	}
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !user.IsActive() {
+		return ErrUserNotActive
+	}
+	if claims.TokenVersion != resolvedTokenVersion(user) {
+		return ErrSensitiveVerificationRequired
+	}
+	return nil
 }
 
 // RefreshToken 刷新token

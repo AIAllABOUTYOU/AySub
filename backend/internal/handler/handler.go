@@ -36,6 +36,7 @@ type AdminHandlers struct {
 	ContentModeration      *admin.ContentModerationHandler
 	Payment                *admin.PaymentHandler
 	Affiliate              *admin.AffiliateHandler
+	Security               *admin.SecurityHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -57,6 +58,8 @@ type Handlers struct {
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
 	PublicStatus     *PublicStatusHandler
+	Checkin          *CheckinHandler
+	UserSecurity     *UserSecurityHandler
 }
 
 // BuildInfo contains build-time information

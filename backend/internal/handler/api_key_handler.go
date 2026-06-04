@@ -18,13 +18,19 @@ import (
 
 // APIKeyHandler handles API key-related requests
 type APIKeyHandler struct {
-	apiKeyService *service.APIKeyService
+	apiKeyService        *service.APIKeyService
+	securityAuditService *service.SecurityAuditService
 }
 
 // NewAPIKeyHandler creates a new APIKeyHandler
-func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
+func NewAPIKeyHandler(apiKeyService *service.APIKeyService, securityAuditServices ...*service.SecurityAuditService) *APIKeyHandler {
+	var securityAuditService *service.SecurityAuditService
+	if len(securityAuditServices) > 0 {
+		securityAuditService = securityAuditServices[0]
+	}
 	return &APIKeyHandler{
-		apiKeyService: apiKeyService,
+		apiKeyService:        apiKeyService,
+		securityAuditService: securityAuditService,
 	}
 }
 
@@ -186,8 +192,35 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		key, err := h.apiKeyService.Create(ctx, subject.UserID, svcReq)
 		if err != nil {
+			writeSecurityAuditAsync(c, h.securityAuditService, service.SecurityAuditCreateInput{
+				SubjectType:  "user",
+				SubjectID:    auditUserSubject(subject.UserID),
+				ResourceType: "api_key",
+				Action:       "api_key.create",
+				Result:       service.SecurityAuditResultFailure,
+				RiskLevel:    service.SecurityAuditRiskMedium,
+				Reason:       err.Error(),
+				Metadata: map[string]any{
+					"name":              req.Name,
+					"group_id":          req.GroupID,
+					"permission_mode":   req.PermissionMode,
+					"allowed_models":    req.AllowedModels,
+					"allowed_endpoints": req.AllowedEndpoints,
+					"has_custom_key":    req.CustomKey != nil && strings.TrimSpace(*req.CustomKey) != "",
+				},
+			})
 			return nil, err
 		}
+		securityAuditForAPIKey(c, h.securityAuditService, key, "api_key.create", service.SecurityAuditResultSuccess, service.SecurityAuditRiskMedium, "API key created", map[string]any{
+			"group_id":          key.GroupID,
+			"permission_mode":   key.PermissionMode,
+			"allowed_models":    key.AllowedModels,
+			"allowed_endpoints": key.AllowedEndpoints,
+			"ip_whitelist_set":  len(key.IPWhitelist) > 0,
+			"ip_blacklist_set":  len(key.IPBlacklist) > 0,
+			"quota":             key.Quota,
+			"expires_at":        key.ExpiresAt,
+		})
 		return dto.APIKeyFromService(key), nil
 	})
 }
@@ -251,10 +284,40 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 
 	key, err := h.apiKeyService.Update(c.Request.Context(), keyID, subject.UserID, svcReq)
 	if err != nil {
+		writeSecurityAuditAsync(c, h.securityAuditService, service.SecurityAuditCreateInput{
+			SubjectType:  "user",
+			SubjectID:    auditUserSubject(subject.UserID),
+			ResourceType: "api_key",
+			ResourceID:   strconv.FormatInt(keyID, 10),
+			Action:       "api_key.update",
+			Result:       service.SecurityAuditResultFailure,
+			RiskLevel:    service.SecurityAuditRiskMedium,
+			Reason:       err.Error(),
+			Metadata: map[string]any{
+				"status":                  req.Status,
+				"group_id":                req.GroupID,
+				"permission_mode_changed": req.PermissionMode != nil,
+				"models_changed":          req.AllowedModels != nil,
+				"endpoints_changed":       req.AllowedEndpoints != nil,
+				"quota_changed":           req.Quota != nil,
+				"reset_quota":             req.ResetQuota != nil && *req.ResetQuota,
+				"reset_rate_limit_usage":  req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage,
+			},
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
 
+	securityAuditForAPIKey(c, h.securityAuditService, key, "api_key.update", service.SecurityAuditResultSuccess, service.SecurityAuditRiskMedium, "API key updated", map[string]any{
+		"status":                  key.Status,
+		"group_id":                key.GroupID,
+		"permission_mode_changed": req.PermissionMode != nil,
+		"models_changed":          req.AllowedModels != nil,
+		"endpoints_changed":       req.AllowedEndpoints != nil,
+		"quota_changed":           req.Quota != nil,
+		"reset_quota":             req.ResetQuota != nil && *req.ResetQuota,
+		"reset_rate_limit_usage":  req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage,
+	})
 	response.Success(c, dto.APIKeyFromService(key))
 }
 
@@ -273,12 +336,41 @@ func (h *APIKeyHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	key, getErr := h.apiKeyService.GetByID(c.Request.Context(), keyID)
 	err = h.apiKeyService.Delete(c.Request.Context(), keyID, subject.UserID)
 	if err != nil {
+		writeSecurityAuditAsync(c, h.securityAuditService, service.SecurityAuditCreateInput{
+			SubjectType:  "user",
+			SubjectID:    auditUserSubject(subject.UserID),
+			ResourceType: "api_key",
+			ResourceID:   strconv.FormatInt(keyID, 10),
+			Action:       "api_key.delete",
+			Result:       service.SecurityAuditResultFailure,
+			RiskLevel:    service.SecurityAuditRiskHigh,
+			Reason:       err.Error(),
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
 
+	if getErr == nil && key != nil {
+		securityAuditForAPIKey(c, h.securityAuditService, key, "api_key.delete", service.SecurityAuditResultSuccess, service.SecurityAuditRiskHigh, "API key deleted", map[string]any{
+			"deleted_key_id": key.ID,
+			"name":           key.Name,
+			"group_id":       key.GroupID,
+		})
+	} else {
+		writeSecurityAuditAsync(c, h.securityAuditService, service.SecurityAuditCreateInput{
+			SubjectType:  "user",
+			SubjectID:    auditUserSubject(subject.UserID),
+			ResourceType: "api_key",
+			ResourceID:   strconv.FormatInt(keyID, 10),
+			Action:       "api_key.delete",
+			Result:       service.SecurityAuditResultSuccess,
+			RiskLevel:    service.SecurityAuditRiskHigh,
+			Reason:       "API key deleted",
+		})
+	}
 	response.Success(c, gin.H{"message": "API key deleted successfully"})
 }
 

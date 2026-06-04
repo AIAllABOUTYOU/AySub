@@ -27,13 +27,18 @@ type AuthHandler struct {
 	redeemService        *service.RedeemService
 	totpService          *service.TotpService
 	userAttributeService *service.UserAttributeService
+	securityAuditService *service.SecurityAuditService
 
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService, userAttributeService *service.UserAttributeService) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userService *service.UserService, settingService *service.SettingService, promoService *service.PromoService, redeemService *service.RedeemService, totpService *service.TotpService, userAttributeService *service.UserAttributeService, securityAuditServices ...*service.SecurityAuditService) *AuthHandler {
+	var securityAuditService *service.SecurityAuditService
+	if len(securityAuditServices) > 0 {
+		securityAuditService = securityAuditServices[0]
+	}
 	return &AuthHandler{
 		cfg:                  cfg,
 		authService:          authService,
@@ -43,6 +48,7 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 		redeemService:        redeemService,
 		totpService:          totpService,
 		userAttributeService: userAttributeService,
+		securityAuditService: securityAuditService,
 	}
 }
 
@@ -181,10 +187,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		req.AffCode,
 	)
 	if err != nil {
+		securityAuditForUser(c, h.securityAuditService, 0, req.Email, "auth.register", service.SecurityAuditResultFailure, service.SecurityAuditRiskMedium, err.Error(), map[string]any{
+			"email": req.Email,
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
 
+	securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.register", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "user registered", map[string]any{
+		"email": user.Email,
+	})
 	h.respondWithTokenPair(c, user)
 }
 
@@ -226,18 +238,30 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// Turnstile 验证
 	if err := h.authService.VerifyTurnstile(c.Request.Context(), req.TurnstileToken, ip.GetClientIP(c)); err != nil {
+		securityAuditForUser(c, h.securityAuditService, 0, req.Email, "auth.login", service.SecurityAuditResultDenied, service.SecurityAuditRiskMedium, err.Error(), map[string]any{
+			"email": req.Email,
+			"stage": "turnstile",
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
 
 	token, user, err := h.authService.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
+		securityAuditForUser(c, h.securityAuditService, 0, req.Email, "auth.login", service.SecurityAuditResultFailure, service.SecurityAuditRiskHigh, err.Error(), map[string]any{
+			"email": req.Email,
+			"stage": "password",
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
 	_ = token // token 由 authService.Login 返回但此处由 respondWithTokenPair 重新生成
 
 	if err := h.ensureBackendModeAllowsUser(c.Request.Context(), user); err != nil {
+		securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.login", service.SecurityAuditResultDenied, service.SecurityAuditRiskHigh, err.Error(), map[string]any{
+			"email": user.Email,
+			"stage": "backend_mode",
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -251,6 +275,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			return
 		}
 
+		securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.login.2fa_required", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "2FA required", map[string]any{
+			"email": user.Email,
+		})
 		response.Success(c, TotpLoginResponse{
 			Requires2FA:     true,
 			TempToken:       tempToken,
@@ -261,6 +288,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 
+	securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.login", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "login succeeded", map[string]any{
+		"email": user.Email,
+	})
 	h.respondWithTokenPair(c, user)
 }
 
@@ -273,8 +303,9 @@ type TotpLoginResponse struct {
 
 // Login2FARequest represents the 2FA login request
 type Login2FARequest struct {
-	TempToken string `json:"temp_token" binding:"required"`
-	TotpCode  string `json:"totp_code" binding:"required,len=6"`
+	TempToken    string `json:"temp_token" binding:"required"`
+	TotpCode     string `json:"totp_code"`
+	RecoveryCode string `json:"recovery_code"`
 }
 
 // Login2FA completes the login with 2FA verification
@@ -300,6 +331,9 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 		slog.Debug("login_2fa_session_invalid",
 			"temp_token_prefix", tokenPrefix,
 			"error", err)
+		securityAuditForUser(c, h.securityAuditService, 0, "", "auth.login.2fa", service.SecurityAuditResultDenied, service.SecurityAuditRiskMedium, "invalid or expired 2FA session", map[string]any{
+			"temp_token_prefix": tokenPrefix,
+		})
 		response.BadRequest(c, "Invalid or expired 2FA session")
 		return
 	}
@@ -308,12 +342,26 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 		"user_id", session.UserID,
 		"email", session.Email)
 
-	// Verify the TOTP code
-	if err := h.totpService.VerifyCode(c.Request.Context(), session.UserID, req.TotpCode); err != nil {
+	var verifyErr error
+	verifyMethod := "totp"
+	if strings.TrimSpace(req.RecoveryCode) != "" {
+		verifyMethod = "recovery_code"
+		verifyErr = h.totpService.VerifyRecoveryCode(c.Request.Context(), session.UserID, req.RecoveryCode)
+	} else if strings.TrimSpace(req.TotpCode) != "" {
+		verifyErr = h.totpService.VerifyCode(c.Request.Context(), session.UserID, req.TotpCode)
+	} else {
+		verifyErr = service.ErrTotpInvalidCode
+	}
+	if verifyErr != nil {
 		slog.Debug("login_2fa_verify_failed",
 			"user_id", session.UserID,
-			"error", err)
-		response.ErrorFrom(c, err)
+			"method", verifyMethod,
+			"error", verifyErr)
+		securityAuditForUser(c, h.securityAuditService, session.UserID, session.Email, "auth.login.2fa", service.SecurityAuditResultDenied, service.SecurityAuditRiskHigh, verifyErr.Error(), map[string]any{
+			"email":  session.Email,
+			"method": verifyMethod,
+		})
+		response.ErrorFrom(c, verifyErr)
 		return
 	}
 
@@ -329,6 +377,10 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 	}
 
 	if err := h.ensureBackendModeAllowsUser(c.Request.Context(), user); err != nil {
+		securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.login.2fa", service.SecurityAuditResultDenied, service.SecurityAuditRiskHigh, err.Error(), map[string]any{
+			"email": user.Email,
+			"stage": "backend_mode",
+		})
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -397,6 +449,10 @@ func (h *AuthHandler) Login2FA(c *gin.Context) {
 		h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	}
 
+	securityAuditForUser(c, h.securityAuditService, user.ID, user.Email, "auth.login.2fa", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "2FA login succeeded", map[string]any{
+		"email":  user.Email,
+		"method": verifyMethod,
+	})
 	h.respondWithTokenPair(c, user)
 }
 

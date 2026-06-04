@@ -82,6 +82,29 @@ type DataImportError struct {
 	Message  string `json:"message"`
 }
 
+type XaiCookieTokenImportRequest struct {
+	Tokens     []string `json:"tokens"`
+	NamePrefix string   `json:"name_prefix"`
+	BaseURL    string   `json:"base_url"`
+}
+
+type XaiCookieTokenImportResult struct {
+	Created int                         `json:"created"`
+	Skipped int                         `json:"skipped"`
+	Failed  int                         `json:"failed"`
+	Errors  []XaiCookieTokenImportError `json:"errors,omitempty"`
+}
+
+type XaiCookieTokenImportError struct {
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+}
+
+type XaiCookieTokenExportResult struct {
+	Tokens []string `json:"tokens"`
+	Count  int      `json:"count"`
+}
+
 func buildProxyKey(protocol, host string, port int, username, password string) string {
 	return fmt.Sprintf("%s|%s|%d|%s|%s", strings.TrimSpace(protocol), strings.TrimSpace(host), port, strings.TrimSpace(username), strings.TrimSpace(password))
 }
@@ -189,6 +212,85 @@ func (h *AccountHandler) ImportData(c *gin.Context) {
 
 	executeAdminIdempotentJSON(c, "admin.accounts.import_data", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		return h.importData(ctx, req)
+	})
+}
+
+func (h *AccountHandler) ExportXaiCookieTokens(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	selectedIDs, err := parseAccountIDs(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	var accounts []service.Account
+	if len(selectedIDs) > 0 {
+		accounts, err = h.resolveExportAccounts(ctx, selectedIDs, c)
+	} else {
+		status := c.Query("status")
+		privacyMode := strings.TrimSpace(c.Query("privacy_mode"))
+		search := strings.TrimSpace(c.Query("search"))
+		sortBy := c.DefaultQuery("sort_by", "name")
+		sortOrder := c.DefaultQuery("sort_order", "asc")
+		if len(search) > 100 {
+			search = search[:100]
+		}
+
+		groupID := int64(0)
+		if groupIDStr := c.Query("group"); groupIDStr != "" {
+			if groupIDStr == accountListGroupUngroupedQueryValue {
+				groupID = service.AccountListGroupUngrouped
+			} else {
+				parsedGroupID, parseErr := strconv.ParseInt(groupIDStr, 10, 64)
+				if parseErr != nil || parsedGroupID <= 0 {
+					response.BadRequest(c, "invalid group filter")
+					return
+				}
+				groupID = parsedGroupID
+			}
+		}
+
+		accounts, err = h.listAccountsFiltered(ctx, service.PlatformXAI, service.AccountTypeCookie, status, search, groupID, privacyMode, sortBy, sortOrder)
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	tokens := make([]string, 0, len(accounts))
+	seen := map[string]struct{}{}
+	for i := range accounts {
+		acc := accounts[i]
+		if acc.Platform != service.PlatformXAI || acc.Type != service.AccountTypeCookie {
+			continue
+		}
+		token := extractXaiCookieAccountToken(acc)
+		if token == "" {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		tokens = append(tokens, token)
+	}
+
+	response.Success(c, XaiCookieTokenExportResult{
+		Tokens: tokens,
+		Count:  len(tokens),
+	})
+}
+
+func (h *AccountHandler) ImportXaiCookieTokens(c *gin.Context) {
+	var req XaiCookieTokenImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	executeAdminIdempotentJSON(c, "admin.accounts.import_xai_cookie_tokens", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+		return h.importXaiCookieTokens(ctx, req)
 	})
 }
 
@@ -358,6 +460,79 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 	return result, nil
 }
 
+func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCookieTokenImportRequest) (XaiCookieTokenImportResult, error) {
+	result := XaiCookieTokenImportResult{}
+	if len(req.Tokens) == 0 {
+		return result, errors.New("tokens is required")
+	}
+
+	existingAccounts, err := h.listAccountsFiltered(ctx, service.PlatformXAI, service.AccountTypeCookie, "", "", 0, "", "name", "asc")
+	if err != nil {
+		return result, err
+	}
+	existingTokens := map[string]struct{}{}
+	for i := range existingAccounts {
+		token := extractXaiCookieAccountToken(existingAccounts[i])
+		if token != "" {
+			existingTokens[token] = struct{}{}
+		}
+	}
+
+	namePrefix := strings.TrimSpace(req.NamePrefix)
+	if namePrefix == "" {
+		namePrefix = "Grok 导入账号"
+	}
+	baseURL := strings.TrimSpace(req.BaseURL)
+	if baseURL == "" {
+		baseURL = "https://grok.com"
+	}
+
+	seenInput := map[string]struct{}{}
+	createIndex := 0
+	for line, raw := range req.Tokens {
+		token := normalizeXaiCookieToken(raw)
+		if token == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, XaiCookieTokenImportError{
+				Line:    line + 1,
+				Message: "token is empty",
+			})
+			continue
+		}
+		if _, ok := seenInput[token]; ok {
+			result.Skipped++
+			continue
+		}
+		seenInput[token] = struct{}{}
+		if _, ok := existingTokens[token]; ok {
+			result.Skipped++
+			continue
+		}
+
+		createIndex++
+		_, createErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
+			Name:        fmt.Sprintf("%s %d", namePrefix, createIndex),
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"base_url": baseURL, "sso_token": token},
+			Concurrency: 10,
+			Priority:    1,
+		})
+		if createErr != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, XaiCookieTokenImportError{
+				Line:    line + 1,
+				Message: createErr.Error(),
+			})
+			continue
+		}
+		existingTokens[token] = struct{}{}
+		result.Created++
+	}
+
+	return result, nil
+}
+
 func (h *AccountHandler) listAllProxies(ctx context.Context) ([]service.Proxy, error) {
 	page := 1
 	pageSize := dataPageCap
@@ -374,6 +549,44 @@ func (h *AccountHandler) listAllProxies(ctx context.Context) ([]service.Proxy, e
 		page++
 	}
 	return out, nil
+}
+
+func extractXaiCookieAccountToken(account service.Account) string {
+	if account.Credentials == nil {
+		return ""
+	}
+	for _, key := range []string{"sso_token", "sso", "cookie"} {
+		if value, ok := account.Credentials[key].(string); ok {
+			if token := normalizeXaiCookieToken(value); token != "" {
+				return token
+			}
+		}
+	}
+	return ""
+}
+
+func normalizeXaiCookieToken(value string) string {
+	raw := strings.TrimSpace(value)
+	raw = strings.TrimPrefix(raw, "\ufeff")
+	raw = strings.ReplaceAll(raw, "\u200b", "")
+	raw = strings.ReplaceAll(raw, "\u200c", "")
+	raw = strings.ReplaceAll(raw, "\u200d", "")
+	if raw == "" {
+		return ""
+	}
+
+	if strings.Contains(raw, "sso=") {
+		for _, part := range strings.Split(raw, ";") {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, "sso=") {
+				return strings.TrimSpace(strings.TrimPrefix(part, "sso="))
+			}
+		}
+	}
+	if strings.HasPrefix(raw, "sso=") {
+		return strings.TrimSpace(strings.TrimPrefix(raw, "sso="))
+	}
+	return raw
 }
 
 func (h *AccountHandler) listAccountsFiltered(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode, sortBy, sortOrder string) ([]service.Account, error) {
@@ -563,7 +776,7 @@ func validateDataAccount(item DataAccount) error {
 		return errors.New("account credentials is required")
 	}
 	switch item.Type {
-	case service.AccountTypeOAuth, service.AccountTypeSetupToken, service.AccountTypeAPIKey, service.AccountTypeUpstream:
+	case service.AccountTypeOAuth, service.AccountTypeSetupToken, service.AccountTypeAPIKey, service.AccountTypeCookie, service.AccountTypeUpstream:
 	default:
 		return fmt.Errorf("account type is invalid: %s", item.Type)
 	}

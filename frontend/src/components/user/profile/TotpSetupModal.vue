@@ -161,6 +161,30 @@
             </div>
           </form>
         </div>
+
+        <!-- Step 3: Recovery Codes -->
+        <div v-if="step === 3" class="space-y-5">
+          <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+            {{ t('profile.totp.recoveryCodesOnceHint') }}
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <code
+              v-for="item in recoveryCodes"
+              :key="item"
+              class="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-center font-mono text-sm tracking-wide text-gray-900 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-100"
+            >
+              {{ item }}
+            </code>
+          </div>
+          <div class="flex justify-end gap-3">
+            <button type="button" class="btn btn-secondary" @click="copyRecoveryCodes">
+              {{ t('profile.totp.copyRecoveryCodes') }}
+            </button>
+            <button type="button" class="btn btn-primary" @click="finishSetup">
+              {{ t('common.close') }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -182,7 +206,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const appStore = useAppStore()
 
-// Step: 0 = verify identity, 1 = QR code, 2 = verify TOTP code
+// Step: 0 = verify identity, 1 = QR code, 2 = verify TOTP code, 3 = recovery codes
 const step = ref(0)
 const methodLoading = ref(true)
 const verificationMethod = ref<'email' | 'password'>('password')
@@ -195,6 +219,7 @@ const setupLoading = ref(false)
 const setupData = ref<TotpSetupResponse | null>(null)
 const verifying = ref(false)
 const code = ref<string[]>(['', '', '', '', '', ''])
+const recoveryCodes = ref<string[]>([])
 const inputRefs = ref<(HTMLInputElement | null)[]>([])
 const qrCodeDataUrl = ref('')
 
@@ -208,6 +233,8 @@ const stepDescription = computed(() => {
       return t('profile.totp.setupStep1')
     case 2:
       return t('profile.totp.setupStep2')
+    case 3:
+      return t('profile.totp.recoveryCodesTitle')
     default:
       return ''
   }
@@ -309,6 +336,20 @@ const copySecret = async () => {
   }
 }
 
+const copyRecoveryCodes = async () => {
+  try {
+    await navigator.clipboard.writeText(recoveryCodes.value.join('\n'))
+    appStore.showSuccess(t('common.copied'))
+  } catch {
+    appStore.showError(t('common.copyFailed'))
+  }
+}
+
+const finishSetup = () => {
+  appStore.showSuccess(t('profile.totp.enableSuccess'))
+  emit('success')
+}
+
 const loadVerificationMethod = async () => {
   methodLoading.value = true
   try {
@@ -373,12 +414,16 @@ const handleVerify = async () => {
   verifying.value = true
 
   try {
-    await totpAPI.enable({
+    const result = await totpAPI.enable({
       totp_code: totpCode,
       setup_token: setupData.value.setup_token
     })
-    appStore.showSuccess(t('profile.totp.enableSuccess'))
-    emit('success')
+    recoveryCodes.value = result.recovery_codes || []
+    if (recoveryCodes.value.length > 0) {
+      step.value = 3
+      return
+    }
+    finishSetup()
   } catch (err: any) {
     appStore.showError(err.response?.data?.message || t('profile.totp.verifyFailed'))
     code.value = ['', '', '', '', '', '']

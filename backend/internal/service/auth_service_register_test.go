@@ -415,6 +415,62 @@ func TestAuthService_Register_EmailSuffixAllowed(t *testing.T) {
 	require.Equal(t, int64(8), user.ID)
 }
 
+func TestAuthService_Register_EmailDomainBlocked(t *testing.T) {
+	repo := &userRepoStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:              "true",
+		SettingKeyRegistrationEmailSuffixWhitelist: `["*.example.com"]`,
+		SettingKeyRegistrationEmailDomainBlacklist: `["@blocked.example.com","*.disposable.example.com"]`,
+	}, nil, nil)
+
+	_, _, err := service.Register(context.Background(), "user@blocked.example.com", "password")
+	require.ErrorIs(t, err, ErrEmailDomainBlocked)
+	require.Equal(t, "EMAIL_DOMAIN_BLOCKED", infraerrors.Reason(err))
+
+	_, _, err = service.Register(context.Background(), "user@sub.disposable.example.com", "password")
+	require.ErrorIs(t, err, ErrEmailDomainBlocked)
+}
+
+func TestAuthService_Register_EmailDomainBlacklistWinsOverWhitelist(t *testing.T) {
+	repo := &userRepoStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:              "true",
+		SettingKeyRegistrationEmailSuffixWhitelist: `["@blocked.example.com"]`,
+		SettingKeyRegistrationEmailDomainBlacklist: `["@blocked.example.com"]`,
+	}, nil, nil)
+
+	_, _, err := service.Register(context.Background(), "user@blocked.example.com", "password")
+	require.ErrorIs(t, err, ErrEmailDomainBlocked)
+}
+
+func TestAuthService_Register_EmailAliasNotAllowed(t *testing.T) {
+	repo := &userRepoStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                      "true",
+		SettingKeyRegistrationEmailAliasRestrictionEnabled: "true",
+	}, nil, nil)
+
+	_, _, err := service.Register(context.Background(), "user+tag@example.com", "password")
+	require.ErrorIs(t, err, ErrEmailAliasNotAllowed)
+	require.Equal(t, "EMAIL_ALIAS_NOT_ALLOWED", infraerrors.Reason(err))
+
+	_, _, err = service.Register(context.Background(), "first.last@gmail.com", "password")
+	require.ErrorIs(t, err, ErrEmailAliasNotAllowed)
+}
+
+func TestAuthService_Register_EmailAliasAllowedWhenDisabled(t *testing.T) {
+	repo := &userRepoStub{nextID: 9}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                      "true",
+		SettingKeyRegistrationEmailAliasRestrictionEnabled: "false",
+	}, nil, nil)
+
+	_, user, err := service.Register(context.Background(), "user+tag@example.com", "password")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, int64(9), user.ID)
+}
+
 func TestAuthService_SendVerifyCode_EmailSuffixNotAllowed(t *testing.T) {
 	repo := &userRepoStub{}
 	service := newAuthService(repo, map[string]string{
@@ -428,6 +484,28 @@ func TestAuthService_SendVerifyCode_EmailSuffixNotAllowed(t *testing.T) {
 	require.Contains(t, appErr.Message, "@example.com")
 	require.Contains(t, appErr.Message, "@company.com")
 	require.Equal(t, "2", appErr.Metadata["allowed_suffix_count"])
+}
+
+func TestAuthService_SendVerifyCode_EmailDomainBlocked(t *testing.T) {
+	repo := &userRepoStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:              "true",
+		SettingKeyRegistrationEmailDomainBlacklist: `["@blocked.example.com"]`,
+	}, nil, nil)
+
+	err := service.SendVerifyCode(context.Background(), "user@blocked.example.com")
+	require.ErrorIs(t, err, ErrEmailDomainBlocked)
+}
+
+func TestAuthService_SendVerifyCode_EmailAliasNotAllowed(t *testing.T) {
+	repo := &userRepoStub{}
+	service := newAuthService(repo, map[string]string{
+		SettingKeyRegistrationEnabled:                      "true",
+		SettingKeyRegistrationEmailAliasRestrictionEnabled: "true",
+	}, nil, nil)
+
+	err := service.SendVerifyCode(context.Background(), "first.last@gmail.com")
+	require.ErrorIs(t, err, ErrEmailAliasNotAllowed)
 }
 
 func TestAuthService_Register_CreateError(t *testing.T) {

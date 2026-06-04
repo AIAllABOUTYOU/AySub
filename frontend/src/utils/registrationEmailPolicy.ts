@@ -80,6 +80,20 @@ function extractRegistrationEmailDomain(email: string): string {
   return raw.slice(atIndex + 1)
 }
 
+export function hasRegistrationEmailAlias(email: string): boolean {
+  const raw = String(email || '').trim().toLowerCase()
+  const atIndex = raw.indexOf('@')
+  if (atIndex <= 0 || atIndex >= raw.length - 1 || raw.indexOf('@', atIndex + 1) !== -1) {
+    return false
+  }
+  const local = raw.slice(0, atIndex)
+  const domain = raw.slice(atIndex + 1)
+  if (local.includes('+')) {
+    return true
+  }
+  return (domain === 'gmail.com' || domain === 'googlemail.com') && local.includes('.')
+}
+
 export function isRegistrationEmailSuffixAllowed(
   email: string,
   whitelist: string[] | null | undefined
