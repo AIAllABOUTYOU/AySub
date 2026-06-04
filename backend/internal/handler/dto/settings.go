@@ -241,6 +241,12 @@ type SystemSettings struct {
 	// Available Channels feature switch (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
+	// Public status page feature switch (anonymous redacted view)
+	PublicStatusEnabled             bool `json:"public_status_enabled"`
+	PublicStatusShowModels          bool `json:"public_status_show_models"`
+	PublicStatusShowChannels        bool `json:"public_status_show_channels"`
+	PublicStatusShowRecentIncidents bool `json:"public_status_show_recent_incidents"`
+
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
 

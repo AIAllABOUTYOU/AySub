@@ -116,18 +116,40 @@ export interface OpsRequestDetail {
 
   platform?: string
   model?: string
+  requested_model?: string
+  upstream_model?: string
+  inbound_endpoint?: string
+  upstream_endpoint?: string
+  request_path?: string
   duration_ms?: number | null
+  first_token_ms?: number | null
   status_code?: number | null
 
   error_id?: number | null
   phase?: string
   severity?: string
+  error_code?: string
+  error_type?: string
   message?: string
 
   user_id?: number | null
+  user_email?: string
   api_key_id?: number | null
+  api_key_name?: string
   account_id?: number | null
+  account_name?: string
+  channel_id?: number | null
+  channel_name?: string
   group_id?: number | null
+  group_name?: string
+
+  total_cost?: number
+  actual_cost?: number
+  account_cost?: number
+
+  ip_address?: string
+  user_agent?: string
+  request_type?: string
 
   stream?: boolean
 }
@@ -145,8 +167,13 @@ export interface OpsRequestDetailsParams {
   user_id?: number
   api_key_id?: number
   account_id?: number
+  channel_id?: number
 
   model?: string
+  endpoint?: string
+  status_code?: number
+  error_type?: string
+  error_code?: string
   request_id?: string
   q?: string
 
@@ -1142,8 +1169,14 @@ export async function listRequestErrorUpstreamErrors(
   return data
 }
 
-export async function listRequestDetails(params: OpsRequestDetailsParams): Promise<OpsRequestDetailsResponse> {
-  const { data } = await apiClient.get<OpsRequestDetailsResponse>('/admin/ops/requests', { params })
+export async function listRequestDetails(
+  params: OpsRequestDetailsParams,
+  options?: OpsRequestOptions
+): Promise<OpsRequestDetailsResponse> {
+  const { data } = await apiClient.get<OpsRequestDetailsResponse>('/admin/ops/requests', {
+    params,
+    signal: options?.signal
+  })
   return data
 }
 

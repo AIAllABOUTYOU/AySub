@@ -588,6 +588,32 @@ func (s *stubAdminService) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 	return nil, service.ErrAPIKeyNotFound
 }
 
+func (s *stubAdminService) AdminUpdateAPIKeyPermissions(ctx context.Context, keyID int64, input service.AdminUpdateAPIKeyPermissionsInput) (*service.APIKey, error) {
+	for i := range s.apiKeys {
+		if s.apiKeys[i].ID == keyID {
+			if input.PermissionMode != nil {
+				s.apiKeys[i].PermissionMode = *input.PermissionMode
+			}
+			if input.AllowedModels != nil {
+				s.apiKeys[i].AllowedModels = service.NormalizeAPIKeyAllowedModels(*input.AllowedModels)
+			}
+			if input.AllowedEndpoints != nil {
+				endpoints, err := service.NormalizeAPIKeyAllowedEndpoints(*input.AllowedEndpoints)
+				if err != nil {
+					return nil, err
+				}
+				s.apiKeys[i].AllowedEndpoints = endpoints
+			}
+			if s.apiKeys[i].PermissionMode == "" {
+				s.apiKeys[i].PermissionMode = service.APIKeyPermissionModeInherit
+			}
+			k := s.apiKeys[i]
+			return &k, nil
+		}
+	}
+	return nil, service.ErrAPIKeyNotFound
+}
+
 func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*service.APIKey, error) {
 	for i := range s.apiKeys {
 		if s.apiKeys[i].ID == keyID {

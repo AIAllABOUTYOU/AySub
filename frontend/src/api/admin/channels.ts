@@ -60,6 +60,52 @@ export interface Channel {
   updated_at: string
 }
 
+export interface ChannelStrategyGroup {
+  id: number
+  name: string
+  platform: string
+  status: string
+  rate_multiplier: number
+  account_count: number
+  active_account_count: number
+  priority_min?: number
+  priority_max?: number
+}
+
+export interface ChannelStrategyRow {
+  channel_id: number
+  channel_name: string
+  description: string
+  status: ChannelStatus
+  billing_model_source: BillingModelSource
+  restrict_models: boolean
+  group_count: number
+  groups: ChannelStrategyGroup[]
+  platforms: string[]
+  model_mapping_count: number
+  model_pricing_count: number
+  pricing_model_count: number
+  billing_modes: string[]
+  model_samples: string[]
+  apply_pricing_to_account_stats: boolean
+  account_stats_pricing_rules_count: number
+  request_count: number
+  success_count: number
+  error_count: number
+  error_rate: number
+  avg_duration_ms: number
+  actual_cost: number
+  account_cost: number
+  last_error_at?: string
+  last_error?: string
+}
+
+export interface ChannelStrategyView {
+  items: ChannelStrategyRow[]
+  start_time: string
+  end_time: string
+}
+
 export interface CreateChannelRequest {
   name: string
   description?: string
@@ -148,6 +194,47 @@ export async function remove(id: number): Promise<void> {
   await apiClient.delete(`/admin/channels/${id}`)
 }
 
+export async function getStrategy(params?: {
+  start_date?: string
+  end_date?: string
+}): Promise<ChannelStrategyView> {
+  const { data } = await apiClient.get<ChannelStrategyView>('/admin/channels/strategy', {
+    params
+  })
+  return data
+}
+
+export async function batchUpdateStatus(channelIds: number[], status: ChannelStatus): Promise<{ updated: number }> {
+  const { data } = await apiClient.post<{ updated: number }>('/admin/channels/batch-status', {
+    channel_ids: channelIds,
+    status
+  })
+  return data
+}
+
+export async function batchReplacePricing(
+  channelIds: number[],
+  modelPricing: ChannelModelPricing[]
+): Promise<{ updated: number }> {
+  const { data } = await apiClient.post<{ updated: number }>('/admin/channels/batch-pricing', {
+    channel_ids: channelIds,
+    model_pricing: modelPricing
+  })
+  return data
+}
+
+export async function copyStrategy(req: {
+  source_channel_id: number
+  target_channel_ids: number[]
+  copy_model_pricing: boolean
+  copy_model_mapping: boolean
+  copy_flags: boolean
+  copy_account_stats_pricing: boolean
+}): Promise<{ updated: number }> {
+  const { data } = await apiClient.post<{ updated: number }>('/admin/channels/copy-strategy', req)
+  return data
+}
+
 export interface ModelDefaultPricing {
   found: boolean
   input_price?: number    // per-token price
@@ -178,5 +265,17 @@ export async function syncPricingModels(platform: string): Promise<SyncPricingMo
   return data
 }
 
-const channelsAPI = { list, getById, create, update, remove, getModelDefaultPricing, syncPricingModels }
+const channelsAPI = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  getStrategy,
+  batchUpdateStatus,
+  batchReplacePricing,
+  copyStrategy,
+  getModelDefaultPricing,
+  syncPricingModels
+}
 export default channelsAPI

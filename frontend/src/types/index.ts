@@ -570,6 +570,10 @@ export interface ApiKey {
   ip_whitelist: string[]
   ip_blacklist: string[]
   last_used_at: string | null
+  permission_mode: ApiKeyPermissionMode
+  allowed_models: string[]
+  allowed_endpoints: ApiKeyPermissionEndpoint[]
+  permission_updated_at: string | null
   quota: number // Quota limit in USD (0 = unlimited)
   quota_used: number // Used quota amount in USD
   expires_at: string | null // Expiration time (null = never expires)
@@ -590,12 +594,30 @@ export interface ApiKey {
   reset_7d_at: string | null
 }
 
+export type ApiKeyPermissionMode = 'inherit' | 'restrict'
+
+export type ApiKeyPermissionEndpoint =
+  | 'messages'
+  | 'chat_completions'
+  | 'responses'
+  | 'embeddings'
+  | 'images'
+  | 'videos'
+  | 'audio_speech'
+  | 'audio_transcriptions'
+  | 'audio_translations'
+  | 'livekit'
+  | 'gemini_native'
+
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
+  permission_mode?: ApiKeyPermissionMode
+  allowed_models?: string[]
+  allowed_endpoints?: ApiKeyPermissionEndpoint[]
   quota?: number // Quota limit in USD (0 = unlimited)
   expires_in_days?: number // Days until expiry (null = never expires)
   rate_limit_5h?: number
@@ -609,6 +631,9 @@ export interface UpdateApiKeyRequest {
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]
+  permission_mode?: ApiKeyPermissionMode
+  allowed_models?: string[]
+  allowed_endpoints?: ApiKeyPermissionEndpoint[]
   quota?: number // Quota limit in USD (null = no change, 0 = unlimited)
   expires_at?: string | null // Expiration time (null = no change)
   reset_quota?: boolean // Reset quota_used to 0

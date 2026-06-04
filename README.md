@@ -31,15 +31,16 @@ AySub is an AI API gateway platform with account scheduling, NewAPI-style commer
 ## Features
 
 - **AySub Scheduling Core** - Account pool scheduling, sticky sessions, circuit breaking, concurrency limits, rate limits, and token-level usage records.
-- **NewAPI-style Operations** - User balance, platform quota, groups, API key permissions, orders, recharge plans, payment instances, payment callbacks, and payment dashboard.
-- **Model and Pricing Management** - Default model pricing, channel model allowlists, model sync candidates, per-channel pricing UI, token/image/request billing modes, and user-facing available-channel pricing display.
-- **Experience Center** - User-facing `/playground` for chat and image generation with the user's own API key; video and audio tabs are reserved and show "coming soon".
+- **NewAPI-style Operations** - User balance, platform quota, groups, backend-enforced API Key permissions, request logs, operational reports, orders, recharge plans, payment instances, payment callbacks, and payment operations dashboard.
+- **Model and Pricing Management** - Default model pricing, channel model allowlists, model sync candidates, per-channel pricing UI, token/image/request billing modes, user-facing `/models` marketplace, price calculator, admin channel strategy view, and batch channel operations.
+- **Experience Center** - User-facing `/playground` for chat, image generation, video task flow, and audio speech/transcription/translation with the user's own API Key. All tabs are governed by API Key permissions and enter logging/billing paths; upstream accounts must explicitly support the requested capability.
 - **Multi-Provider Gateway** - OpenAI-compatible, Claude/Anthropic-compatible, Gemini-compatible, Antigravity, OpenAI OAuth/API Key, Claude OAuth/API Key, Gemini OAuth/API Key, and custom upstream channels.
 - **xAI Official API Key** - xAI platform support with Chat Completions, Responses fallback, Anthropic Messages fallback, model listing, quota attribution, and channel monitoring.
 - **Grok Cookie Reverse Adapter** - Grok Web Cookie accounts support Chat Completions, Responses, Anthropic Messages, search references, thinking streams, multimodal image upload, image generation/edit, video generation, and quota lookup.
 - **Grok Console Models** - Supports `console.x.ai/v1/responses` routing for `grok-4.3-console`, `grok-4.3-low/medium/high`, `grok-4.20-*`, `grok-4.20-multi-agent-*`, and `grok-build-console` models through Chat, Responses, and Messages entries.
 - **Generated Media Cache** - Generated Grok images/videos can be saved under `DATA_DIR/files/images` and `DATA_DIR/files/videos`, then served through `/v1/files/image` and `/v1/files/video`.
-- **Built-in Payment System** - Supports EasyPay, Alipay, WeChat Pay, Stripe, and related self-service recharge flows without a separate payment deployment ([Configuration Guide](docs/PAYMENT.md)).
+- **Built-in Payment System** - Supports EasyPay, Alipay, WeChat Pay, Stripe, self-service recharge, callback observability, refund/order consistency metrics, and related flows without a separate payment deployment ([Configuration Guide](docs/PAYMENT.md)).
+- **Public Status Page** - Optional anonymous `/status` page with sanitized system health, model availability, channel health summary, 24h error rate, latency range, and recent event summaries.
 - **Admin Dashboard** - Web interface for users, accounts, channels, pricing, groups, payment, usage, monitoring, data management, and system settings.
 - **External System Integration** - Embed external systems such as ticketing through iframe entries in the admin dashboard.
 
@@ -48,9 +49,11 @@ AySub is an AI API gateway platform with account scheduling, NewAPI-style commer
 | Area | Current state |
 |------|---------------|
 | AySub core | Main scheduling, account pool, sticky session, billing records, rate limit, and gateway routes are retained. |
-| NewAPI model/pricing | Main path is available: model pricing, channel allowlists, pricing sync, available channels, admin channel pricing, and a user-facing `/models` model marketplace that aggregates available models by platform, channel, group, and pricing. |
-| NewAPI experience center | `/playground` is available for chat and image-generation trials. Video and audio entries are present in the UI and currently show a coming-soon state. |
-| NewAPI business operations | Users, balance, quotas, groups, orders, recharge plans, payment instances, callbacks, and payment dashboard are present. Real merchant configuration still needs production validation. |
+| NewAPI model/pricing | Model pricing, channel allowlists, pricing sync, available channels, admin channel pricing, `/models` marketplace, price calculator, channel strategy visualization, and batch channel operations are available. |
+| NewAPI experience center | `/playground` supports chat, image generation, `/v1/videos` task submission/polling/content download, and OpenAI-compatible `/v1/audio/speech`, `/v1/audio/transcriptions`, and `/v1/audio/translations`. |
+| NewAPI business operations | Users, balance, quotas, groups, backend-enforced API Key model/endpoint permissions, request log center, operational reports, orders, recharge plans, payment instances, callbacks, and payment operations dashboard are present. Real merchant configuration still needs production validation. |
+| Public status | Optional `/status` page and anonymous read-only API expose sanitized health, model, channel, 24h error-rate, latency, and recent event summaries without leaking account secrets or internal stack traces. |
+| Frontend/mobile | NewAPI-style pages follow AySub/Sub2API responsive behavior: dense desktop tables where useful, mobile cards and natural-flow controls on small screens. |
 | Grok2API parity | Chat, Responses, Messages, Images, Videos, quota, model list, LiveKit token, LiveKit RTC proxy, console models, and local media cache are implemented in Go. Media link/upscale, Masonry/ChatKit/Admin WebUI, WARP, and FlareSolverr stacks are not directly imported. |
 | End-to-end validation | Unit tests and frontend type checks have passed for the implemented paths. Real xAI/Grok Cookie/Console/media/LiveKit account validation is still required before production claims. |
 

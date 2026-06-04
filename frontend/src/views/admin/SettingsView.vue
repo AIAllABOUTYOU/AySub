@@ -5241,6 +5241,80 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.publicStatus.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.publicStatus.description') }}
+            </p>
+            <p class="mt-1.5 text-xs">
+              <router-link
+                to="/status"
+                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
+              >
+                {{ t('admin.settings.features.publicStatus.viewLink') }}
+                <span aria-hidden="true">→</span>
+              </router-link>
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.publicStatus.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.publicStatus.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.public_status_enabled" />
+            </div>
+
+            <div
+              v-if="form.public_status_enabled"
+              class="grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 dark:border-dark-700 md:grid-cols-3"
+            >
+              <div class="flex items-start justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.features.publicStatus.showModels') }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.features.publicStatus.showModelsHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.public_status_show_models" />
+              </div>
+
+              <div class="flex items-start justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.features.publicStatus.showChannels') }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.features.publicStatus.showChannelsHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.public_status_show_channels" />
+              </div>
+
+              <div class="flex items-start justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t('admin.settings.features.publicStatus.showRecentIncidents') }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('admin.settings.features.publicStatus.showRecentIncidentsHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.public_status_show_recent_incidents" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.riskControl.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -7188,6 +7262,11 @@ const form = reactive<SettingsForm>({
   channel_monitor_default_interval_seconds: 60,
   // Available Channels feature switch
   available_channels_enabled: false,
+  // Public Status feature switch
+  public_status_enabled: false,
+  public_status_show_models: true,
+  public_status_show_channels: true,
+  public_status_show_recent_incidents: true,
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: false,
 });
@@ -8329,6 +8408,12 @@ async function saveSettings() {
         Number(form.channel_monitor_default_interval_seconds) || 60,
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
+      // Public Status feature switch
+      public_status_enabled: form.public_status_enabled,
+      public_status_show_models: form.public_status_show_models,
+      public_status_show_channels: form.public_status_show_channels,
+      public_status_show_recent_incidents:
+        form.public_status_show_recent_incidents,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
     };

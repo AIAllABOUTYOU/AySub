@@ -240,6 +240,82 @@ export interface UserSpendingRankingParams
   limit?: number
 }
 
+export interface OperationalReportsParams
+  extends Pick<TrendParams, 'start_date' | 'end_date' | 'granularity'> {
+  limit?: number
+}
+
+export interface OperationalRequestTrendPoint {
+  date: string
+  success_count: number
+  error_count: number
+  total_requests: number
+  total_tokens: number
+  actual_cost: number
+  avg_duration_ms: number
+}
+
+export interface OperationalErrorTrendPoint {
+  date: string
+  error_count_total: number
+  business_limited_count: number
+  error_count_sla: number
+  upstream_error_count_excl_429_529: number
+  upstream_429_count: number
+  upstream_529_count: number
+}
+
+export interface ModelCostRankingItem {
+  model: string
+  platform?: string
+  requests: number
+  tokens: number
+  cost: number
+  actual_cost: number
+  account_cost: number
+}
+
+export interface ChannelHealthRankingItem {
+  channel_id: number
+  channel_name: string
+  status: string
+  group_count: number
+  success_count: number
+  error_count: number
+  request_count: number
+  error_rate: number
+  avg_duration_ms: number
+  actual_cost: number
+  account_cost: number
+  last_error_at?: string
+  last_error?: string
+}
+
+export interface APIKeySpendingRankingItem {
+  api_key_id: number
+  key_name: string
+  user_id: number
+  user_email: string
+  actual_cost: number
+  requests: number
+  tokens: number
+}
+
+export interface OperationalReportsResponse {
+  request_trend: OperationalRequestTrendPoint[]
+  error_trend: OperationalErrorTrendPoint[]
+  model_cost_ranking: ModelCostRankingItem[]
+  channel_health_ranking: ChannelHealthRankingItem[]
+  user_spending_ranking: UserSpendingRankingResponse['ranking']
+  api_key_spending_ranking: APIKeySpendingRankingItem[]
+  total_actual_cost: number
+  total_requests: number
+  total_tokens: number
+  start_date: string
+  end_date: string
+  granularity: string
+}
+
 /**
  * Get user usage trend data
  * @param params - Query parameters for filtering
@@ -263,6 +339,21 @@ export async function getUserSpendingRanking(
   const { data } = await apiClient.get<UserSpendingRankingResponse>('/admin/dashboard/users-ranking', {
     params
   })
+  return data
+}
+
+/**
+ * Get unified operational reports for request logs center.
+ * @param params - Query parameters for date range, granularity and ranking limit
+ * @returns Request trend, error trend and business rankings
+ */
+export async function getOperationalReports(
+  params?: OperationalReportsParams
+): Promise<OperationalReportsResponse> {
+  const { data } = await apiClient.get<OperationalReportsResponse>(
+    '/admin/dashboard/operational-reports',
+    { params }
+  )
   return data
 }
 
@@ -332,6 +423,7 @@ export const dashboardAPI = {
   getApiKeyUsageTrend,
   getUserUsageTrend,
   getUserSpendingRanking,
+  getOperationalReports,
   getBatchUsersUsage,
   getBatchApiKeysUsage
 }

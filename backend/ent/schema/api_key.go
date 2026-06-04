@@ -57,6 +57,20 @@ func (APIKey) Fields() []ent.Field {
 		field.JSON("ip_blacklist", []string{}).
 			Optional().
 			Comment("Blocked IPs/CIDRs"),
+		field.String("permission_mode").
+			MaxLen(20).
+			Default("inherit").
+			Comment("API key permission mode: inherit or restrict"),
+		field.JSON("allowed_models", []string{}).
+			Optional().
+			Comment("API key model allow-list. Empty means inherit current group/channel models"),
+		field.JSON("allowed_endpoints", []string{}).
+			Optional().
+			Comment("API key endpoint allow-list. Empty means inherit current group/channel endpoints"),
+		field.Time("permission_updated_at").
+			Optional().
+			Nillable().
+			Comment("Last time API key permissions were explicitly updated"),
 
 		// ========== Quota fields ==========
 		// Quota limit in USD (0 = unlimited)
@@ -144,5 +158,6 @@ func (APIKey) Indexes() []ent.Index {
 		// Index for quota queries
 		index.Fields("quota", "quota_used"),
 		index.Fields("expires_at"),
+		index.Fields("permission_mode"),
 	}
 }

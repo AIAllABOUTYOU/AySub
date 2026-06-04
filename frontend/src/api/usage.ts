@@ -12,6 +12,7 @@ import type {
   TrendDataPoint,
   ModelStat
 } from '@/types'
+import type { OpsRequestDetail, OpsRequestDetailsParams } from '@/api/admin/ops'
 
 // ==================== Dashboard Types ====================
 
@@ -87,6 +88,27 @@ export interface ApiKeyDailyUsageResponse {
   start_date: string
   end_date: string
 }
+
+export type UserRequestLogsParams = Pick<
+  OpsRequestDetailsParams,
+  | 'time_range'
+  | 'start_time'
+  | 'end_time'
+  | 'kind'
+  | 'api_key_id'
+  | 'model'
+  | 'endpoint'
+  | 'status_code'
+  | 'request_id'
+  | 'q'
+  | 'min_duration_ms'
+  | 'max_duration_ms'
+  | 'sort'
+  | 'page'
+  | 'page_size'
+>
+
+export type UserRequestLogsResponse = PaginatedResponse<OpsRequestDetail>
 
 /**
  * List usage logs with optional filters
@@ -219,6 +241,21 @@ export async function getById(id: number): Promise<UsageLog> {
   return data
 }
 
+/**
+ * List current user's unified request logs.
+ * Success rows come from usage logs; failed rows come from ops error logs.
+ */
+export async function requestLogs(
+  params: UserRequestLogsParams,
+  config: { signal?: AbortSignal } = {}
+): Promise<UserRequestLogsResponse> {
+  const { data } = await apiClient.get<UserRequestLogsResponse>('/usage/requests', {
+    ...config,
+    params
+  })
+  return data
+}
+
 // ==================== Dashboard API ====================
 
 /**
@@ -311,6 +348,7 @@ export const usageAPI = {
   getStatsByDateRange,
   getByDateRange,
   getById,
+  requestLogs,
   // Dashboard
   getDashboardStats,
   getDashboardTrend,

@@ -607,6 +607,12 @@ export interface SystemSettings {
   // Available Channels feature switch
   available_channels_enabled: boolean;
 
+  // Public status page feature switch
+  public_status_enabled: boolean;
+  public_status_show_models: boolean;
+  public_status_show_channels: boolean;
+  public_status_show_recent_incidents: boolean;
+
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: boolean;
 
@@ -836,6 +842,12 @@ export interface UpdateSettingsRequest {
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;
+
+  // Public status page feature switch
+  public_status_enabled?: boolean;
+  public_status_show_models?: boolean;
+  public_status_show_channels?: boolean;
+  public_status_show_recent_incidents?: boolean;
 
   // Affiliate (邀请返利) feature switch
   affiliate_enabled?: boolean;

@@ -350,6 +350,7 @@ export default {
     announcements: '公告',
     apiKeys: 'API 密钥',
     usage: '使用记录',
+    requestLogs: '请求日志',
     redeem: '兑换',
     affiliate: '邀请返利',
     affiliateManagement: '邀请返利',
@@ -783,6 +784,33 @@ export default {
     customKeyTooShort: '自定义密钥至少需要16个字符',
     customKeyInvalidChars: '自定义密钥只能包含字母、数字、下划线和连字符',
     customKeyRequired: '请输入自定义密钥',
+    permissions: {
+      column: '权限',
+      title: '模型与端点权限',
+      description: '继承表示使用分组和渠道能力；限制后仅允许下方模型和端点。',
+      inherit: '继承',
+      restrict: '限制',
+      allowedModels: '允许模型',
+      allowedModelsPlaceholder: 'gpt-4o\ngemini-*\nclaude-3-5-sonnet-*',
+      allowedModelsHint: '每行或逗号分隔一个模型，支持末尾 * 前缀匹配。留空表示不允许任何模型。',
+      allowedEndpoints: '允许端点',
+      allowedEndpointsHint: '仅勾选的网关端点可被此密钥调用。',
+      modelsCount: '{count} 个模型',
+      endpointsCount: '{count} 个端点',
+      endpoints: {
+        chat_completions: 'Chat Completions',
+        responses: 'Responses',
+        messages: 'Messages',
+        embeddings: 'Embeddings',
+        images: 'Images',
+        videos: 'Videos',
+        audio_speech: 'Audio Speech',
+        audio_transcriptions: 'Audio Transcriptions',
+        audio_translations: 'Audio Translations',
+        livekit: 'LiveKit',
+        gemini_native: 'Gemini 原生'
+      }
+    },
     ipRestriction: 'IP 限制',
     ipWhitelist: 'IP 白名单',
     ipWhitelistPlaceholder: '192.168.1.100\n10.0.0.0/8',
@@ -942,6 +970,73 @@ export default {
     userAgent: 'User-Agent'
   },
 
+  requestLogs: {
+    title: '请求日志',
+    description: '统一查看成功请求和失败请求，排查 API Key、模型、端点与上游错误',
+    failedToLoad: '加载请求日志失败',
+    empty: '暂无请求日志',
+    requestIdCopied: '请求 ID 已复制',
+    copyRequestId: '复制请求 ID',
+    viewError: '查看错误',
+    kind: {
+      all: '全部',
+      success: '成功',
+      error: '失败'
+    },
+    stats: {
+      total: '请求总数',
+      success: '本页成功',
+      errors: '本页失败',
+      avgDuration: '本页平均耗时',
+      errorRate: '本页失败率'
+    },
+    reports: {
+      title: '运营报表',
+      description: '按当前时间范围汇总请求趋势、错误趋势、模型成本、渠道健康、用户消费和 Key 消费',
+      failedToLoad: '加载运营报表失败',
+      empty: '暂无报表数据',
+      totalRequests: '总请求',
+      totalTokens: '总 Token',
+      totalCost: '总消费',
+      requestTrend: '请求趋势',
+      errorTrend: '错误趋势',
+      businessLimited: '业务限制',
+      modelCostRanking: '模型成本排行',
+      channelHealthRanking: '渠道健康排行',
+      userSpendingRanking: '用户消费排行',
+      keySpendingRanking: 'Key 消费排行',
+      requests: '请求',
+      cost: '消费',
+      errorRate: '错误率'
+    },
+    filters: {
+      kind: '类型',
+      channel: '渠道',
+      platform: '平台',
+      allChannels: '全部渠道',
+      allPlatforms: '全部平台',
+      modelPlaceholder: '模型名',
+      statusCode: '状态码',
+      errorType: '错误类型',
+      errorCode: '错误码',
+      searchPlaceholder: '搜索 request_id / 模型 / 错误 / 用户 / Key / 账号 / 渠道'
+    },
+    columns: {
+      kind: '类型',
+      status: '状态',
+      requestId: '请求 ID',
+      owner: '用户 / Key',
+      routing: '渠道 / 账号 / 分组',
+      model: '模型',
+      endpoint: '端点',
+      timings: '耗时',
+      cost: '费用',
+      error: '错误',
+      client: '客户端',
+      actions: '操作'
+    }
+  },
+
   // Shared keys for channel monitor (admin + user views)
   monitorCommon: {
     status: {
@@ -1056,6 +1151,42 @@ export default {
     }
   },
 
+  // Public Status Page
+  publicStatus: {
+    title: '系统状态',
+    subtitle: '公开服务健康摘要',
+    refresh: '刷新',
+    refreshing: '刷新中...',
+    generatedAt: '更新时间',
+    disabledTitle: '状态页未启用',
+    disabledDescription: '管理员尚未开启公开状态页。',
+    loadFailed: '加载状态页失败',
+    operational: '运行正常',
+    degraded: '服务降级',
+    unknown: '状态未知',
+    last24h: '最近 24 小时',
+    requests: '请求数',
+    errorRate: '错误率',
+    avgLatency: '平均延迟',
+    latencyRange: '延迟区间',
+    models: '可用模型',
+    modelCount: '{count} 个模型',
+    noModels: '暂无可展示模型',
+    channels: '渠道摘要',
+    activeChannels: '可用渠道',
+    disabledChannels: '不可用/异常',
+    noChannels: '暂无可展示渠道',
+    platform: '平台',
+    active: '可用',
+    total: '总数',
+    modelCountShort: '模型',
+    recentEvents: '最近事件',
+    noRecentEvents: '最近 24 小时暂无公开事件',
+    endpoint: '端点',
+    statusCode: '状态码',
+    hidden: '管理员已隐藏此项',
+  },
+
   // Model Marketplace (user-facing)
   modelMarketplace: {
     title: '模型广场',
@@ -1086,6 +1217,29 @@ export default {
       tokenSummary: '输入 {input} / 输出 {output}',
       requestSummary: '{price} / 次',
       imageSummary: '{price} / 次'
+    },
+    calculator: {
+      title: '价格计算器',
+      reset: '重置输入',
+      model: '模型',
+      selectModel: '选择模型',
+      group: '分组',
+      selectGroup: '选择分组',
+      channel: '渠道',
+      selectChannel: '选择渠道',
+      billingMode: '计费模式',
+      inputTokens: '输入 Token',
+      outputTokens: '输出 Token',
+      cacheWriteTokens: '缓存写入 Token',
+      cacheReadTokens: '缓存读取 Token',
+      contextTokens: '上下文 Token',
+      imageCount: '图片张数',
+      requestCount: '请求次数',
+      originalCost: '预估原价',
+      multipliedCost: '倍率后价格 ({multiplier}x)',
+      lowestChannel: '最低渠道价格',
+      highestChannel: '最高渠道价格',
+      noResult: '选择模型和分组后可计算预估费用；未配置定价的模型不会产生结果。'
     }
   },
 
@@ -1108,13 +1262,23 @@ export default {
       baseUrl: '网关地址',
       temperature: '温度',
       imageSize: '图片尺寸',
-      keyHint: '体验请求会直接调用当前 AySub 网关，不会保存额外密钥。视频和音频入口已保留，能力待开放。'
+      videoSeconds: '视频时长',
+      videoSize: '视频尺寸',
+      videoResolution: '视频清晰度',
+      videoPreset: '视频预设',
+      audioMode: '音频模式',
+      audioVoice: '音色',
+      audioFormat: '音频格式',
+      audioLanguage: '识别语言',
+      keyHint: '体验请求会直接调用当前 AySub 网关，使用所选 API 密钥，并受模型与端点权限控制。'
     },
     actions: {
       send: '发送',
       sending: '发送中...',
       generate: '生成',
       generating: '生成中...',
+      processing: '处理中...',
+      download: '下载',
       clear: '清空'
     },
     chat: {
@@ -1126,15 +1290,34 @@ export default {
       placeholder: '描述你想生成的图片...'
     },
     video: {
-      title: '视频体验'
+      title: '视频体验',
+      submit: '生成视频',
+      empty: '提交视频任务后，状态、预览和下载会显示在这里',
+      placeholder: '描述你想生成的视频...',
+      progress: '进度 {value}%',
+      presets: {
+        custom: '自定义',
+        normal: '普通',
+        fun: '趣味',
+        spicy: '强烈'
+      }
     },
     audio: {
-      title: '音频体验'
+      title: '音频体验',
+      submit: '执行音频任务',
+      empty: '语音生成或音频识别结果会显示在这里',
+      speechPlaceholder: '输入要转换为语音的文本...',
+      modes: {
+        speech: '语音',
+        transcription: '转写',
+        translation: '翻译'
+      }
     },
     errors: {
       selectKey: '请先选择 API 密钥',
       selectModel: '请先选择模型',
-      enterPrompt: '请输入内容'
+      enterPrompt: '请输入内容',
+      selectAudioFile: '请先选择音频文件'
     }
   },
 
@@ -1946,6 +2129,10 @@ export default {
       groupChangedSuccess: '分组修改成功',
       groupChangedWithGrant: '分组修改成功，已自动为用户添加「{group}」分组权限',
       groupChangeFailed: '分组修改失败',
+      editKeyPermissions: '编辑密钥权限',
+      keyPermissionsAdminHint: '管理员覆盖配置会直接影响该密钥可调用的模型和端点；继承模式使用用户分组和渠道能力。',
+      keyPermissionsUpdated: '密钥权限已更新',
+      keyPermissionsUpdateFailed: '密钥权限更新失败',
       noUsersYet: '暂无用户',
       createFirstUser: '创建您的第一个用户以开始使用系统',
       userCreated: '用户创建成功',
@@ -2512,6 +2699,53 @@ export default {
         pricing: '定价',
         createdAt: '创建时间',
         actions: '操作'
+      },
+      strategy: {
+        selectVisible: '选择当前页',
+        clearVisible: '取消当前页',
+        clearSelection: '清空选择',
+        selectedCount: '已选 {count} 个',
+        batchEnable: '批量启用',
+        batchDisable: '批量停用',
+        batchPricing: '批量定价',
+        copyStrategy: '复制策略',
+        show: '策略视图',
+        hide: '隐藏策略',
+        title: '渠道策略视图',
+        window: '统计窗口：{start} - {end}',
+        channel: '渠道',
+        groups: '分组与账号',
+        models: '模型与映射',
+        policy: '策略',
+        health: '健康与成本',
+        lastError: '最近错误',
+        groupSummary: '{count} 个分组，{active}/{total} 个账号可用',
+        modelSummary: '{pricing} 条定价，{models} 个定价模型，{mappings} 条映射',
+        notRestricted: '不限制模型',
+        requests: '{count} 次请求',
+        errorRate: '错误率 {rate}',
+        cost: '用户成本 {actual} / 账号成本 {account}',
+        empty: '暂无渠道策略数据',
+        batchPricingTitle: '批量替换模型定价',
+        batchPricingHint: '将替换已选 {count} 个渠道中指定平台的模型定价。',
+        pricingPlatform: '定价平台',
+        batchPricingEmpty: '请至少添加一条定价规则',
+        batchPricingSuccess: '已更新 {count} 个渠道的定价',
+        batchPricingError: '批量定价失败',
+        copyStrategyTitle: '复制渠道策略',
+        sourceChannel: '来源渠道',
+        copyTargets: '将复制到已选 {count} 个渠道',
+        copyModelPricing: '复制模型定价',
+        copyModelMapping: '复制模型映射',
+        copyFlags: '复制策略开关',
+        copyAccountStatsPricing: '复制账号统计定价',
+        sourceRequired: '请选择来源渠道',
+        copyOptionRequired: '至少选择一个复制项',
+        copyStrategySuccess: '已复制策略到 {count} 个渠道',
+        copyStrategyError: '复制策略失败',
+        loadError: '加载渠道策略视图失败',
+        batchStatusSuccess: '已更新 {count} 个渠道状态',
+        batchStatusError: '批量更新渠道状态失败'
       },
       billingMode: {
         token: 'Token',
@@ -5604,6 +5838,19 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        publicStatus: {
+          title: '公开状态页',
+          description: '向未登录访客展示脱敏后的系统健康摘要、模型数量、渠道健康和近期事件。默认关闭。',
+          viewLink: '查看公开状态页',
+          enabled: '启用公开状态页',
+          enabledHint: '关闭后 /status 页面和匿名状态 API 返回 404。',
+          showModels: '展示模型',
+          showModelsHint: '仅展示模型名称和数量，不展示账号或密钥。',
+          showChannels: '展示渠道摘要',
+          showChannelsHint: '仅按平台展示总数、可用数和模型数。',
+          showRecentIncidents: '展示近期事件',
+          showRecentIncidentsHint: '仅展示脱敏错误摘要，不包含请求体或内部堆栈。',
+        },
         riskControl: {
           title: '风控中心',
           description: '启用内容审计菜单和全端点请求审核入口。默认关闭。',
@@ -7306,6 +7553,37 @@ export default {
       dashboardTitle: '支付概览',
       dashboardDesc: '充值订单统计与分析',
       daySuffix: '天',
+      ops: {
+        title: '支付运营验收',
+        window: '最近 {days} 天审计与当前订单状态',
+        productionReadiness: '生产验收指标',
+        callback: {
+          title: '回调与一致性',
+          desc: '支付通知、金额和履约异常',
+          failures: '回调失败',
+          inconsistencies: '订单不一致',
+          fulfillmentFailed: '履约失败',
+          paidNotCompleted: '已支付未完成',
+          stalePending: '超时待支付',
+        },
+        refunds: {
+          title: '退款',
+          desc: '退款申请、处理中和失败状态',
+          requested: '待审核申请',
+          processing: '退款处理中',
+          failed: '退款失败',
+          completed: '已退款',
+        },
+        providers: {
+          title: '支付实例',
+          desc: '服务商启停与退款能力',
+          enabled: '已启用实例',
+          disabled: '已停用实例',
+          unavailable: '不可用实例',
+          refundEnabled: '支持退款实例',
+          userRefundEnabled: '用户可申请退款',
+        },
+      },
       paymentConfigTitle: '支付配置',
       paymentConfigDesc: '管理支付服务商与相关设置',
       plansPageTitle: '订阅套餐管理',

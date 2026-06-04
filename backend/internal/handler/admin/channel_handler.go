@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -139,6 +140,26 @@ type accountStatsPricingRuleResponse struct {
 	GroupIDs   []int64                       `json:"group_ids"`
 	AccountIDs []int64                       `json:"account_ids"`
 	Pricing    []channelModelPricingResponse `json:"pricing"`
+}
+
+type batchChannelStatusRequest struct {
+	ChannelIDs []int64 `json:"channel_ids" binding:"required,min=1"`
+	Status     string  `json:"status" binding:"required,oneof=active disabled"`
+}
+
+type batchChannelPricingRequest struct {
+	ChannelIDs    []int64                      `json:"channel_ids" binding:"required,min=1"`
+	ModelPricing  []channelModelPricingRequest `json:"model_pricing" binding:"required,min=1"`
+	ReplaceReason string                       `json:"replace_reason"`
+}
+
+type copyChannelStrategyRequest struct {
+	SourceChannelID         int64   `json:"source_channel_id" binding:"required,min=1"`
+	TargetChannelIDs        []int64 `json:"target_channel_ids" binding:"required,min=1"`
+	CopyModelPricing        bool    `json:"copy_model_pricing"`
+	CopyModelMapping        bool    `json:"copy_model_mapping"`
+	CopyFlags               bool    `json:"copy_flags"`
+	CopyAccountStatsPricing bool    `json:"copy_account_stats_pricing"`
 }
 
 func channelToResponse(ch *service.Channel) *channelResponse {
@@ -291,6 +312,81 @@ func accountStatsPricingRuleRequestToService(r accountStatsPricingRuleRequest) s
 }
 
 // --- Handlers ---
+
+// GetStrategyView returns a denormalized channel strategy and health view.
+// GET /api/v1/admin/channels/strategy
+func (h *ChannelHandler) GetStrategyView(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	if strings.TrimSpace(c.Query("start_date")) == "" && strings.TrimSpace(c.Query("end_date")) == "" {
+		endTime = time.Now()
+		startTime = endTime.Add(-24 * time.Hour)
+	}
+
+	view, err := h.channelService.GetStrategyView(c.Request.Context(), startTime, endTime)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, view)
+}
+
+// BatchUpdateStatus updates many channels' enabled state in one backend write path.
+// POST /api/v1/admin/channels/batch-status
+func (h *ChannelHandler) BatchUpdateStatus(c *gin.Context) {
+	var req batchChannelStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("VALIDATION_ERROR", err.Error()))
+		return
+	}
+	updated, err := h.channelService.BatchUpdateStatus(c.Request.Context(), req.ChannelIDs, req.Status)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"updated": updated})
+}
+
+// BatchReplacePricing replaces model pricing for many channels in one backend transaction.
+// POST /api/v1/admin/channels/batch-pricing
+func (h *ChannelHandler) BatchReplacePricing(c *gin.Context) {
+	var req batchChannelPricingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("VALIDATION_ERROR", err.Error()))
+		return
+	}
+	pricing := pricingRequestToService(req.ModelPricing)
+	for i := range pricing {
+		if pricing[i].Platform == "" {
+			pricing[i].Platform = service.PlatformAnthropic
+		}
+	}
+	if err := h.channelService.BatchReplaceModelPricing(c.Request.Context(), req.ChannelIDs, pricing); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"updated": len(req.ChannelIDs)})
+}
+
+// CopyStrategy copies channel strategy configuration without copying group bindings.
+// POST /api/v1/admin/channels/copy-strategy
+func (h *ChannelHandler) CopyStrategy(c *gin.Context) {
+	var req copyChannelStrategyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("VALIDATION_ERROR", err.Error()))
+		return
+	}
+	err := h.channelService.CopyStrategy(c.Request.Context(), req.SourceChannelID, req.TargetChannelIDs, service.ChannelStrategyCopyOptions{
+		CopyModelPricing:        req.CopyModelPricing,
+		CopyModelMapping:        req.CopyModelMapping,
+		CopyFlags:               req.CopyFlags,
+		CopyAccountStatsPricing: req.CopyAccountStatsPricing,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"updated": len(req.TargetChannelIDs)})
+}
 
 // List handles listing channels with pagination
 // GET /api/v1/admin/channels

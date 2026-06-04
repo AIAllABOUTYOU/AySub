@@ -531,6 +531,56 @@ func (h *DashboardHandler) GetUserSpendingRanking(c *gin.Context) {
 	response.Success(c, payload)
 }
 
+// GetOperationalReports returns unified request and business operations reports.
+// GET /api/v1/admin/dashboard/operational-reports
+func (h *DashboardHandler) GetOperationalReports(c *gin.Context) {
+	startTime, endTime := parseTimeRange(c)
+	granularity := c.DefaultQuery("granularity", "day")
+	if granularity != "hour" && granularity != "day" {
+		response.BadRequest(c, "Invalid granularity, use day/hour")
+		return
+	}
+	limit := parseRankingLimit(c.DefaultQuery("limit", "10"))
+
+	reports, err := h.dashboardService.GetOperationalReports(c.Request.Context(), startTime, endTime, granularity, limit)
+	if err != nil {
+		response.Error(c, 500, "Failed to get operational reports")
+		return
+	}
+	if reports == nil {
+		response.Success(c, gin.H{
+			"request_trend":            []any{},
+			"error_trend":              []any{},
+			"model_cost_ranking":       []any{},
+			"channel_health_ranking":   []any{},
+			"user_spending_ranking":    []any{},
+			"api_key_spending_ranking": []any{},
+			"total_actual_cost":        0,
+			"total_requests":           0,
+			"total_tokens":             0,
+			"start_date":               startTime.Format("2006-01-02"),
+			"end_date":                 endTime.Add(-24 * time.Hour).Format("2006-01-02"),
+			"granularity":              granularity,
+		})
+		return
+	}
+
+	response.Success(c, gin.H{
+		"request_trend":            reports.RequestTrend,
+		"error_trend":              reports.ErrorTrend,
+		"model_cost_ranking":       reports.ModelCostRanking,
+		"channel_health_ranking":   reports.ChannelHealthRanking,
+		"user_spending_ranking":    reports.UserSpendingRanking,
+		"api_key_spending_ranking": reports.APIKeySpendingRanking,
+		"total_actual_cost":        reports.TotalActualCost,
+		"total_requests":           reports.TotalRequests,
+		"total_tokens":             reports.TotalTokens,
+		"start_date":               startTime.Format("2006-01-02"),
+		"end_date":                 endTime.Add(-24 * time.Hour).Format("2006-01-02"),
+		"granularity":              granularity,
+	})
+}
+
 // GetBatchUsersUsage handles getting usage stats for multiple users
 // POST /api/v1/admin/dashboard/users-usage
 func (h *DashboardHandler) GetBatchUsersUsage(c *gin.Context) {

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -20,14 +22,21 @@ import (
 type UsageHandler struct {
 	usageService  *service.UsageService
 	apiKeyService *service.APIKeyService
+	opsService    *service.OpsService
 }
 
 // NewUsageHandler creates a new UsageHandler
-func NewUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService) *UsageHandler {
+func NewUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService, opsService *service.OpsService) *UsageHandler {
 	return &UsageHandler{
 		usageService:  usageService,
 		apiKeyService: apiKeyService,
+		opsService:    opsService,
 	}
+}
+
+// SetOpsService supports bootstrap wiring where OpsService is constructed after UsageHandler.
+func (h *UsageHandler) SetOpsService(opsService *service.OpsService) {
+	h.opsService = opsService
 }
 
 // List handles listing usage records with pagination
@@ -147,6 +156,175 @@ func (h *UsageHandler) List(c *gin.Context) {
 		out = append(out, *dto.UsageLogFromService(&records[i]))
 	}
 	response.Paginated(c, out, result.Total, page, pageSize)
+}
+
+// RequestLogs lists the current user's success and failure requests through the unified
+// request-log view. Success rows come from usage_logs; failure rows come from ops_error_logs.
+// GET /api/v1/usage/requests
+func (h *UsageHandler) RequestLogs(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Request log service not available")
+		return
+	}
+
+	page, pageSize := response.ParsePagination(c)
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	startTime, endTime, err := parseUserRequestLogTimeRange(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	filter := &service.OpsRequestDetailFilter{
+		Page:      page,
+		PageSize:  pageSize,
+		StartTime: &startTime,
+		EndTime:   &endTime,
+		UserID:    &subject.UserID,
+		Kind:      strings.TrimSpace(c.Query("kind")),
+		Model:     strings.TrimSpace(c.Query("model")),
+		Endpoint:  strings.TrimSpace(c.Query("endpoint")),
+		RequestID: strings.TrimSpace(c.Query("request_id")),
+		Query:     strings.TrimSpace(c.Query("q")),
+		Sort:      strings.TrimSpace(c.Query("sort")),
+	}
+
+	if v := strings.TrimSpace(c.Query("api_key_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid api_key_id")
+			return
+		}
+		if h.apiKeyService != nil {
+			apiKey, err := h.apiKeyService.GetByID(c.Request.Context(), id)
+			if err != nil {
+				response.ErrorFrom(c, err)
+				return
+			}
+			if apiKey.UserID != subject.UserID {
+				response.Forbidden(c, "Not authorized to access this API key's request logs")
+				return
+			}
+		}
+		filter.APIKeyID = &id
+	}
+	if v := strings.TrimSpace(c.Query("status_code")); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			response.BadRequest(c, "Invalid status_code")
+			return
+		}
+		filter.StatusCode = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("min_duration_ms")); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			response.BadRequest(c, "Invalid min_duration_ms")
+			return
+		}
+		filter.MinDurationMs = &parsed
+	}
+	if v := strings.TrimSpace(c.Query("max_duration_ms")); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			response.BadRequest(c, "Invalid max_duration_ms")
+			return
+		}
+		filter.MaxDurationMs = &parsed
+	}
+
+	out, err := h.opsService.ListRequestDetails(c.Request.Context(), filter)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid") {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	for _, item := range out.Items {
+		stripUserRequestLogAdminFields(item)
+	}
+	response.Paginated(c, out.Items, out.Total, out.Page, out.PageSize)
+}
+
+func stripUserRequestLogAdminFields(item *service.OpsRequestDetail) {
+	if item == nil {
+		return
+	}
+	item.UserEmail = ""
+	item.AccountName = ""
+	item.ChannelName = ""
+	item.GroupName = ""
+}
+
+func parseUserRequestLogTimeRange(c *gin.Context) (time.Time, time.Time, error) {
+	parseTS := func(s string) (time.Time, error) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return time.Time{}, nil
+		}
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			return t, nil
+		}
+		return time.Parse(time.RFC3339, s)
+	}
+
+	start, err := parseTS(c.Query("start_time"))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	end, err := parseTS(c.Query("end_time"))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if !start.IsZero() || !end.IsZero() {
+		if end.IsZero() {
+			end = time.Now()
+		}
+		if start.IsZero() {
+			start = end.Add(-24 * time.Hour)
+		}
+		if start.After(end) {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid time range: start_time must be <= end_time")
+		}
+		if end.Sub(start) > 30*24*time.Hour {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid time range: max window is 30 days")
+		}
+		return start, end, nil
+	}
+
+	duration := 24 * time.Hour
+	switch strings.TrimSpace(c.DefaultQuery("time_range", "24h")) {
+	case "5m":
+		duration = 5 * time.Minute
+	case "30m":
+		duration = 30 * time.Minute
+	case "1h":
+		duration = time.Hour
+	case "6h":
+		duration = 6 * time.Hour
+	case "24h":
+		duration = 24 * time.Hour
+	case "7d":
+		duration = 7 * 24 * time.Hour
+	case "30d":
+		duration = 30 * 24 * time.Hour
+	default:
+		duration = 24 * time.Hour
+	}
+	end = time.Now()
+	start = end.Add(-duration)
+	return start, end, nil
 }
 
 // GetByID handles getting a single usage record

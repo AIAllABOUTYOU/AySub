@@ -1,6 +1,263 @@
 <template>
   <AppLayout>
     <TablePageLayout>
+      <template #actions>
+        <div class="space-y-3">
+          <div class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-800 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="loading || channels.length === 0"
+                @click="toggleVisible(!allVisibleSelected)"
+              >
+                {{ allVisibleSelected ? t('admin.channels.strategy.clearVisible') : t('admin.channels.strategy.selectVisible') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="selectedCount === 0"
+                @click="clearSelection"
+              >
+                {{ t('admin.channels.strategy.clearSelection') }}
+              </button>
+              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                {{ t('admin.channels.strategy.selectedCount', { count: selectedCount }) }}
+              </span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-success btn-sm"
+                :disabled="selectedCount === 0 || batchOperating"
+                @click="handleBatchStatus('active')"
+              >
+                {{ t('admin.channels.strategy.batchEnable') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-warning btn-sm"
+                :disabled="selectedCount === 0 || batchOperating"
+                @click="handleBatchStatus('disabled')"
+              >
+                {{ t('admin.channels.strategy.batchDisable') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="selectedCount === 0 || batchOperating"
+                @click="openBatchPricingDialog"
+              >
+                {{ t('admin.channels.strategy.batchPricing') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="selectedCount === 0 || batchOperating"
+                @click="openCopyStrategyDialog"
+              >
+                {{ t('admin.channels.strategy.copyStrategy') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="strategyLoading"
+                @click="toggleStrategyView"
+              >
+                <Icon name="refresh" size="sm" :class="strategyLoading ? 'animate-spin' : ''" />
+                {{ showStrategyView ? t('admin.channels.strategy.hide') : t('admin.channels.strategy.show') }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="showStrategyView"
+            class="rounded-lg border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800"
+          >
+            <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                  {{ t('admin.channels.strategy.title') }}
+                </h3>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.channels.strategy.window', { start: formatDateTime(strategyWindow.start), end: formatDateTime(strategyWindow.end) }) }}
+                </p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="strategyLoading" @click="loadStrategyView">
+                {{ t('common.refresh') }}
+              </button>
+            </div>
+
+            <div v-if="strategyLoading" class="py-8 text-center text-sm text-gray-500">
+              <Icon name="refresh" size="lg" class="inline-block animate-spin" />
+            </div>
+            <div v-else>
+              <div class="space-y-3 md:hidden">
+                <div
+                  v-if="strategyRows.length === 0"
+                  class="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+                >
+                  {{ t('admin.channels.strategy.empty') }}
+                </div>
+                <template v-else>
+                  <article
+                    v-for="row in strategyRows"
+                    :key="row.channel_id"
+                    class="rounded-lg border border-gray-200 p-3 dark:border-dark-700"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="break-words text-sm font-semibold text-gray-900 dark:text-white">
+                          {{ row.channel_name }}
+                        </div>
+                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">#{{ row.channel_id }}</div>
+                      </div>
+                      <span :class="['badge flex-shrink-0 text-xs', row.status === 'active' ? 'badge-success' : 'badge-gray']">
+                        {{ row.status }}
+                      </span>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap gap-1.5">
+                      <span
+                        v-for="group in row.groups.slice(0, 3)"
+                        :key="group.id"
+                        class="max-w-full truncate rounded-md bg-gray-100 px-2 py-1 text-[11px] text-gray-700 dark:bg-dark-700 dark:text-gray-300"
+                      >
+                        {{ group.name }} · {{ group.rate_multiplier }}x
+                      </span>
+                      <span
+                        v-if="row.group_count > 3"
+                        class="rounded-md bg-gray-100 px-2 py-1 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400"
+                      >
+                        +{{ row.group_count - 3 }}
+                      </span>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t('admin.channels.strategy.groupSummary', { count: row.group_count, active: activeAccountCount(row), total: accountCount(row) }) }}
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-1 gap-2">
+                      <div class="rounded-md bg-gray-50 p-3 dark:bg-dark-900">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.strategy.models') }}</div>
+                        <div class="mt-1 text-xs font-medium text-gray-900 dark:text-white">
+                          {{ t('admin.channels.strategy.modelSummary', { pricing: row.model_pricing_count, models: row.pricing_model_count, mappings: row.model_mapping_count }) }}
+                        </div>
+                        <div class="mt-1 line-clamp-2 break-words text-xs text-gray-500 dark:text-gray-400">
+                          {{ row.model_samples.join(', ') || '-' }}
+                        </div>
+                      </div>
+
+                      <div class="rounded-md bg-gray-50 p-3 dark:bg-dark-900">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.strategy.policy') }}</div>
+                        <div class="mt-1 break-words text-xs font-medium text-gray-900 dark:text-white">
+                          {{ row.billing_model_source }}
+                        </div>
+                        <div class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
+                          {{ row.restrict_models ? t('admin.channels.form.restrictModels') : t('admin.channels.strategy.notRestricted') }}
+                          ·
+                          {{ row.billing_modes.join(' / ') || '-' }}
+                        </div>
+                      </div>
+
+                      <div class="rounded-md bg-gray-50 p-3 dark:bg-dark-900">
+                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.strategy.health') }}</div>
+                        <div class="mt-1 text-xs font-medium text-gray-900 dark:text-white">
+                          {{ t('admin.channels.strategy.requests', { count: row.request_count }) }}
+                          ·
+                          {{ t('admin.channels.strategy.errorRate', { rate: formatPercent(row.error_rate) }) }}
+                        </div>
+                        <div class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
+                          {{ t('admin.channels.strategy.cost', { actual: formatCurrency(row.actual_cost), account: formatCurrency(row.account_cost) }) }}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="mt-3 rounded-md border border-gray-100 p-3 dark:border-dark-700">
+                      <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.strategy.lastError') }}</div>
+                      <div class="mt-1 break-words text-xs text-gray-700 dark:text-gray-300">{{ row.last_error || '-' }}</div>
+                      <div v-if="row.last_error_at" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(row.last_error_at) }}</div>
+                    </div>
+                  </article>
+                </template>
+              </div>
+
+              <div class="table-wrapper hidden md:block">
+                <table class="w-full min-w-[1120px] table-fixed border-collapse text-xs">
+                  <thead>
+                    <tr class="border-b border-gray-100 bg-gray-50 text-left font-medium uppercase text-gray-500 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-400">
+                      <th class="w-[180px] px-3 py-2">{{ t('admin.channels.strategy.channel') }}</th>
+                      <th class="w-[220px] px-3 py-2">{{ t('admin.channels.strategy.groups') }}</th>
+                      <th class="w-[210px] px-3 py-2">{{ t('admin.channels.strategy.models') }}</th>
+                      <th class="w-[160px] px-3 py-2">{{ t('admin.channels.strategy.policy') }}</th>
+                      <th class="w-[180px] px-3 py-2">{{ t('admin.channels.strategy.health') }}</th>
+                      <th class="px-3 py-2">{{ t('admin.channels.strategy.lastError') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in strategyRows"
+                      :key="row.channel_id"
+                      class="border-b border-gray-100 align-top dark:border-dark-700"
+                    >
+                      <td class="px-3 py-3">
+                        <div class="font-medium text-gray-900 dark:text-white">{{ row.channel_name }}</div>
+                        <div class="mt-1 text-gray-500">#{{ row.channel_id }} · {{ row.status }}</div>
+                      </td>
+                      <td class="px-3 py-3">
+                        <div class="flex flex-wrap gap-1">
+                          <span
+                            v-for="group in row.groups.slice(0, 4)"
+                            :key="group.id"
+                            class="rounded-md bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-dark-700 dark:text-gray-300"
+                          >
+                            {{ group.name }} · {{ group.rate_multiplier }}x
+                          </span>
+                        </div>
+                        <div class="mt-1 text-gray-500">
+                          {{ t('admin.channels.strategy.groupSummary', { count: row.group_count, active: activeAccountCount(row), total: accountCount(row) }) }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-3">
+                        <div class="text-gray-900 dark:text-white">
+                          {{ t('admin.channels.strategy.modelSummary', { pricing: row.model_pricing_count, models: row.pricing_model_count, mappings: row.model_mapping_count }) }}
+                        </div>
+                        <div class="mt-1 line-clamp-2 text-gray-500">
+                          {{ row.model_samples.join(', ') || '-' }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-3">
+                        <div>{{ row.billing_model_source }}</div>
+                        <div class="mt-1 text-gray-500">
+                          {{ row.restrict_models ? t('admin.channels.form.restrictModels') : t('admin.channels.strategy.notRestricted') }}
+                        </div>
+                        <div class="mt-1 text-gray-500">
+                          {{ row.billing_modes.join(' / ') || '-' }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-3">
+                        <div>{{ t('admin.channels.strategy.requests', { count: row.request_count }) }}</div>
+                        <div class="mt-1">{{ t('admin.channels.strategy.errorRate', { rate: formatPercent(row.error_rate) }) }}</div>
+                        <div class="mt-1 text-gray-500">
+                          {{ t('admin.channels.strategy.cost', { actual: formatCurrency(row.actual_cost), account: formatCurrency(row.account_cost) }) }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-3">
+                        <div class="line-clamp-2 text-gray-700 dark:text-gray-300">{{ row.last_error || '-' }}</div>
+                        <div v-if="row.last_error_at" class="mt-1 text-gray-500">{{ formatDateTime(row.last_error_at) }}</div>
+                      </td>
+                    </tr>
+                    <tr v-if="strategyRows.length === 0">
+                      <td colspan="6" class="px-3 py-8 text-center text-gray-500">{{ t('admin.channels.strategy.empty') }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <template #filters>
         <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <!-- Left: Search + Filters -->
@@ -57,6 +314,25 @@
           default-sort-order="desc"
           @sort="handleSort"
         >
+          <template #header-select>
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :checked="allVisibleSelected"
+              :disabled="channels.length === 0"
+              @change="toggleVisible(($event.target as HTMLInputElement).checked)"
+            />
+          </template>
+
+          <template #cell-select="{ row }">
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :checked="isSelected(row.id)"
+              @change="toggleSelection(row.id)"
+            />
+          </template>
+
           <template #cell-name="{ value }">
             <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
           </template>
@@ -621,6 +897,91 @@
       @confirm="confirmDelete"
       @cancel="showDeleteDialog = false"
     />
+
+    <BaseDialog
+      :show="showBatchPricingDialog"
+      :title="t('admin.channels.strategy.batchPricingTitle')"
+      width="extra-wide"
+      @close="closeBatchPricingDialog"
+    >
+      <form id="channel-batch-pricing-form" class="space-y-4" @submit.prevent="submitBatchPricing">
+        <div class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+          {{ t('admin.channels.strategy.batchPricingHint', { count: selectedCount }) }}
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.channels.strategy.pricingPlatform') }}</label>
+          <Select v-model="batchPricingForm.platform" :options="batchPricingPlatformOptions" />
+        </div>
+        <PricingEntryCard
+          v-for="(entry, idx) in batchPricingForm.entries"
+          :key="idx"
+          :entry="entry"
+          :platform="batchPricingForm.platform"
+          @update="batchPricingForm.entries.splice(idx, 1, $event)"
+          @remove="batchPricingForm.entries.splice(idx, 1)"
+        />
+        <button type="button" class="btn btn-secondary btn-sm" @click="addBatchPricingEntry">
+          + {{ t('common.add') }}
+        </button>
+      </form>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" @click="closeBatchPricingDialog">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" form="channel-batch-pricing-form" class="btn btn-primary" :disabled="batchOperating">
+            {{ batchOperating ? t('common.submitting') : t('admin.channels.strategy.batchPricing') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
+    <BaseDialog
+      :show="showCopyStrategyDialog"
+      :title="t('admin.channels.strategy.copyStrategyTitle')"
+      width="wide"
+      @close="closeCopyStrategyDialog"
+    >
+      <form id="channel-copy-strategy-form" class="space-y-4" @submit.prevent="submitCopyStrategy">
+        <div>
+          <label class="input-label">{{ t('admin.channels.strategy.sourceChannel') }}</label>
+          <Select v-model="copyStrategyForm.source_channel_id" :options="copyStrategySourceOptions" />
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-dark-700 dark:text-gray-300">
+          {{ t('admin.channels.strategy.copyTargets', { count: selectedCount }) }}
+        </div>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-600">
+            <input v-model="copyStrategyForm.copy_model_pricing" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+            {{ t('admin.channels.strategy.copyModelPricing') }}
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-600">
+            <input v-model="copyStrategyForm.copy_model_mapping" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+            {{ t('admin.channels.strategy.copyModelMapping') }}
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-600">
+            <input v-model="copyStrategyForm.copy_flags" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+            {{ t('admin.channels.strategy.copyFlags') }}
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-3 text-sm dark:border-dark-600">
+            <input v-model="copyStrategyForm.copy_account_stats_pricing" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+            {{ t('admin.channels.strategy.copyAccountStatsPricing') }}
+          </label>
+        </div>
+      </form>
+
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" @click="closeCopyStrategyDialog">
+            {{ t('common.cancel') }}
+          </button>
+          <button type="submit" form="channel-copy-strategy-form" class="btn btn-primary" :disabled="batchOperating">
+            {{ batchOperating ? t('common.submitting') : t('admin.channels.strategy.copyStrategy') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
   </AppLayout>
 </template>
 
@@ -630,11 +991,12 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
-import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest, AccountStatsPricingRule } from '@/api/admin/channels'
+import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest, AccountStatsPricingRule, ChannelStrategyRow } from '@/api/admin/channels'
 import type { PricingFormEntry } from '@/components/admin/channel/types'
 import { mTokToPerToken, perTokenToMTok, apiIntervalsToForm, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
+import type { ChannelStatus } from '@/constants/channel'
 import { platformTextClass, platformBadgeLightClass } from '@/utils/platformColors'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -650,6 +1012,7 @@ import Toggle from '@/components/common/Toggle.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { useKeyedDebouncedSearch } from '@/composables/useKeyedDebouncedSearch'
+import { useTableSelection } from '@/composables/useTableSelection'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -690,6 +1053,7 @@ interface PlatformSection {
 
 // ── Table columns ──
 const columns = computed<Column[]>(() => [
+  { key: 'select', label: '', sortable: false, class: 'w-12' },
   { key: 'name', label: t('admin.channels.columns.name', 'Name'), sortable: true },
   { key: 'description', label: t('admin.channels.columns.description', 'Description'), sortable: false },
   { key: 'status', label: t('admin.channels.columns.status', 'Status'), sortable: true },
@@ -731,6 +1095,40 @@ const sortState = reactive({
   sort_order: 'desc' as 'asc' | 'desc'
 })
 
+const {
+  selectedIds,
+  selectedCount,
+  allVisibleSelected,
+  isSelected,
+  toggle: toggleSelection,
+  clear: clearSelection,
+  toggleVisible
+} = useTableSelection<Channel>({
+  rows: channels,
+  getId: (row) => row.id
+})
+
+const showStrategyView = ref(false)
+const strategyLoading = ref(false)
+const strategyRows = ref<ChannelStrategyRow[]>([])
+const strategyWindow = reactive({ start: '', end: '' })
+const batchOperating = ref(false)
+const showBatchPricingDialog = ref(false)
+const showCopyStrategyDialog = ref(false)
+
+const batchPricingForm = reactive({
+  platform: 'anthropic' as GroupPlatform,
+  entries: [] as PricingFormEntry[]
+})
+
+const copyStrategyForm = reactive({
+  source_channel_id: null as number | null,
+  copy_model_pricing: true,
+  copy_model_mapping: true,
+  copy_flags: true,
+  copy_account_stats_pricing: true
+})
+
 // Dialog state
 const showDialog = ref(false)
 const editingChannel = ref<Channel | null>(null)
@@ -761,11 +1159,65 @@ let abortController: AbortController | null = null
 
 // ── Platform config ──
 const platformOrder: GroupPlatform[] = ['anthropic', 'openai', 'xai', 'gemini', 'antigravity']
+function emptyPricingEntry(): PricingFormEntry {
+  return {
+    models: [],
+    billing_mode: 'token',
+    input_price: null,
+    output_price: null,
+    cache_write_price: null,
+    cache_read_price: null,
+    image_output_price: null,
+    per_request_price: null,
+    intervals: []
+  }
+}
+
+const batchPricingPlatformOptions = computed(() =>
+  platformOrder.map(platform => ({
+    value: platform,
+    label: t('admin.groups.platforms.' + platform, platform)
+  }))
+)
+
+const copyStrategySourceOptions = computed(() =>
+  channels.value
+    .filter(channel => !selectedIds.value.includes(channel.id))
+    .map(channel => ({
+      value: channel.id,
+      label: `${channel.name} #${channel.id}`
+    }))
+)
 
 // ── Helpers ──
 function formatDate(value: string): string {
   if (!value) return '-'
   return new Date(value).toLocaleDateString()
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString()
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return '0%'
+  return `${(value * 100).toFixed(2)}%`
+}
+
+function formatCurrency(value: number): string {
+  if (!Number.isFinite(value)) return '$0.000000'
+  return `$${value.toFixed(6)}`
+}
+
+function accountCount(row: ChannelStrategyRow): number {
+  return row.groups.reduce((sum, group) => sum + (group.account_count || 0), 0)
+}
+
+function activeAccountCount(row: ChannelStrategyRow): number {
+  return row.groups.reduce((sum, group) => sum + (group.active_account_count || 0), 0)
 }
 
 // ── Platform section helpers ──
@@ -848,17 +1300,7 @@ function toggleGroupInSection(sectionIdx: number, groupId: number) {
 
 // ── Pricing helpers ──
 function addPricingEntry(sectionIdx: number) {
-  form.platforms[sectionIdx].model_pricing.push({
-    models: [],
-    billing_mode: 'token',
-    input_price: null,
-    output_price: null,
-    cache_write_price: null,
-    cache_read_price: null,
-    image_output_price: null,
-    per_request_price: null,
-    intervals: []
-  })
+  form.platforms[sectionIdx].model_pricing.push(emptyPricingEntry())
 }
 
 const syncingPlatform = ref<string | null>(null)
@@ -944,17 +1386,7 @@ function addAccountStatsRule(sectionIdx: number) {
 }
 
 function addRulePricingEntry(sectionIdx: number, ruleIndex: number) {
-  form.platforms[sectionIdx].account_stats_pricing_rules[ruleIndex].pricing.push({
-    models: [],
-    billing_mode: 'token',
-    input_price: null,
-    output_price: null,
-    cache_write_price: null,
-    cache_read_price: null,
-    image_output_price: null,
-    per_request_price: null,
-    intervals: []
-  })
+  form.platforms[sectionIdx].account_stats_pricing_rules[ruleIndex].pricing.push(emptyPricingEntry())
 }
 
 function removeAccountStatsRule(sectionIdx: number, ruleIndex: number) {
@@ -1273,6 +1705,181 @@ async function loadAllChannelsForConflict() {
   } catch (error) {
     // Fallback to current page data
     allChannelsForConflict.value = channels.value
+  }
+}
+
+async function loadStrategyView() {
+  strategyLoading.value = true
+  try {
+    const view = await adminAPI.channels.getStrategy()
+    strategyRows.value = view.items || []
+    strategyWindow.start = view.start_time
+    strategyWindow.end = view.end_time
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.channels.strategy.loadError')))
+  } finally {
+    strategyLoading.value = false
+  }
+}
+
+async function toggleStrategyView() {
+  showStrategyView.value = !showStrategyView.value
+  if (showStrategyView.value && strategyRows.value.length === 0) {
+    await loadStrategyView()
+  }
+}
+
+function selectedChannelIds(): number[] {
+  return selectedIds.value
+}
+
+async function handleBatchStatus(status: ChannelStatus) {
+  const ids = selectedChannelIds()
+  if (ids.length === 0 || batchOperating.value) return
+  batchOperating.value = true
+  try {
+    const result = await adminAPI.channels.batchUpdateStatus(ids, status)
+    appStore.showSuccess(t('admin.channels.strategy.batchStatusSuccess', { count: result.updated }))
+    clearSelection()
+    await Promise.all([loadChannels(), showStrategyView.value ? loadStrategyView() : Promise.resolve()])
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.channels.strategy.batchStatusError')))
+  } finally {
+    batchOperating.value = false
+  }
+}
+
+function openBatchPricingDialog() {
+  if (selectedCount.value === 0) return
+  batchPricingForm.entries = [emptyPricingEntry()]
+  showBatchPricingDialog.value = true
+}
+
+function closeBatchPricingDialog() {
+  showBatchPricingDialog.value = false
+  batchPricingForm.entries = []
+}
+
+function addBatchPricingEntry() {
+  batchPricingForm.entries.push(emptyPricingEntry())
+}
+
+function pricingFormEntriesToAPI(entries: PricingFormEntry[], platform: string): ChannelModelPricing[] {
+  return entries
+    .filter(entry => entry.models.length > 0)
+    .map(entry => ({
+      platform,
+      models: entry.models,
+      billing_mode: entry.billing_mode,
+      input_price: mTokToPerToken(entry.input_price),
+      output_price: mTokToPerToken(entry.output_price),
+      cache_write_price: mTokToPerToken(entry.cache_write_price),
+      cache_read_price: mTokToPerToken(entry.cache_read_price),
+      image_output_price: mTokToPerToken(entry.image_output_price),
+      per_request_price: entry.per_request_price != null && entry.per_request_price !== '' ? Number(entry.per_request_price) : null,
+      intervals: formIntervalsToAPI(entry.intervals || [])
+    }))
+}
+
+function validatePricingFormEntries(entries: PricingFormEntry[], platform: string): boolean {
+  if (entries.length === 0) {
+    appStore.showError(t('admin.channels.strategy.batchPricingEmpty'))
+    return false
+  }
+
+  const allModels: string[] = []
+  for (const entry of entries) {
+    if (entry.models.length === 0) {
+      appStore.showError(t('admin.channels.emptyModelsInPricing', { platform }))
+      return false
+    }
+    allModels.push(...entry.models)
+    if ((entry.billing_mode === 'per_request' || entry.billing_mode === 'image') &&
+      (entry.per_request_price == null || entry.per_request_price === '') &&
+      (!entry.intervals || entry.intervals.length === 0)) {
+      appStore.showError(t('admin.channels.form.perRequestPriceRequired'))
+      return false
+    }
+    const intervalErr = validateIntervals(entry.intervals || [], entry.billing_mode)
+    if (intervalErr) {
+      appStore.showError(intervalErr)
+      return false
+    }
+  }
+
+  const conflict = findModelConflict(allModels)
+  if (conflict) {
+    appStore.showError(t('admin.channels.modelConflict', { model1: conflict[0], model2: conflict[1] }))
+    return false
+  }
+  return true
+}
+
+async function submitBatchPricing() {
+  const ids = selectedChannelIds()
+  if (ids.length === 0 || batchOperating.value) return
+  const entries = batchPricingForm.entries
+  if (!validatePricingFormEntries(entries, batchPricingForm.platform)) return
+
+  batchOperating.value = true
+  try {
+    const pricing = pricingFormEntriesToAPI(entries, batchPricingForm.platform)
+    const result = await adminAPI.channels.batchReplacePricing(ids, pricing)
+    appStore.showSuccess(t('admin.channels.strategy.batchPricingSuccess', { count: result.updated }))
+    closeBatchPricingDialog()
+    clearSelection()
+    await Promise.all([loadChannels(), showStrategyView.value ? loadStrategyView() : Promise.resolve()])
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.channels.strategy.batchPricingError')))
+  } finally {
+    batchOperating.value = false
+  }
+}
+
+function openCopyStrategyDialog() {
+  if (selectedCount.value === 0) return
+  const firstSource = copyStrategySourceOptions.value[0]?.value
+  copyStrategyForm.source_channel_id = typeof firstSource === 'number' ? firstSource : null
+  showCopyStrategyDialog.value = true
+}
+
+function closeCopyStrategyDialog() {
+  showCopyStrategyDialog.value = false
+}
+
+async function submitCopyStrategy() {
+  const ids = selectedChannelIds()
+  if (ids.length === 0 || batchOperating.value) return
+  if (!copyStrategyForm.source_channel_id) {
+    appStore.showError(t('admin.channels.strategy.sourceRequired'))
+    return
+  }
+  if (!copyStrategyForm.copy_model_pricing &&
+    !copyStrategyForm.copy_model_mapping &&
+    !copyStrategyForm.copy_flags &&
+    !copyStrategyForm.copy_account_stats_pricing) {
+    appStore.showError(t('admin.channels.strategy.copyOptionRequired'))
+    return
+  }
+
+  batchOperating.value = true
+  try {
+    const result = await adminAPI.channels.copyStrategy({
+      source_channel_id: copyStrategyForm.source_channel_id,
+      target_channel_ids: ids,
+      copy_model_pricing: copyStrategyForm.copy_model_pricing,
+      copy_model_mapping: copyStrategyForm.copy_model_mapping,
+      copy_flags: copyStrategyForm.copy_flags,
+      copy_account_stats_pricing: copyStrategyForm.copy_account_stats_pricing
+    })
+    appStore.showSuccess(t('admin.channels.strategy.copyStrategySuccess', { count: result.updated }))
+    closeCopyStrategyDialog()
+    clearSelection()
+    await Promise.all([loadChannels(), showStrategyView.value ? loadStrategyView() : Promise.resolve()])
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.channels.strategy.copyStrategyError')))
+  } finally {
+    batchOperating.value = false
   }
 }
 

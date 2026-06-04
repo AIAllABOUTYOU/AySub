@@ -686,6 +686,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
+    { path: '/request-logs', label: t('nav.requestLogs'), icon: OrderListIcon, hideInSimpleMode: true },
     { path: '/models', label: t('nav.modelMarketplace'), icon: ModelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/playground', label: t('nav.experienceCenter'), icon: PriceTagIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
@@ -785,7 +786,8 @@ const adminNavItems = computed((): NavItem[] => {
         { path: '/admin/orders/plans', label: t('nav.paymentPlans'), icon: CreditCardIcon },
       ],
     },
-    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
+    { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon },
+    { path: '/admin/request-logs', label: t('nav.requestLogs'), icon: OrderListIcon }
   ]
 
   const visible = applyFeatureFlags(baseItems)

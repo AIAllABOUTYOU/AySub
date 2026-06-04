@@ -22,20 +22,43 @@ type OpsRequestDetail struct {
 	Platform string `json:"platform,omitempty"`
 	Model    string `json:"model,omitempty"`
 
-	DurationMs *int `json:"duration_ms,omitempty"`
-	StatusCode *int `json:"status_code,omitempty"`
+	RequestedModel   string `json:"requested_model,omitempty"`
+	UpstreamModel    string `json:"upstream_model,omitempty"`
+	InboundEndpoint  string `json:"inbound_endpoint,omitempty"`
+	UpstreamEndpoint string `json:"upstream_endpoint,omitempty"`
+	RequestPath      string `json:"request_path,omitempty"`
+
+	DurationMs   *int `json:"duration_ms,omitempty"`
+	FirstTokenMs *int `json:"first_token_ms,omitempty"`
+	StatusCode   *int `json:"status_code,omitempty"`
 
 	// When Kind == "error", ErrorID links to /admin/ops/errors/:id.
 	ErrorID *int64 `json:"error_id,omitempty"`
 
-	Phase    string `json:"phase,omitempty"`
-	Severity string `json:"severity,omitempty"`
-	Message  string `json:"message,omitempty"`
+	Phase     string `json:"phase,omitempty"`
+	Severity  string `json:"severity,omitempty"`
+	ErrorCode string `json:"error_code,omitempty"`
+	ErrorType string `json:"error_type,omitempty"`
+	Message   string `json:"message,omitempty"`
 
-	UserID    *int64 `json:"user_id,omitempty"`
-	APIKeyID  *int64 `json:"api_key_id,omitempty"`
-	AccountID *int64 `json:"account_id,omitempty"`
-	GroupID   *int64 `json:"group_id,omitempty"`
+	UserID      *int64 `json:"user_id,omitempty"`
+	UserEmail   string `json:"user_email,omitempty"`
+	APIKeyID    *int64 `json:"api_key_id,omitempty"`
+	APIKeyName  string `json:"api_key_name,omitempty"`
+	AccountID   *int64 `json:"account_id,omitempty"`
+	AccountName string `json:"account_name,omitempty"`
+	ChannelID   *int64 `json:"channel_id,omitempty"`
+	ChannelName string `json:"channel_name,omitempty"`
+	GroupID     *int64 `json:"group_id,omitempty"`
+	GroupName   string `json:"group_name,omitempty"`
+
+	TotalCost   float64 `json:"total_cost,omitempty"`
+	ActualCost  float64 `json:"actual_cost,omitempty"`
+	AccountCost float64 `json:"account_cost,omitempty"`
+
+	IPAddress   string `json:"ip_address,omitempty"`
+	UserAgent   string `json:"user_agent,omitempty"`
+	RequestType string `json:"request_type,omitempty"`
 
 	Stream bool `json:"stream"`
 }
@@ -53,10 +76,15 @@ type OpsRequestDetailFilter struct {
 	UserID    *int64
 	APIKeyID  *int64
 	AccountID *int64
+	ChannelID *int64
 
-	Model     string
-	RequestID string
-	Query     string
+	Model      string
+	Endpoint   string
+	StatusCode *int
+	ErrorType  string
+	ErrorCode  string
+	RequestID  string
+	Query      string
 
 	MinDurationMs *int
 	MaxDurationMs *int

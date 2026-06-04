@@ -134,6 +134,26 @@
             </div>
           </template>
 
+          <template #cell-permissions="{ row }">
+            <div class="min-w-[160px] space-y-1 text-xs">
+              <span
+                :class="[
+                  'inline-flex rounded-full px-2 py-0.5 font-medium',
+                  row.permission_mode === 'restrict'
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    : 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
+                ]"
+              >
+                {{ row.permission_mode === 'restrict' ? t('keys.permissions.restrict') : t('keys.permissions.inherit') }}
+              </span>
+              <div v-if="row.permission_mode === 'restrict'" class="text-gray-500 dark:text-dark-400">
+                {{ t('keys.permissions.modelsCount', { count: row.allowed_models?.length || 0 }) }}
+                ·
+                {{ t('keys.permissions.endpointsCount', { count: row.allowed_endpoints?.length || 0 }) }}
+              </div>
+            </div>
+          </template>
+
           <template #cell-usage="{ row }">
             <div class="text-sm">
               <div class="flex items-center gap-1.5">
@@ -523,6 +543,54 @@
                 :placeholder="t('keys.ipBlacklistPlaceholder')"
               />
               <p class="input-hint">{{ t('keys.ipBlacklistHint') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Key Permission Section -->
+        <div class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label class="input-label mb-0">{{ t('keys.permissions.title') }}</label>
+              <p class="input-hint">{{ t('keys.permissions.description') }}</p>
+            </div>
+            <Select
+              v-model="formData.permission_mode"
+              class="w-full sm:w-36"
+              :options="permissionModeOptions"
+            />
+          </div>
+
+          <div v-if="formData.permission_mode === 'restrict'" class="space-y-4 pt-1">
+            <div>
+              <label class="input-label">{{ t('keys.permissions.allowedModels') }}</label>
+              <textarea
+                v-model="formData.allowed_models"
+                rows="4"
+                class="input font-mono text-sm"
+                :placeholder="t('keys.permissions.allowedModelsPlaceholder')"
+              />
+              <p class="input-hint">{{ t('keys.permissions.allowedModelsHint') }}</p>
+            </div>
+
+            <div>
+              <label class="input-label">{{ t('keys.permissions.allowedEndpoints') }}</label>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <label
+                  v-for="endpoint in permissionEndpointOptions"
+                  :key="endpoint.value"
+                  class="flex min-h-[42px] items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors hover:border-primary-300 dark:border-dark-600 dark:hover:border-primary-700"
+                >
+                  <input
+                    v-model="formData.allowed_endpoints"
+                    type="checkbox"
+                    :value="endpoint.value"
+                    class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span class="text-gray-700 dark:text-gray-200">{{ endpoint.label }}</span>
+                </label>
+              </div>
+              <p class="input-hint">{{ t('keys.permissions.allowedEndpointsHint') }}</p>
             </div>
           </div>
         </div>
@@ -982,7 +1050,7 @@
       <div
         v-if="groupSelectorKeyId !== null && dropdownPosition"
         ref="dropdownRef"
-        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-max min-w-[380px] overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 duration-200 dark:bg-dark-800 dark:ring-white/10"
+        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-[calc(100vw-2rem)] max-w-[380px] overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 duration-200 dark:bg-dark-800 dark:ring-white/10"
         style="pointer-events: auto !important;"
         :style="{
           top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
@@ -1068,7 +1136,15 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
 	import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
-	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform } from '@/types'
+	import type {
+  ApiKey,
+  ApiKeyPermissionEndpoint,
+  ApiKeyPermissionMode,
+  Group,
+  GroupPlatform,
+  PublicSettings,
+  SubscriptionType
+} from '@/types'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
@@ -1103,6 +1179,7 @@ const columns = computed<Column[]>(() => [
   { key: 'name', label: t('common.name'), sortable: true },
   { key: 'key', label: t('keys.apiKey'), sortable: false },
   { key: 'group', label: t('keys.group'), sortable: false },
+  { key: 'permissions', label: t('keys.permissions.column'), sortable: false },
   { key: 'usage', label: t('keys.usage'), sortable: false },
   { key: 'rate_limit', label: t('keys.rateLimitColumn'), sortable: false },
   { key: 'expires_at', label: t('keys.expiresAt'), sortable: true },
@@ -1187,7 +1264,10 @@ const formData = ref({
   rate_limit_7d: null as number | null,
   enable_expiration: false,
   expiration_preset: '30' as '7' | '30' | '90' | 'custom',
-  expiration_date: ''
+  expiration_date: '',
+  permission_mode: 'inherit' as ApiKeyPermissionMode,
+  allowed_models: '',
+  allowed_endpoints: [] as ApiKeyPermissionEndpoint[]
 })
 
 // 自定义Key验证
@@ -1209,6 +1289,25 @@ const customKeyError = computed(() => {
 const statusOptions = computed(() => [
   { value: 'active', label: t('common.active') },
   { value: 'inactive', label: t('common.inactive') }
+])
+
+const permissionModeOptions = computed(() => [
+  { value: 'inherit', label: t('keys.permissions.inherit') },
+  { value: 'restrict', label: t('keys.permissions.restrict') }
+])
+
+const permissionEndpointOptions = computed<{ value: ApiKeyPermissionEndpoint; label: string }[]>(() => [
+  { value: 'chat_completions', label: t('keys.permissions.endpoints.chat_completions') },
+  { value: 'responses', label: t('keys.permissions.endpoints.responses') },
+  { value: 'messages', label: t('keys.permissions.endpoints.messages') },
+  { value: 'embeddings', label: t('keys.permissions.endpoints.embeddings') },
+  { value: 'images', label: t('keys.permissions.endpoints.images') },
+  { value: 'videos', label: t('keys.permissions.endpoints.videos') },
+  { value: 'audio_speech', label: t('keys.permissions.endpoints.audio_speech') },
+  { value: 'audio_transcriptions', label: t('keys.permissions.endpoints.audio_transcriptions') },
+  { value: 'audio_translations', label: t('keys.permissions.endpoints.audio_translations') },
+  { value: 'livekit', label: t('keys.permissions.endpoints.livekit') },
+  { value: 'gemini_native', label: t('keys.permissions.endpoints.gemini_native') }
 ])
 
 // Filter dropdown options
@@ -1364,6 +1463,29 @@ const openUseKeyModal = (key: ApiKey) => {
   showUseKeyModal.value = true
 }
 
+const parseAllowedModels = (text: string): string[] =>
+  text
+    .split(/\r?\n|,/)
+    .map((model) => model.trim())
+    .filter(Boolean)
+
+const buildPermissionPayload = () => {
+  const mode = formData.value.permission_mode
+  if (mode !== 'restrict') {
+    return {
+      permission_mode: 'inherit' as ApiKeyPermissionMode,
+      allowed_models: [],
+      allowed_endpoints: []
+    }
+  }
+
+  return {
+    permission_mode: mode,
+    allowed_models: parseAllowedModels(formData.value.allowed_models),
+    allowed_endpoints: [...formData.value.allowed_endpoints]
+  }
+}
+
 const closeUseKeyModal = () => {
   showUseKeyModal.value = false
   selectedKey.value = null
@@ -1408,7 +1530,10 @@ const editKey = (key: ApiKey) => {
     rate_limit_7d: key.rate_limit_7d || null,
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
-    expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
+    expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : '',
+    permission_mode: key.permission_mode || 'inherit',
+    allowed_models: (key.allowed_models || []).join('\n'),
+    allowed_endpoints: [...(key.allowed_endpoints || [])]
   }
   showEditModal.value = true
 }
@@ -1435,6 +1560,8 @@ const openGroupSelector = (key: ApiKey) => {
     if (buttonEl) {
       const rect = buttonEl.getBoundingClientRect()
       const dropdownEstHeight = 400 // estimated max dropdown height
+      const dropdownWidth = Math.min(380, Math.max(0, window.innerWidth - 32))
+      const left = Math.min(Math.max(16, rect.left), Math.max(16, window.innerWidth - dropdownWidth - 16))
       const spaceBelow = window.innerHeight - rect.bottom
       const spaceAbove = rect.top
 
@@ -1442,13 +1569,13 @@ const openGroupSelector = (key: ApiKey) => {
         // Not enough space below, pop upward
         dropdownPosition.value = {
           bottom: window.innerHeight - rect.top + 4,
-          left: rect.left
+          left
         }
       } else {
         // Default: pop downward
         dropdownPosition.value = {
           top: rect.bottom + 4,
-          left: rect.left
+          left
         }
       }
     }
@@ -1538,6 +1665,7 @@ const handleSubmit = async () => {
     rate_limit_1d: formData.value.rate_limit_1d && formData.value.rate_limit_1d > 0 ? formData.value.rate_limit_1d : 0,
     rate_limit_7d: formData.value.rate_limit_7d && formData.value.rate_limit_7d > 0 ? formData.value.rate_limit_7d : 0,
   } : { rate_limit_5h: 0, rate_limit_1d: 0, rate_limit_7d: 0 }
+  const permissionPayload = buildPermissionPayload()
 
   submitting.value = true
   try {
@@ -1553,6 +1681,7 @@ const handleSubmit = async () => {
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
+        ...permissionPayload
       })
       appStore.showSuccess(t('keys.keyUpdatedSuccess'))
     } else {
@@ -1565,7 +1694,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        permissionPayload
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1625,7 +1755,10 @@ const closeModals = () => {
     rate_limit_7d: null,
     enable_expiration: false,
     expiration_preset: '30',
-    expiration_date: ''
+    expiration_date: '',
+    permission_mode: 'inherit',
+    allowed_models: '',
+    allowed_endpoints: []
   }
 }
 

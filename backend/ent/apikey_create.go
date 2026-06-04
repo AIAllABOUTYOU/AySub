@@ -139,6 +139,46 @@ func (_c *APIKeyCreate) SetIPBlacklist(v []string) *APIKeyCreate {
 	return _c
 }
 
+// SetPermissionMode sets the "permission_mode" field.
+func (_c *APIKeyCreate) SetPermissionMode(v string) *APIKeyCreate {
+	_c.mutation.SetPermissionMode(v)
+	return _c
+}
+
+// SetNillablePermissionMode sets the "permission_mode" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillablePermissionMode(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetPermissionMode(*v)
+	}
+	return _c
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (_c *APIKeyCreate) SetAllowedModels(v []string) *APIKeyCreate {
+	_c.mutation.SetAllowedModels(v)
+	return _c
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (_c *APIKeyCreate) SetAllowedEndpoints(v []string) *APIKeyCreate {
+	_c.mutation.SetAllowedEndpoints(v)
+	return _c
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (_c *APIKeyCreate) SetPermissionUpdatedAt(v time.Time) *APIKeyCreate {
+	_c.mutation.SetPermissionUpdatedAt(v)
+	return _c
+}
+
+// SetNillablePermissionUpdatedAt sets the "permission_updated_at" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillablePermissionUpdatedAt(v *time.Time) *APIKeyCreate {
+	if v != nil {
+		_c.SetPermissionUpdatedAt(*v)
+	}
+	return _c
+}
+
 // SetQuota sets the "quota" field.
 func (_c *APIKeyCreate) SetQuota(v float64) *APIKeyCreate {
 	_c.mutation.SetQuota(v)
@@ -387,6 +427,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.PermissionMode(); !ok {
+		v := apikey.DefaultPermissionMode
+		_c.mutation.SetPermissionMode(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := apikey.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -455,6 +499,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.PermissionMode(); !ok {
+		return &ValidationError{Name: "permission_mode", err: errors.New(`ent: missing required field "APIKey.permission_mode"`)}
+	}
+	if v, ok := _c.mutation.PermissionMode(); ok {
+		if err := apikey.PermissionModeValidator(v); err != nil {
+			return &ValidationError{Name: "permission_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.permission_mode": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
@@ -546,6 +598,22 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IPBlacklist(); ok {
 		_spec.SetField(apikey.FieldIPBlacklist, field.TypeJSON, value)
 		_node.IPBlacklist = value
+	}
+	if value, ok := _c.mutation.PermissionMode(); ok {
+		_spec.SetField(apikey.FieldPermissionMode, field.TypeString, value)
+		_node.PermissionMode = value
+	}
+	if value, ok := _c.mutation.AllowedModels(); ok {
+		_spec.SetField(apikey.FieldAllowedModels, field.TypeJSON, value)
+		_node.AllowedModels = value
+	}
+	if value, ok := _c.mutation.AllowedEndpoints(); ok {
+		_spec.SetField(apikey.FieldAllowedEndpoints, field.TypeJSON, value)
+		_node.AllowedEndpoints = value
+	}
+	if value, ok := _c.mutation.PermissionUpdatedAt(); ok {
+		_spec.SetField(apikey.FieldPermissionUpdatedAt, field.TypeTime, value)
+		_node.PermissionUpdatedAt = &value
 	}
 	if value, ok := _c.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -844,6 +912,72 @@ func (u *APIKeyUpsert) UpdateIPBlacklist() *APIKeyUpsert {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (u *APIKeyUpsert) ClearIPBlacklist() *APIKeyUpsert {
 	u.SetNull(apikey.FieldIPBlacklist)
+	return u
+}
+
+// SetPermissionMode sets the "permission_mode" field.
+func (u *APIKeyUpsert) SetPermissionMode(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldPermissionMode, v)
+	return u
+}
+
+// UpdatePermissionMode sets the "permission_mode" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdatePermissionMode() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldPermissionMode)
+	return u
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (u *APIKeyUpsert) SetAllowedModels(v []string) *APIKeyUpsert {
+	u.Set(apikey.FieldAllowedModels, v)
+	return u
+}
+
+// UpdateAllowedModels sets the "allowed_models" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateAllowedModels() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldAllowedModels)
+	return u
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (u *APIKeyUpsert) ClearAllowedModels() *APIKeyUpsert {
+	u.SetNull(apikey.FieldAllowedModels)
+	return u
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (u *APIKeyUpsert) SetAllowedEndpoints(v []string) *APIKeyUpsert {
+	u.Set(apikey.FieldAllowedEndpoints, v)
+	return u
+}
+
+// UpdateAllowedEndpoints sets the "allowed_endpoints" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateAllowedEndpoints() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldAllowedEndpoints)
+	return u
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (u *APIKeyUpsert) ClearAllowedEndpoints() *APIKeyUpsert {
+	u.SetNull(apikey.FieldAllowedEndpoints)
+	return u
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (u *APIKeyUpsert) SetPermissionUpdatedAt(v time.Time) *APIKeyUpsert {
+	u.Set(apikey.FieldPermissionUpdatedAt, v)
+	return u
+}
+
+// UpdatePermissionUpdatedAt sets the "permission_updated_at" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdatePermissionUpdatedAt() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldPermissionUpdatedAt)
+	return u
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (u *APIKeyUpsert) ClearPermissionUpdatedAt() *APIKeyUpsert {
+	u.SetNull(apikey.FieldPermissionUpdatedAt)
 	return u
 }
 
@@ -1280,6 +1414,83 @@ func (u *APIKeyUpsertOne) UpdateIPBlacklist() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearIPBlacklist() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetPermissionMode sets the "permission_mode" field.
+func (u *APIKeyUpsertOne) SetPermissionMode(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissionMode(v)
+	})
+}
+
+// UpdatePermissionMode sets the "permission_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdatePermissionMode() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissionMode()
+	})
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (u *APIKeyUpsertOne) SetAllowedModels(v []string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAllowedModels(v)
+	})
+}
+
+// UpdateAllowedModels sets the "allowed_models" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateAllowedModels() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAllowedModels()
+	})
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (u *APIKeyUpsertOne) ClearAllowedModels() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearAllowedModels()
+	})
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (u *APIKeyUpsertOne) SetAllowedEndpoints(v []string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAllowedEndpoints(v)
+	})
+}
+
+// UpdateAllowedEndpoints sets the "allowed_endpoints" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateAllowedEndpoints() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAllowedEndpoints()
+	})
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (u *APIKeyUpsertOne) ClearAllowedEndpoints() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearAllowedEndpoints()
+	})
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (u *APIKeyUpsertOne) SetPermissionUpdatedAt(v time.Time) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissionUpdatedAt(v)
+	})
+}
+
+// UpdatePermissionUpdatedAt sets the "permission_updated_at" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdatePermissionUpdatedAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissionUpdatedAt()
+	})
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (u *APIKeyUpsertOne) ClearPermissionUpdatedAt() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearPermissionUpdatedAt()
 	})
 }
 
@@ -1918,6 +2129,83 @@ func (u *APIKeyUpsertBulk) UpdateIPBlacklist() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearIPBlacklist() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearIPBlacklist()
+	})
+}
+
+// SetPermissionMode sets the "permission_mode" field.
+func (u *APIKeyUpsertBulk) SetPermissionMode(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissionMode(v)
+	})
+}
+
+// UpdatePermissionMode sets the "permission_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdatePermissionMode() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissionMode()
+	})
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (u *APIKeyUpsertBulk) SetAllowedModels(v []string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAllowedModels(v)
+	})
+}
+
+// UpdateAllowedModels sets the "allowed_models" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateAllowedModels() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAllowedModels()
+	})
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (u *APIKeyUpsertBulk) ClearAllowedModels() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearAllowedModels()
+	})
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (u *APIKeyUpsertBulk) SetAllowedEndpoints(v []string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetAllowedEndpoints(v)
+	})
+}
+
+// UpdateAllowedEndpoints sets the "allowed_endpoints" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateAllowedEndpoints() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateAllowedEndpoints()
+	})
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (u *APIKeyUpsertBulk) ClearAllowedEndpoints() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearAllowedEndpoints()
+	})
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (u *APIKeyUpsertBulk) SetPermissionUpdatedAt(v time.Time) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissionUpdatedAt(v)
+	})
+}
+
+// UpdatePermissionUpdatedAt sets the "permission_updated_at" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdatePermissionUpdatedAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissionUpdatedAt()
+	})
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (u *APIKeyUpsertBulk) ClearPermissionUpdatedAt() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearPermissionUpdatedAt()
 	})
 }
 

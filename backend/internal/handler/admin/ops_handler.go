@@ -530,6 +530,9 @@ func (h *OpsHandler) ListRequestDetails(c *gin.Context) {
 	filter.Kind = strings.TrimSpace(c.Query("kind"))
 	filter.Platform = strings.TrimSpace(c.Query("platform"))
 	filter.Model = strings.TrimSpace(c.Query("model"))
+	filter.Endpoint = strings.TrimSpace(c.Query("endpoint"))
+	filter.ErrorType = strings.TrimSpace(c.Query("error_type"))
+	filter.ErrorCode = strings.TrimSpace(c.Query("error_code"))
 	filter.RequestID = strings.TrimSpace(c.Query("request_id"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
 	filter.Sort = strings.TrimSpace(c.Query("sort"))
@@ -558,6 +561,14 @@ func (h *OpsHandler) ListRequestDetails(c *gin.Context) {
 		}
 		filter.AccountID = &id
 	}
+	if v := strings.TrimSpace(c.Query("channel_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			response.BadRequest(c, "Invalid channel_id")
+			return
+		}
+		filter.ChannelID = &id
+	}
 	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
 		id, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || id <= 0 {
@@ -565,6 +576,14 @@ func (h *OpsHandler) ListRequestDetails(c *gin.Context) {
 			return
 		}
 		filter.GroupID = &id
+	}
+	if v := strings.TrimSpace(c.Query("status_code")); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			response.BadRequest(c, "Invalid status_code")
+			return
+		}
+		filter.StatusCode = &parsed
 	}
 
 	if v := strings.TrimSpace(c.Query("min_duration_ms")); v != "" {

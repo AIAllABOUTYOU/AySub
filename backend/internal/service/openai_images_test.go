@@ -461,6 +461,9 @@ func TestAccountSupportsOpenAIEndpointCapability(t *testing.T) {
 
 		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityChatCompletions))
 		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityEmbeddings))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioSpeech))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranscribe))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranslate))
 	})
 
 	t.Run("xAI APIKey 使用 OpenAI-compatible 能力判定", func(t *testing.T) {
@@ -494,6 +497,40 @@ func TestAccountSupportsOpenAIEndpointCapability(t *testing.T) {
 
 		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityChatCompletions))
 		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityEmbeddings))
+	})
+
+	t.Run("显式列表声明后支持 OpenAI-compatible 音频", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Credentials: map[string]any{
+				"openai_capabilities": []any{
+					"chat_completions",
+					"embeddings",
+					"audio_speech",
+					"audio_transcriptions",
+					"audio_translations",
+				},
+			},
+		}
+
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioSpeech))
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranscribe))
+		require.True(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranslate))
+	})
+
+	t.Run("OpenAI OAuth 不支持音频即使显式声明", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeOAuth,
+			Credentials: map[string]any{
+				"openai_capabilities": []any{"audio_speech", "audio_transcriptions", "audio_translations"},
+			},
+		}
+
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioSpeech))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranscribe))
+		require.False(t, account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAudioTranslate))
 	})
 
 	t.Run("显式列表只声明 chat 时不支持 embeddings", func(t *testing.T) {

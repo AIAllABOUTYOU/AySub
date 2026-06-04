@@ -100,51 +100,57 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int64
-	created_at         *time.Time
-	updated_at         *time.Time
-	deleted_at         *time.Time
-	key                *string
-	name               *string
-	status             *string
-	last_used_at       *time.Time
-	ip_whitelist       *[]string
-	appendip_whitelist []string
-	ip_blacklist       *[]string
-	appendip_blacklist []string
-	quota              *float64
-	addquota           *float64
-	quota_used         *float64
-	addquota_used      *float64
-	expires_at         *time.Time
-	rate_limit_5h      *float64
-	addrate_limit_5h   *float64
-	rate_limit_1d      *float64
-	addrate_limit_1d   *float64
-	rate_limit_7d      *float64
-	addrate_limit_7d   *float64
-	usage_5h           *float64
-	addusage_5h        *float64
-	usage_1d           *float64
-	addusage_1d        *float64
-	usage_7d           *float64
-	addusage_7d        *float64
-	window_5h_start    *time.Time
-	window_1d_start    *time.Time
-	window_7d_start    *time.Time
-	clearedFields      map[string]struct{}
-	user               *int64
-	cleareduser        bool
-	group              *int64
-	clearedgroup       bool
-	usage_logs         map[int64]struct{}
-	removedusage_logs  map[int64]struct{}
-	clearedusage_logs  bool
-	done               bool
-	oldValue           func(context.Context) (*APIKey, error)
-	predicates         []predicate.APIKey
+	op                      Op
+	typ                     string
+	id                      *int64
+	created_at              *time.Time
+	updated_at              *time.Time
+	deleted_at              *time.Time
+	key                     *string
+	name                    *string
+	status                  *string
+	last_used_at            *time.Time
+	ip_whitelist            *[]string
+	appendip_whitelist      []string
+	ip_blacklist            *[]string
+	appendip_blacklist      []string
+	permission_mode         *string
+	allowed_models          *[]string
+	appendallowed_models    []string
+	allowed_endpoints       *[]string
+	appendallowed_endpoints []string
+	permission_updated_at   *time.Time
+	quota                   *float64
+	addquota                *float64
+	quota_used              *float64
+	addquota_used           *float64
+	expires_at              *time.Time
+	rate_limit_5h           *float64
+	addrate_limit_5h        *float64
+	rate_limit_1d           *float64
+	addrate_limit_1d        *float64
+	rate_limit_7d           *float64
+	addrate_limit_7d        *float64
+	usage_5h                *float64
+	addusage_5h             *float64
+	usage_1d                *float64
+	addusage_1d             *float64
+	usage_7d                *float64
+	addusage_7d             *float64
+	window_5h_start         *time.Time
+	window_1d_start         *time.Time
+	window_7d_start         *time.Time
+	clearedFields           map[string]struct{}
+	user                    *int64
+	cleareduser             bool
+	group                   *int64
+	clearedgroup            bool
+	usage_logs              map[int64]struct{}
+	removedusage_logs       map[int64]struct{}
+	clearedusage_logs       bool
+	done                    bool
+	oldValue                func(context.Context) (*APIKey, error)
+	predicates              []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -736,6 +742,221 @@ func (m *APIKeyMutation) ResetIPBlacklist() {
 	m.ip_blacklist = nil
 	m.appendip_blacklist = nil
 	delete(m.clearedFields, apikey.FieldIPBlacklist)
+}
+
+// SetPermissionMode sets the "permission_mode" field.
+func (m *APIKeyMutation) SetPermissionMode(s string) {
+	m.permission_mode = &s
+}
+
+// PermissionMode returns the value of the "permission_mode" field in the mutation.
+func (m *APIKeyMutation) PermissionMode() (r string, exists bool) {
+	v := m.permission_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPermissionMode returns the old "permission_mode" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldPermissionMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPermissionMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPermissionMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPermissionMode: %w", err)
+	}
+	return oldValue.PermissionMode, nil
+}
+
+// ResetPermissionMode resets all changes to the "permission_mode" field.
+func (m *APIKeyMutation) ResetPermissionMode() {
+	m.permission_mode = nil
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (m *APIKeyMutation) SetAllowedModels(s []string) {
+	m.allowed_models = &s
+	m.appendallowed_models = nil
+}
+
+// AllowedModels returns the value of the "allowed_models" field in the mutation.
+func (m *APIKeyMutation) AllowedModels() (r []string, exists bool) {
+	v := m.allowed_models
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAllowedModels returns the old "allowed_models" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldAllowedModels(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAllowedModels is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAllowedModels requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAllowedModels: %w", err)
+	}
+	return oldValue.AllowedModels, nil
+}
+
+// AppendAllowedModels adds s to the "allowed_models" field.
+func (m *APIKeyMutation) AppendAllowedModels(s []string) {
+	m.appendallowed_models = append(m.appendallowed_models, s...)
+}
+
+// AppendedAllowedModels returns the list of values that were appended to the "allowed_models" field in this mutation.
+func (m *APIKeyMutation) AppendedAllowedModels() ([]string, bool) {
+	if len(m.appendallowed_models) == 0 {
+		return nil, false
+	}
+	return m.appendallowed_models, true
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (m *APIKeyMutation) ClearAllowedModels() {
+	m.allowed_models = nil
+	m.appendallowed_models = nil
+	m.clearedFields[apikey.FieldAllowedModels] = struct{}{}
+}
+
+// AllowedModelsCleared returns if the "allowed_models" field was cleared in this mutation.
+func (m *APIKeyMutation) AllowedModelsCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldAllowedModels]
+	return ok
+}
+
+// ResetAllowedModels resets all changes to the "allowed_models" field.
+func (m *APIKeyMutation) ResetAllowedModels() {
+	m.allowed_models = nil
+	m.appendallowed_models = nil
+	delete(m.clearedFields, apikey.FieldAllowedModels)
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (m *APIKeyMutation) SetAllowedEndpoints(s []string) {
+	m.allowed_endpoints = &s
+	m.appendallowed_endpoints = nil
+}
+
+// AllowedEndpoints returns the value of the "allowed_endpoints" field in the mutation.
+func (m *APIKeyMutation) AllowedEndpoints() (r []string, exists bool) {
+	v := m.allowed_endpoints
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAllowedEndpoints returns the old "allowed_endpoints" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldAllowedEndpoints(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAllowedEndpoints is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAllowedEndpoints requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAllowedEndpoints: %w", err)
+	}
+	return oldValue.AllowedEndpoints, nil
+}
+
+// AppendAllowedEndpoints adds s to the "allowed_endpoints" field.
+func (m *APIKeyMutation) AppendAllowedEndpoints(s []string) {
+	m.appendallowed_endpoints = append(m.appendallowed_endpoints, s...)
+}
+
+// AppendedAllowedEndpoints returns the list of values that were appended to the "allowed_endpoints" field in this mutation.
+func (m *APIKeyMutation) AppendedAllowedEndpoints() ([]string, bool) {
+	if len(m.appendallowed_endpoints) == 0 {
+		return nil, false
+	}
+	return m.appendallowed_endpoints, true
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (m *APIKeyMutation) ClearAllowedEndpoints() {
+	m.allowed_endpoints = nil
+	m.appendallowed_endpoints = nil
+	m.clearedFields[apikey.FieldAllowedEndpoints] = struct{}{}
+}
+
+// AllowedEndpointsCleared returns if the "allowed_endpoints" field was cleared in this mutation.
+func (m *APIKeyMutation) AllowedEndpointsCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldAllowedEndpoints]
+	return ok
+}
+
+// ResetAllowedEndpoints resets all changes to the "allowed_endpoints" field.
+func (m *APIKeyMutation) ResetAllowedEndpoints() {
+	m.allowed_endpoints = nil
+	m.appendallowed_endpoints = nil
+	delete(m.clearedFields, apikey.FieldAllowedEndpoints)
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (m *APIKeyMutation) SetPermissionUpdatedAt(t time.Time) {
+	m.permission_updated_at = &t
+}
+
+// PermissionUpdatedAt returns the value of the "permission_updated_at" field in the mutation.
+func (m *APIKeyMutation) PermissionUpdatedAt() (r time.Time, exists bool) {
+	v := m.permission_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPermissionUpdatedAt returns the old "permission_updated_at" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldPermissionUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPermissionUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPermissionUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPermissionUpdatedAt: %w", err)
+	}
+	return oldValue.PermissionUpdatedAt, nil
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (m *APIKeyMutation) ClearPermissionUpdatedAt() {
+	m.permission_updated_at = nil
+	m.clearedFields[apikey.FieldPermissionUpdatedAt] = struct{}{}
+}
+
+// PermissionUpdatedAtCleared returns if the "permission_updated_at" field was cleared in this mutation.
+func (m *APIKeyMutation) PermissionUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldPermissionUpdatedAt]
+	return ok
+}
+
+// ResetPermissionUpdatedAt resets all changes to the "permission_updated_at" field.
+func (m *APIKeyMutation) ResetPermissionUpdatedAt() {
+	m.permission_updated_at = nil
+	delete(m.clearedFields, apikey.FieldPermissionUpdatedAt)
 }
 
 // SetQuota sets the "quota" field.
@@ -1524,7 +1745,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1557,6 +1778,18 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.ip_blacklist != nil {
 		fields = append(fields, apikey.FieldIPBlacklist)
+	}
+	if m.permission_mode != nil {
+		fields = append(fields, apikey.FieldPermissionMode)
+	}
+	if m.allowed_models != nil {
+		fields = append(fields, apikey.FieldAllowedModels)
+	}
+	if m.allowed_endpoints != nil {
+		fields = append(fields, apikey.FieldAllowedEndpoints)
+	}
+	if m.permission_updated_at != nil {
+		fields = append(fields, apikey.FieldPermissionUpdatedAt)
 	}
 	if m.quota != nil {
 		fields = append(fields, apikey.FieldQuota)
@@ -1624,6 +1857,14 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.IPWhitelist()
 	case apikey.FieldIPBlacklist:
 		return m.IPBlacklist()
+	case apikey.FieldPermissionMode:
+		return m.PermissionMode()
+	case apikey.FieldAllowedModels:
+		return m.AllowedModels()
+	case apikey.FieldAllowedEndpoints:
+		return m.AllowedEndpoints()
+	case apikey.FieldPermissionUpdatedAt:
+		return m.PermissionUpdatedAt()
 	case apikey.FieldQuota:
 		return m.Quota()
 	case apikey.FieldQuotaUsed:
@@ -1679,6 +1920,14 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldIPWhitelist(ctx)
 	case apikey.FieldIPBlacklist:
 		return m.OldIPBlacklist(ctx)
+	case apikey.FieldPermissionMode:
+		return m.OldPermissionMode(ctx)
+	case apikey.FieldAllowedModels:
+		return m.OldAllowedModels(ctx)
+	case apikey.FieldAllowedEndpoints:
+		return m.OldAllowedEndpoints(ctx)
+	case apikey.FieldPermissionUpdatedAt:
+		return m.OldPermissionUpdatedAt(ctx)
 	case apikey.FieldQuota:
 		return m.OldQuota(ctx)
 	case apikey.FieldQuotaUsed:
@@ -1788,6 +2037,34 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIPBlacklist(v)
+		return nil
+	case apikey.FieldPermissionMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPermissionMode(v)
+		return nil
+	case apikey.FieldAllowedModels:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAllowedModels(v)
+		return nil
+	case apikey.FieldAllowedEndpoints:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAllowedEndpoints(v)
+		return nil
+	case apikey.FieldPermissionUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPermissionUpdatedAt(v)
 		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
@@ -2017,6 +2294,15 @@ func (m *APIKeyMutation) ClearedFields() []string {
 	if m.FieldCleared(apikey.FieldIPBlacklist) {
 		fields = append(fields, apikey.FieldIPBlacklist)
 	}
+	if m.FieldCleared(apikey.FieldAllowedModels) {
+		fields = append(fields, apikey.FieldAllowedModels)
+	}
+	if m.FieldCleared(apikey.FieldAllowedEndpoints) {
+		fields = append(fields, apikey.FieldAllowedEndpoints)
+	}
+	if m.FieldCleared(apikey.FieldPermissionUpdatedAt) {
+		fields = append(fields, apikey.FieldPermissionUpdatedAt)
+	}
 	if m.FieldCleared(apikey.FieldExpiresAt) {
 		fields = append(fields, apikey.FieldExpiresAt)
 	}
@@ -2057,6 +2343,15 @@ func (m *APIKeyMutation) ClearField(name string) error {
 		return nil
 	case apikey.FieldIPBlacklist:
 		m.ClearIPBlacklist()
+		return nil
+	case apikey.FieldAllowedModels:
+		m.ClearAllowedModels()
+		return nil
+	case apikey.FieldAllowedEndpoints:
+		m.ClearAllowedEndpoints()
+		return nil
+	case apikey.FieldPermissionUpdatedAt:
+		m.ClearPermissionUpdatedAt()
 		return nil
 	case apikey.FieldExpiresAt:
 		m.ClearExpiresAt()
@@ -2110,6 +2405,18 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldIPBlacklist:
 		m.ResetIPBlacklist()
+		return nil
+	case apikey.FieldPermissionMode:
+		m.ResetPermissionMode()
+		return nil
+	case apikey.FieldAllowedModels:
+		m.ResetAllowedModels()
+		return nil
+	case apikey.FieldAllowedEndpoints:
+		m.ResetAllowedEndpoints()
+		return nil
+	case apikey.FieldPermissionUpdatedAt:
+		m.ResetPermissionUpdatedAt()
 		return nil
 	case apikey.FieldQuota:
 		m.ResetQuota()

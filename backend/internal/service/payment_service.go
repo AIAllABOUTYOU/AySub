@@ -152,6 +152,29 @@ type DashboardStats struct {
 	DailySeries    []DailyStats        `json:"daily_series"`
 	PaymentMethods []PaymentMethodStat `json:"payment_methods"`
 	TopUsers       []TopUserStat       `json:"top_users"`
+	Ops            PaymentOpsStats     `json:"ops"`
+}
+
+type PaymentOpsStats struct {
+	WindowDays int `json:"window_days"`
+
+	CallbackFailures     int `json:"callback_failures"`
+	OrderInconsistencies int `json:"order_inconsistencies"`
+	ProviderUnavailable  int `json:"provider_unavailable"`
+
+	RefundRequested int `json:"refund_requested"`
+	Refunding       int `json:"refunding"`
+	RefundFailed    int `json:"refund_failed"`
+	Refunded        int `json:"refunded"`
+
+	FulfillmentFailed int `json:"fulfillment_failed"`
+	PaidNotCompleted  int `json:"paid_not_completed"`
+	StalePending      int `json:"stale_pending"`
+
+	EnabledProviderInstances           int `json:"enabled_provider_instances"`
+	DisabledProviderInstances          int `json:"disabled_provider_instances"`
+	RefundEnabledProviderInstances     int `json:"refund_enabled_provider_instances"`
+	UserRefundEnabledProviderInstances int `json:"user_refund_enabled_provider_instances"`
 }
 
 type DailyStats struct {

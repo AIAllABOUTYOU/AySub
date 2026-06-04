@@ -30,15 +30,16 @@ AySub 是一个 AI API 聚合网关：提供账号调度核心、NewAPI 风格�
 ## 核心功能
 
 - **AySub 调度内核** - 支持账号池调度、粘性会话、熔断、并发控制、速率限制和 Token 级用量记录主路径。
-- **NewAPI 风格运营体系** - 支持用户余额、平台额度、分组、API Key 权限、订单、充值套餐、支付实例、支付回调和运营支付看板。
-- **模型与定价管理** - 支持默认模型定价、渠道模型白名单、模型同步候选、渠道定价 UI、Token/图片/按次计费模式，以及用户侧可用渠道和价格展示。
-- **体验中心** - 用户侧 `/playground` 支持使用自己的 API Key 进行聊天和画图体验；视频、音频入口保留并显示待开放。
+- **NewAPI 风格运营体系** - 支持用户余额、平台额度、分组、后端强制的 API Key 权限、请求日志中心、运营报表、订单、充值套餐、支付实例、支付回调和运营支付看板。
+- **模型与定价管理** - 支持默认模型定价、渠道模型白名单、模型同步候选、渠道定价 UI、Token/图片/按次计费模式、用户侧 `/models` 模型广场、价格计算器、后台渠道策略视图和批量渠道运维。
+- **体验中心** - 用户侧 `/playground` 支持使用自己的 API Key 进行聊天、画图、视频任务流和音频 speech/transcription/translation 体验；所有 Tab 均受 API Key 权限控制，并进入日志/计费链路，上游账号需明确支持对应能力。
 - **多厂商网关** - 支持 OpenAI 兼容、Claude/Anthropic 兼容、Gemini 兼容、Antigravity、OpenAI OAuth/API Key、Claude OAuth/API Key、Gemini OAuth/API Key 和自定义上游渠道。
 - **xAI 官方 API Key** - 新增 xAI 平台，支持 Chat Completions、Responses fallback、Anthropic Messages fallback、模型列表、端点统计归因和渠道监控。
 - **Grok Cookie 逆向适配器** - Grok Web Cookie 账号支持 Chat Completions、Responses、Anthropic Messages、联网搜索引用、thinking 流、多模态图片上传、图片生成/编辑、视频生成和 quota 查询。
 - **Grok Console 免费模型** - 支持 Cookie 账号经 `console.x.ai/v1/responses` 调用 `grok-4.3-console`、`grok-4.3-low/medium/high`、`grok-4.20-*`、`grok-4.20-multi-agent-*`、`grok-build-console`，并转换到 Chat、Responses、Messages 三类入口。
 - **生成媒体本地缓存** - Grok 生成图片/视频可落盘到 `DATA_DIR/files/images` 与 `DATA_DIR/files/videos`，并通过 `/v1/files/image`、`/v1/files/video` 读取。
-- **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe 等自助充值能力，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）。
+- **内置支付系统** - 支持 EasyPay 易支付、支付宝官方、微信官方、Stripe、自助充值、回调可观测、退款/订单一致性指标等能力，无需独立部署支付服务（[配置指南](docs/PAYMENT_CN.md)）。
+- **公开状态页** - 可选匿名 `/status` 页面，展示脱敏后的系统状态、可用模型、渠道健康摘要、24 小时错误率、延迟区间和近期事件摘要。
 - **管理后台** - Web 界面覆盖用户、账号、渠道、定价、分组、支付、用量、监控、数据管理和系统设置。
 - **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能。
 
@@ -47,9 +48,11 @@ AySub 是一个 AI API 聚合网关：提供账号调度核心、NewAPI 风格�
 | 模块 | 当前状态 |
 |------|----------|
 | AySub 主体 | 调度、账号池、粘性会话、用量计费、限流和网关路由主路径已具备。 |
-| NewAPI 模型/定价 | 已具备主路径：模型定价、渠道白名单、定价同步、可用渠道展示、后台渠道定价，以及用户侧 `/models` 模型广场，可按模型聚合展示平台、渠道、分组和价格。 |
-| NewAPI 体验中心 | 用户侧 `/playground` 已支持聊天和画图体验；视频、音频入口已保留，当前显示待开放。 |
-| NewAPI 商用运营 | 用户、余额、额度、分组、订单、充值套餐、支付实例、回调和支付看板已具备；真实商户配置仍需生产环境验收。 |
+| NewAPI 模型/定价 | 模型定价、渠道白名单、定价同步、可用渠道展示、后台渠道定价、用户侧 `/models` 模型广场、价格计算器、渠道策略可视化和批量渠道运维已具备。 |
+| NewAPI 体验中心 | 用户侧 `/playground` 已支持聊天、画图、`/v1/videos` 任务提交/轮询/内容下载，以及 OpenAI 兼容的 `/v1/audio/speech`、`/v1/audio/transcriptions`、`/v1/audio/translations`。 |
+| NewAPI 商用运营 | 用户、余额、额度、分组、后端强制的 API Key 模型/端点权限、请求日志中心、运营报表、订单、充值套餐、支付实例、回调和支付运营看板已具备；真实商户配置仍需生产环境验收。 |
+| 公开状态页 | 可选 `/status` 页面和匿名只读 API 已具备，展示脱敏健康状态、模型、渠道、24 小时错误率、延迟和近期事件摘要，不暴露账号密钥、内部栈或敏感配置。 |
+| 前端/移动端 | NewAPI 风格页面遵循 AySub/Sub2API 现有响应式方式：桌面端保留高密度表格，小屏使用卡片列表和自然流式控件。 |
 | Grok2API parity | Chat、Responses、Messages、Images、Videos、Usage、模型列表、LiveKit token、LiveKit RTC 代理、Console 免费模型和本地媒体缓存已转 Go。media link/upscale、Masonry/ChatKit/Admin WebUI、WARP/FlareSolverr 防封栈未直接整体并入。 |
 | 端到端验证 | 已完成单元测试和前端类型检查；真实 xAI/Grok Cookie/Console/媒体/LiveKit 账号链路仍需上线前逐项验收。 |
 

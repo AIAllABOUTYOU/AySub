@@ -214,7 +214,27 @@ export interface DashboardStats {
   today_count: number
   total_count: number
   avg_amount: number
+  pending_orders?: number
   daily_series: { date: string; amount: number; count: number }[]
   payment_methods: { type: string; amount: number; count: number }[]
   top_users: { user_id: number; email: string; amount: number }[]
+  ops?: PaymentOpsStats
+}
+
+export interface PaymentOpsStats {
+  window_days: number
+  callback_failures: number
+  order_inconsistencies: number
+  provider_unavailable: number
+  refund_requested: number
+  refunding: number
+  refund_failed: number
+  refunded: number
+  fulfillment_failed: number
+  paid_not_completed: number
+  stale_pending: number
+  enabled_provider_instances: number
+  disabled_provider_instances: number
+  refund_enabled_provider_instances: number
+  user_refund_enabled_provider_instances: number
 }

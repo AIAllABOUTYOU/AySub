@@ -365,6 +365,23 @@ func (s *DashboardService) GetUserSpendingRanking(ctx context.Context, startTime
 	return ranking, nil
 }
 
+func (s *DashboardService) GetOperationalReports(ctx context.Context, startTime, endTime time.Time, granularity string, limit int) (*usagestats.OperationalReportsResponse, error) {
+	if granularity != "hour" && granularity != "day" {
+		granularity = "day"
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	reports, err := s.usageRepo.GetOperationalReports(ctx, startTime, endTime, granularity, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get operational reports: %w", err)
+	}
+	return reports, nil
+}
+
 func (s *DashboardService) GetUserBreakdownStats(ctx context.Context, startTime, endTime time.Time, dim usagestats.UserBreakdownDimension, limit int) ([]usagestats.UserBreakdownItem, error) {
 	stats, err := s.usageRepo.GetUserBreakdownStats(ctx, startTime, endTime, dim, limit)
 	if err != nil {

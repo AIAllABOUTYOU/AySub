@@ -67,6 +67,7 @@ type AdminService interface {
 
 	// API Key management (admin)
 	AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error)
+	AdminUpdateAPIKeyPermissions(ctx context.Context, keyID int64, input AdminUpdateAPIKeyPermissionsInput) (*APIKey, error)
 	AdminResetAPIKeyRateLimitUsage(ctx context.Context, keyID int64) (*APIKey, error)
 
 	// ReplaceUserGroup 替换用户的专属分组：授予新分组权限、迁移 Key、移除旧分组权限
@@ -351,6 +352,12 @@ type AdminUpdateAPIKeyGroupIDResult struct {
 	AutoGrantedGroupAccess bool   // true if a new exclusive group permission was auto-added
 	GrantedGroupID         *int64 // the group ID that was auto-granted
 	GrantedGroupName       string // the group name that was auto-granted
+}
+
+type AdminUpdateAPIKeyPermissionsInput struct {
+	PermissionMode   *string
+	AllowedModels    *[]string
+	AllowedEndpoints *[]string
 }
 
 // ReplaceUserGroupResult 分组替换操作的结果
@@ -2350,6 +2357,58 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 
 	result.APIKey = apiKey
 	return result, nil
+}
+
+func (s *adminServiceImpl) AdminUpdateAPIKeyPermissions(ctx context.Context, keyID int64, input AdminUpdateAPIKeyPermissionsInput) (*APIKey, error) {
+	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, err
+	}
+
+	nextMode := NormalizeAPIKeyPermissionModeNoError(apiKey.PermissionMode)
+	if input.PermissionMode != nil {
+		mode, err := NormalizeAPIKeyPermissionMode(*input.PermissionMode)
+		if err != nil {
+			return nil, err
+		}
+		nextMode = mode
+	}
+	nextModels := apiKey.AllowedModels
+	if input.PermissionMode != nil && nextMode == APIKeyPermissionModeInherit {
+		nextModels = []string{}
+	}
+	if input.AllowedModels != nil {
+		nextModels = NormalizeAPIKeyAllowedModels(*input.AllowedModels)
+	}
+	nextEndpoints := apiKey.AllowedEndpoints
+	if input.PermissionMode != nil && nextMode == APIKeyPermissionModeInherit {
+		nextEndpoints = []string{}
+	}
+	if input.AllowedEndpoints != nil {
+		endpoints, err := NormalizeAPIKeyAllowedEndpoints(*input.AllowedEndpoints)
+		if err != nil {
+			return nil, err
+		}
+		nextEndpoints = endpoints
+	}
+	if nextMode == APIKeyPermissionModeInherit && (len(nextModels) > 0 || len(nextEndpoints) > 0) {
+		nextMode = APIKeyPermissionModeRestrict
+	}
+	if !APIKeyPermissionsChanged(apiKey, nextMode, nextModels, nextEndpoints) {
+		return apiKey, nil
+	}
+
+	apiKey.PermissionMode = nextMode
+	apiKey.AllowedModels = nextModels
+	apiKey.AllowedEndpoints = nextEndpoints
+	apiKey.PermissionUpdatedAt = APIKeyPermissionUpdatedAtNow()
+	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+		return nil, fmt.Errorf("update api key permissions: %w", err)
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
+	}
+	return apiKey, nil
 }
 
 // AdminResetAPIKeyRateLimitUsage resets all API key rate-limit usage windows.

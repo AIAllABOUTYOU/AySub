@@ -154,6 +154,10 @@ type CreateAPIKeyRequest struct {
 	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	// Permission fields. Empty/inherit keeps current group/channel capabilities.
+	PermissionMode   string   `json:"permission_mode"`
+	AllowedModels    []string `json:"allowed_models"`
+	AllowedEndpoints []string `json:"allowed_endpoints"`
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -172,6 +176,10 @@ type UpdateAPIKeyRequest struct {
 	Status      *string  `json:"status"`
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
+	// Permission fields. Nil means no change; empty slice clears that allow-list.
+	PermissionMode   *string   `json:"permission_mode"`
+	AllowedModels    *[]string `json:"allowed_models"`
+	AllowedEndpoints *[]string `json:"allowed_endpoints"`
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -346,6 +354,18 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 			return nil, fmt.Errorf("%w: %v", ErrInvalidIPPattern, invalid)
 		}
 	}
+	permissionMode, err := NormalizeAPIKeyPermissionMode(req.PermissionMode)
+	if err != nil {
+		return nil, err
+	}
+	allowedModels := NormalizeAPIKeyAllowedModels(req.AllowedModels)
+	allowedEndpoints, err := NormalizeAPIKeyAllowedEndpoints(req.AllowedEndpoints)
+	if err != nil {
+		return nil, err
+	}
+	if permissionMode == APIKeyPermissionModeInherit && (len(allowedModels) > 0 || len(allowedEndpoints) > 0) {
+		permissionMode = APIKeyPermissionModeRestrict
+	}
 
 	// 验证分组权限（如果指定了分组）
 	if req.GroupID != nil {
@@ -409,6 +429,12 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		RateLimit5h: req.RateLimit5h,
 		RateLimit1d: req.RateLimit1d,
 		RateLimit7d: req.RateLimit7d,
+	}
+	apiKey.PermissionMode = permissionMode
+	apiKey.AllowedModels = allowedModels
+	apiKey.AllowedEndpoints = allowedEndpoints
+	if permissionMode == APIKeyPermissionModeRestrict || len(allowedModels) > 0 || len(allowedEndpoints) > 0 {
+		apiKey.PermissionUpdatedAt = APIKeyPermissionUpdatedAtNow()
 	}
 
 	// Set expiration time if specified
@@ -600,6 +626,44 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// 更新 IP 限制（空数组会清空设置）
 	apiKey.IPWhitelist = req.IPWhitelist
 	apiKey.IPBlacklist = req.IPBlacklist
+
+	if req.PermissionMode != nil || req.AllowedModels != nil || req.AllowedEndpoints != nil {
+		nextMode := NormalizeAPIKeyPermissionModeNoError(apiKey.PermissionMode)
+		if req.PermissionMode != nil {
+			mode, err := NormalizeAPIKeyPermissionMode(*req.PermissionMode)
+			if err != nil {
+				return nil, err
+			}
+			nextMode = mode
+		}
+		nextModels := apiKey.AllowedModels
+		if req.PermissionMode != nil && nextMode == APIKeyPermissionModeInherit {
+			nextModels = []string{}
+		}
+		if req.AllowedModels != nil {
+			nextModels = NormalizeAPIKeyAllowedModels(*req.AllowedModels)
+		}
+		nextEndpoints := apiKey.AllowedEndpoints
+		if req.PermissionMode != nil && nextMode == APIKeyPermissionModeInherit {
+			nextEndpoints = []string{}
+		}
+		if req.AllowedEndpoints != nil {
+			endpoints, err := NormalizeAPIKeyAllowedEndpoints(*req.AllowedEndpoints)
+			if err != nil {
+				return nil, err
+			}
+			nextEndpoints = endpoints
+		}
+		if nextMode == APIKeyPermissionModeInherit && (len(nextModels) > 0 || len(nextEndpoints) > 0) {
+			nextMode = APIKeyPermissionModeRestrict
+		}
+		if APIKeyPermissionsChanged(apiKey, nextMode, nextModels, nextEndpoints) {
+			apiKey.PermissionMode = nextMode
+			apiKey.AllowedModels = nextModels
+			apiKey.AllowedEndpoints = nextEndpoints
+			apiKey.PermissionUpdatedAt = APIKeyPermissionUpdatedAtNow()
+		}
+	}
 
 	// Update rate limit configuration
 	if req.RateLimit5h != nil {

@@ -71,6 +71,9 @@ type OpenAIEndpointCapability string
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
+	OpenAIEndpointCapabilityAudioSpeech     OpenAIEndpointCapability = "audio_speech"
+	OpenAIEndpointCapabilityAudioTranscribe OpenAIEndpointCapability = "audio_transcriptions"
+	OpenAIEndpointCapabilityAudioTranslate  OpenAIEndpointCapability = "audio_translations"
 	OpenAIEndpointCapabilityVideos          OpenAIEndpointCapability = "videos"
 	OpenAIEndpointCapabilityLiveKit         OpenAIEndpointCapability = "livekit"
 )
@@ -1164,6 +1167,10 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		if a.Type != AccountTypeAPIKey {
 			return false
 		}
+	case OpenAIEndpointCapabilityAudioSpeech, OpenAIEndpointCapabilityAudioTranscribe, OpenAIEndpointCapabilityAudioTranslate:
+		if a.Type != AccountTypeAPIKey {
+			return false
+		}
 	case OpenAIEndpointCapabilityVideos, OpenAIEndpointCapabilityLiveKit:
 		if !a.IsXAICookie() {
 			return false
@@ -1173,10 +1180,22 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	}
 
 	configured, found := a.openAIEndpointCapabilitySet()
+	if isExplicitOpenAIAudioCapability(capability) && !found {
+		return false
+	}
 	if !found {
 		return true
 	}
 	return configured[string(capability)]
+}
+
+func isExplicitOpenAIAudioCapability(capability OpenAIEndpointCapability) bool {
+	switch capability {
+	case OpenAIEndpointCapabilityAudioSpeech, OpenAIEndpointCapabilityAudioTranscribe, OpenAIEndpointCapabilityAudioTranslate:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {

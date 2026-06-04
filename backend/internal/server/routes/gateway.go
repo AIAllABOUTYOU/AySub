@@ -53,6 +53,7 @@ func RegisterGatewayRoutes(
 	gateway.Use(opsErrorLogger)
 	gateway.Use(endpointNorm)
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
+	gateway.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto))
 	gateway.Use(requireGroupAnthropic)
 	{
 		// /v1/messages: auto-route based on group platform
@@ -153,6 +154,51 @@ func RegisterGatewayRoutes(
 			withOpenAICompatiblePlatform(c, platform)
 			h.OpenAIGateway.Images(c)
 		})
+		gateway.POST("/audio/speech", func(c *gin.Context) {
+			platform := openAICompatiblePlatform(c)
+			if platform == "" {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Audio API is not supported for this platform",
+					},
+				})
+				return
+			}
+			withOpenAICompatiblePlatform(c, platform)
+			h.OpenAIGateway.Audio(c)
+		})
+		gateway.POST("/audio/transcriptions", func(c *gin.Context) {
+			platform := openAICompatiblePlatform(c)
+			if platform == "" {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Audio API is not supported for this platform",
+					},
+				})
+				return
+			}
+			withOpenAICompatiblePlatform(c, platform)
+			h.OpenAIGateway.Audio(c)
+		})
+		gateway.POST("/audio/translations", func(c *gin.Context) {
+			platform := openAICompatiblePlatform(c)
+			if platform == "" {
+				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Audio API is not supported for this platform",
+					},
+				})
+				return
+			}
+			withOpenAICompatiblePlatform(c, platform)
+			h.OpenAIGateway.Audio(c)
+		})
 		gateway.POST("/videos", func(c *gin.Context) {
 			platform := openAICompatiblePlatform(c)
 			if platform == "" {
@@ -211,6 +257,7 @@ func RegisterGatewayRoutes(
 	gemini.Use(opsErrorLogger)
 	gemini.Use(endpointNorm)
 	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+	gemini.Use(requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle))
 	gemini.Use(requireGroupGoogle)
 	{
 		gemini.GET("/models", h.Gateway.GeminiV1BetaListModels)
@@ -228,18 +275,20 @@ func RegisterGatewayRoutes(
 		}
 		h.Gateway.Responses(c)
 	}
-	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
-	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
-	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
+	permissionAnthropic := requireAPIKeyGatewayPermission(gatewayPermissionProtocolAuto)
+	permissionGoogle := requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle)
+	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
+	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
+	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
 	codexDirect := r.Group("/backend-api/codex")
-	codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic)
+	codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic)
 	{
 		codexDirect.POST("/responses", responsesHandler)
 		codexDirect.POST("/responses/*subpath", responsesHandler)
 		codexDirect.GET("/responses", h.OpenAIGateway.ResponsesWebSocket)
 	}
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
-	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		if platform := openAICompatiblePlatform(c); platform != "" {
 			withOpenAICompatiblePlatform(c, platform)
 			h.OpenAIGateway.ChatCompletions(c)
@@ -247,7 +296,7 @@ func RegisterGatewayRoutes(
 		}
 		h.Gateway.ChatCompletions(c)
 	})
-	r.POST("/embeddings", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/embeddings", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -262,7 +311,7 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.Embeddings(c)
 	})
-	r.POST("/images/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/images/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -277,7 +326,7 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.Images(c)
 	})
-	r.POST("/images/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/images/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -292,7 +341,52 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.Images(c)
 	})
-	r.POST("/videos", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.POST("/audio/speech", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
+		platform := openAICompatiblePlatform(c)
+		if platform == "" {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Audio API is not supported for this platform",
+				},
+			})
+			return
+		}
+		withOpenAICompatiblePlatform(c, platform)
+		h.OpenAIGateway.Audio(c)
+	})
+	r.POST("/audio/transcriptions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
+		platform := openAICompatiblePlatform(c)
+		if platform == "" {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Audio API is not supported for this platform",
+				},
+			})
+			return
+		}
+		withOpenAICompatiblePlatform(c, platform)
+		h.OpenAIGateway.Audio(c)
+	})
+	r.POST("/audio/translations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
+		platform := openAICompatiblePlatform(c)
+		if platform == "" {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Audio API is not supported for this platform",
+				},
+			})
+			return
+		}
+		withOpenAICompatiblePlatform(c, platform)
+		h.OpenAIGateway.Audio(c)
+	})
+	r.POST("/videos", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -307,11 +401,11 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.Videos(c)
 	})
-	r.GET("/videos/:video_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.VideoJob)
-	r.GET("/videos/:video_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.VideoContent)
-	r.GET("/files/image", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.LocalImageFile)
-	r.GET("/files/video", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.OpenAIGateway.LocalVideoFile)
-	r.POST("/livekit/tokens", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.GET("/videos/:video_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoJob)
+	r.GET("/videos/:video_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoContent)
+	r.GET("/files/image", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.LocalImageFile)
+	r.GET("/files/video", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.LocalVideoFile)
+	r.POST("/livekit/tokens", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -326,7 +420,7 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.LiveKitToken(c)
 	})
-	r.GET("/livekit/rtc", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+	r.GET("/livekit/rtc", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, func(c *gin.Context) {
 		platform := openAICompatiblePlatform(c)
 		if platform == "" {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -343,7 +437,7 @@ func RegisterGatewayRoutes(
 	})
 
 	// Antigravity 模型列表
-	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, h.Gateway.AntigravityModels)
+	r.GET("/antigravity/models", gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.Gateway.AntigravityModels)
 
 	// Antigravity 专用路由（仅使用 antigravity 账户，不混合调度）
 	antigravityV1 := r.Group("/antigravity/v1")
@@ -353,6 +447,7 @@ func RegisterGatewayRoutes(
 	antigravityV1.Use(endpointNorm)
 	antigravityV1.Use(middleware.ForcePlatform(service.PlatformAntigravity))
 	antigravityV1.Use(gin.HandlerFunc(apiKeyAuth))
+	antigravityV1.Use(permissionAnthropic)
 	antigravityV1.Use(requireGroupAnthropic)
 	{
 		antigravityV1.POST("/messages", h.Gateway.Messages)
@@ -368,6 +463,7 @@ func RegisterGatewayRoutes(
 	antigravityV1Beta.Use(endpointNorm)
 	antigravityV1Beta.Use(middleware.ForcePlatform(service.PlatformAntigravity))
 	antigravityV1Beta.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
+	antigravityV1Beta.Use(permissionGoogle)
 	antigravityV1Beta.Use(requireGroupGoogle)
 	{
 		antigravityV1Beta.GET("/models", h.Gateway.GeminiV1BetaListModels)

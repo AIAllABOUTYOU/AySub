@@ -4,13 +4,21 @@
  */
 
 import { apiClient } from '../client'
-import type { ApiKey } from '@/types'
+import type { ApiKey, ApiKeyPermissionEndpoint, ApiKeyPermissionMode } from '@/types'
 
 export interface UpdateApiKeyGroupResult {
   api_key: ApiKey
   auto_granted_group_access: boolean
   granted_group_id?: number
   granted_group_name?: string
+}
+
+export interface UpdateApiKeyAdminRequest {
+  group_id?: number | null
+  reset_rate_limit_usage?: boolean
+  permission_mode?: ApiKeyPermissionMode
+  allowed_models?: string[]
+  allowed_endpoints?: ApiKeyPermissionEndpoint[]
 }
 
 /**
@@ -26,8 +34,14 @@ export async function updateApiKeyGroup(id: number, groupId: number | null): Pro
   return data
 }
 
+export async function updateApiKey(id: number, payload: UpdateApiKeyAdminRequest): Promise<UpdateApiKeyGroupResult> {
+  const { data } = await apiClient.put<UpdateApiKeyGroupResult>(`/admin/api-keys/${id}`, payload)
+  return data
+}
+
 export const apiKeysAPI = {
-  updateApiKeyGroup
+  updateApiKeyGroup,
+  updateApiKey
 }
 
 export default apiKeysAPI

@@ -162,6 +162,80 @@ type UserSpendingRankingResponse struct {
 	TotalTokens     int64                     `json:"total_tokens"`
 }
 
+// OperationalRequestTrendPoint represents success/error request trend for ops reporting.
+type OperationalRequestTrendPoint struct {
+	Date          string  `json:"date"`
+	SuccessCount  int64   `json:"success_count"`
+	ErrorCount    int64   `json:"error_count"`
+	TotalRequests int64   `json:"total_requests"`
+	TotalTokens   int64   `json:"total_tokens"`
+	ActualCost    float64 `json:"actual_cost"`
+	AvgDurationMs float64 `json:"avg_duration_ms"`
+}
+
+// OperationalErrorTrendPoint represents error trend for ops reporting.
+type OperationalErrorTrendPoint struct {
+	Date                      string `json:"date"`
+	ErrorCountTotal           int64  `json:"error_count_total"`
+	BusinessLimitedCount      int64  `json:"business_limited_count"`
+	ErrorCountSLA             int64  `json:"error_count_sla"`
+	UpstreamErrorCountExcl429 int64  `json:"upstream_error_count_excl_429_529"`
+	Upstream429Count          int64  `json:"upstream_429_count"`
+	Upstream529Count          int64  `json:"upstream_529_count"`
+}
+
+// ModelCostRankingItem represents model cost ranking within a time range.
+type ModelCostRankingItem struct {
+	Model       string  `json:"model"`
+	Platform    string  `json:"platform,omitempty"`
+	Requests    int64   `json:"requests"`
+	Tokens      int64   `json:"tokens"`
+	Cost        float64 `json:"cost"`
+	ActualCost  float64 `json:"actual_cost"`
+	AccountCost float64 `json:"account_cost"`
+}
+
+// ChannelHealthRankingItem represents channel health and cost ranking within a time range.
+type ChannelHealthRankingItem struct {
+	ChannelID     int64   `json:"channel_id"`
+	ChannelName   string  `json:"channel_name"`
+	Status        string  `json:"status"`
+	GroupCount    int64   `json:"group_count"`
+	SuccessCount  int64   `json:"success_count"`
+	ErrorCount    int64   `json:"error_count"`
+	RequestCount  int64   `json:"request_count"`
+	ErrorRate     float64 `json:"error_rate"`
+	AvgDurationMs float64 `json:"avg_duration_ms"`
+	ActualCost    float64 `json:"actual_cost"`
+	AccountCost   float64 `json:"account_cost"`
+	LastErrorAt   string  `json:"last_error_at,omitempty"`
+	LastError     string  `json:"last_error,omitempty"`
+}
+
+// APIKeySpendingRankingItem represents API key spending ranking within a time range.
+type APIKeySpendingRankingItem struct {
+	APIKeyID   int64   `json:"api_key_id"`
+	KeyName    string  `json:"key_name"`
+	UserID     int64   `json:"user_id"`
+	UserEmail  string  `json:"user_email"`
+	ActualCost float64 `json:"actual_cost"`
+	Requests   int64   `json:"requests"`
+	Tokens     int64   `json:"tokens"`
+}
+
+// OperationalReportsResponse is the unified admin operations report payload.
+type OperationalReportsResponse struct {
+	RequestTrend          []OperationalRequestTrendPoint `json:"request_trend"`
+	ErrorTrend            []OperationalErrorTrendPoint   `json:"error_trend"`
+	ModelCostRanking      []ModelCostRankingItem         `json:"model_cost_ranking"`
+	ChannelHealthRanking  []ChannelHealthRankingItem     `json:"channel_health_ranking"`
+	UserSpendingRanking   []UserSpendingRankingItem      `json:"user_spending_ranking"`
+	APIKeySpendingRanking []APIKeySpendingRankingItem    `json:"api_key_spending_ranking"`
+	TotalActualCost       float64                        `json:"total_actual_cost"`
+	TotalRequests         int64                          `json:"total_requests"`
+	TotalTokens           int64                          `json:"total_tokens"`
+}
+
 // UserBreakdownItem represents per-user usage breakdown within a dimension (group, model, endpoint).
 type UserBreakdownItem struct {
 	UserID      int64   `json:"user_id"`

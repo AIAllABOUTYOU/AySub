@@ -296,6 +296,11 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
 
+		PublicStatusEnabled:             settings.PublicStatusEnabled,
+		PublicStatusShowModels:          settings.PublicStatusShowModels,
+		PublicStatusShowChannels:        settings.PublicStatusShowChannels,
+		PublicStatusShowRecentIncidents: settings.PublicStatusShowRecentIncidents,
+
 		AffiliateEnabled: settings.AffiliateEnabled,
 	}
 
@@ -637,6 +642,12 @@ type UpdateSettingsRequest struct {
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+
+	// Public status page feature switch (anonymous redacted view)
+	PublicStatusEnabled             *bool `json:"public_status_enabled"`
+	PublicStatusShowModels          *bool `json:"public_status_show_models"`
+	PublicStatusShowChannels        *bool `json:"public_status_show_channels"`
+	PublicStatusShowRecentIncidents *bool `json:"public_status_show_recent_incidents"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -1747,6 +1758,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AvailableChannelsEnabled
 		}(),
+		PublicStatusEnabled: func() bool {
+			if req.PublicStatusEnabled != nil {
+				return *req.PublicStatusEnabled
+			}
+			return previousSettings.PublicStatusEnabled
+		}(),
+		PublicStatusShowModels: func() bool {
+			if req.PublicStatusShowModels != nil {
+				return *req.PublicStatusShowModels
+			}
+			return previousSettings.PublicStatusShowModels
+		}(),
+		PublicStatusShowChannels: func() bool {
+			if req.PublicStatusShowChannels != nil {
+				return *req.PublicStatusShowChannels
+			}
+			return previousSettings.PublicStatusShowChannels
+		}(),
+		PublicStatusShowRecentIncidents: func() bool {
+			if req.PublicStatusShowRecentIncidents != nil {
+				return *req.PublicStatusShowRecentIncidents
+			}
+			return previousSettings.PublicStatusShowRecentIncidents
+		}(),
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -2077,6 +2112,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+
+		PublicStatusEnabled:             updatedSettings.PublicStatusEnabled,
+		PublicStatusShowModels:          updatedSettings.PublicStatusShowModels,
+		PublicStatusShowChannels:        updatedSettings.PublicStatusShowChannels,
+		PublicStatusShowRecentIncidents: updatedSettings.PublicStatusShowRecentIncidents,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
@@ -2554,6 +2594,18 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.AvailableChannelsEnabled != after.AvailableChannelsEnabled {
 		changed = append(changed, "available_channels_enabled")
+	}
+	if before.PublicStatusEnabled != after.PublicStatusEnabled {
+		changed = append(changed, "public_status_enabled")
+	}
+	if before.PublicStatusShowModels != after.PublicStatusShowModels {
+		changed = append(changed, "public_status_show_models")
+	}
+	if before.PublicStatusShowChannels != after.PublicStatusShowChannels {
+		changed = append(changed, "public_status_show_channels")
+	}
+	if before.PublicStatusShowRecentIncidents != after.PublicStatusShowRecentIncidents {
+		changed = append(changed, "public_status_show_recent_incidents")
 	}
 	if before.AffiliateEnabled != after.AffiliateEnabled {
 		changed = append(changed, "affiliate_enabled")

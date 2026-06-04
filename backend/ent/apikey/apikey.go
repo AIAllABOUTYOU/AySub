@@ -37,6 +37,14 @@ const (
 	FieldIPWhitelist = "ip_whitelist"
 	// FieldIPBlacklist holds the string denoting the ip_blacklist field in the database.
 	FieldIPBlacklist = "ip_blacklist"
+	// FieldPermissionMode holds the string denoting the permission_mode field in the database.
+	FieldPermissionMode = "permission_mode"
+	// FieldAllowedModels holds the string denoting the allowed_models field in the database.
+	FieldAllowedModels = "allowed_models"
+	// FieldAllowedEndpoints holds the string denoting the allowed_endpoints field in the database.
+	FieldAllowedEndpoints = "allowed_endpoints"
+	// FieldPermissionUpdatedAt holds the string denoting the permission_updated_at field in the database.
+	FieldPermissionUpdatedAt = "permission_updated_at"
 	// FieldQuota holds the string denoting the quota field in the database.
 	FieldQuota = "quota"
 	// FieldQuotaUsed holds the string denoting the quota_used field in the database.
@@ -106,6 +114,10 @@ var Columns = []string{
 	FieldLastUsedAt,
 	FieldIPWhitelist,
 	FieldIPBlacklist,
+	FieldPermissionMode,
+	FieldAllowedModels,
+	FieldAllowedEndpoints,
+	FieldPermissionUpdatedAt,
 	FieldQuota,
 	FieldQuotaUsed,
 	FieldExpiresAt,
@@ -152,6 +164,10 @@ var (
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultPermissionMode holds the default value on creation for the "permission_mode" field.
+	DefaultPermissionMode string
+	// PermissionModeValidator is a validator for the "permission_mode" field. It is called by the builders before save.
+	PermissionModeValidator func(string) error
 	// DefaultQuota holds the default value on creation for the "quota" field.
 	DefaultQuota float64
 	// DefaultQuotaUsed holds the default value on creation for the "quota_used" field.
@@ -221,6 +237,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastUsedAt orders the results by the last_used_at field.
 func ByLastUsedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastUsedAt, opts...).ToFunc()
+}
+
+// ByPermissionMode orders the results by the permission_mode field.
+func ByPermissionMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPermissionMode, opts...).ToFunc()
+}
+
+// ByPermissionUpdatedAt orders the results by the permission_updated_at field.
+func ByPermissionUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPermissionUpdatedAt, opts...).ToFunc()
 }
 
 // ByQuota orders the results by the quota field.

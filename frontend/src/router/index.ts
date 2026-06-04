@@ -166,6 +166,16 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/status',
+    name: 'PublicStatus',
+    component: () => import('@/views/StatusView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'Status',
+      titleKey: 'publicStatus.title'
+    }
+  },
+  {
     path: '/legal/:documentId',
     name: 'LegalDocument',
     component: () => import('@/views/public/LegalDocumentView.vue'),
@@ -214,6 +224,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Usage Records',
       titleKey: 'usage.title',
       descriptionKey: 'usage.description'
+    }
+  },
+  {
+    path: '/request-logs',
+    name: 'RequestLogs',
+    component: () => import('@/views/user/RequestLogsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Request Logs',
+      titleKey: 'requestLogs.title',
+      descriptionKey: 'requestLogs.description'
     }
   },
   {
@@ -599,6 +621,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/request-logs',
+    name: 'AdminRequestLogs',
+    component: () => import('@/views/admin/RequestLogsView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Request Logs',
+      titleKey: 'requestLogs.title',
+      descriptionKey: 'requestLogs.description'
+    }
+  },
+  {
     path: '/admin/affiliates',
     redirect: '/admin/affiliates/invites'
   },
@@ -714,7 +748,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/status', '/setup', '/payment/result', '/payment/airwallex', '/legal']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',

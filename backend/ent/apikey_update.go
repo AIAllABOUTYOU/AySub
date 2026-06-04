@@ -190,6 +190,76 @@ func (_u *APIKeyUpdate) ClearIPBlacklist() *APIKeyUpdate {
 	return _u
 }
 
+// SetPermissionMode sets the "permission_mode" field.
+func (_u *APIKeyUpdate) SetPermissionMode(v string) *APIKeyUpdate {
+	_u.mutation.SetPermissionMode(v)
+	return _u
+}
+
+// SetNillablePermissionMode sets the "permission_mode" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillablePermissionMode(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetPermissionMode(*v)
+	}
+	return _u
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (_u *APIKeyUpdate) SetAllowedModels(v []string) *APIKeyUpdate {
+	_u.mutation.SetAllowedModels(v)
+	return _u
+}
+
+// AppendAllowedModels appends value to the "allowed_models" field.
+func (_u *APIKeyUpdate) AppendAllowedModels(v []string) *APIKeyUpdate {
+	_u.mutation.AppendAllowedModels(v)
+	return _u
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (_u *APIKeyUpdate) ClearAllowedModels() *APIKeyUpdate {
+	_u.mutation.ClearAllowedModels()
+	return _u
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (_u *APIKeyUpdate) SetAllowedEndpoints(v []string) *APIKeyUpdate {
+	_u.mutation.SetAllowedEndpoints(v)
+	return _u
+}
+
+// AppendAllowedEndpoints appends value to the "allowed_endpoints" field.
+func (_u *APIKeyUpdate) AppendAllowedEndpoints(v []string) *APIKeyUpdate {
+	_u.mutation.AppendAllowedEndpoints(v)
+	return _u
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (_u *APIKeyUpdate) ClearAllowedEndpoints() *APIKeyUpdate {
+	_u.mutation.ClearAllowedEndpoints()
+	return _u
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (_u *APIKeyUpdate) SetPermissionUpdatedAt(v time.Time) *APIKeyUpdate {
+	_u.mutation.SetPermissionUpdatedAt(v)
+	return _u
+}
+
+// SetNillablePermissionUpdatedAt sets the "permission_updated_at" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillablePermissionUpdatedAt(v *time.Time) *APIKeyUpdate {
+	if v != nil {
+		_u.SetPermissionUpdatedAt(*v)
+	}
+	return _u
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (_u *APIKeyUpdate) ClearPermissionUpdatedAt() *APIKeyUpdate {
+	_u.mutation.ClearPermissionUpdatedAt()
+	return _u
+}
+
 // SetQuota sets the "quota" field.
 func (_u *APIKeyUpdate) SetQuota(v float64) *APIKeyUpdate {
 	_u.mutation.ResetQuota()
@@ -560,6 +630,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PermissionMode(); ok {
+		if err := apikey.PermissionModeValidator(v); err != nil {
+			return &ValidationError{Name: "permission_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.permission_mode": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -623,6 +698,37 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PermissionMode(); ok {
+		_spec.SetField(apikey.FieldPermissionMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AllowedModels(); ok {
+		_spec.SetField(apikey.FieldAllowedModels, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAllowedModels(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAllowedModels, value)
+		})
+	}
+	if _u.mutation.AllowedModelsCleared() {
+		_spec.ClearField(apikey.FieldAllowedModels, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.AllowedEndpoints(); ok {
+		_spec.SetField(apikey.FieldAllowedEndpoints, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAllowedEndpoints(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAllowedEndpoints, value)
+		})
+	}
+	if _u.mutation.AllowedEndpointsCleared() {
+		_spec.ClearField(apikey.FieldAllowedEndpoints, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PermissionUpdatedAt(); ok {
+		_spec.SetField(apikey.FieldPermissionUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PermissionUpdatedAtCleared() {
+		_spec.ClearField(apikey.FieldPermissionUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)
@@ -974,6 +1080,76 @@ func (_u *APIKeyUpdateOne) AppendIPBlacklist(v []string) *APIKeyUpdateOne {
 // ClearIPBlacklist clears the value of the "ip_blacklist" field.
 func (_u *APIKeyUpdateOne) ClearIPBlacklist() *APIKeyUpdateOne {
 	_u.mutation.ClearIPBlacklist()
+	return _u
+}
+
+// SetPermissionMode sets the "permission_mode" field.
+func (_u *APIKeyUpdateOne) SetPermissionMode(v string) *APIKeyUpdateOne {
+	_u.mutation.SetPermissionMode(v)
+	return _u
+}
+
+// SetNillablePermissionMode sets the "permission_mode" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillablePermissionMode(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetPermissionMode(*v)
+	}
+	return _u
+}
+
+// SetAllowedModels sets the "allowed_models" field.
+func (_u *APIKeyUpdateOne) SetAllowedModels(v []string) *APIKeyUpdateOne {
+	_u.mutation.SetAllowedModels(v)
+	return _u
+}
+
+// AppendAllowedModels appends value to the "allowed_models" field.
+func (_u *APIKeyUpdateOne) AppendAllowedModels(v []string) *APIKeyUpdateOne {
+	_u.mutation.AppendAllowedModels(v)
+	return _u
+}
+
+// ClearAllowedModels clears the value of the "allowed_models" field.
+func (_u *APIKeyUpdateOne) ClearAllowedModels() *APIKeyUpdateOne {
+	_u.mutation.ClearAllowedModels()
+	return _u
+}
+
+// SetAllowedEndpoints sets the "allowed_endpoints" field.
+func (_u *APIKeyUpdateOne) SetAllowedEndpoints(v []string) *APIKeyUpdateOne {
+	_u.mutation.SetAllowedEndpoints(v)
+	return _u
+}
+
+// AppendAllowedEndpoints appends value to the "allowed_endpoints" field.
+func (_u *APIKeyUpdateOne) AppendAllowedEndpoints(v []string) *APIKeyUpdateOne {
+	_u.mutation.AppendAllowedEndpoints(v)
+	return _u
+}
+
+// ClearAllowedEndpoints clears the value of the "allowed_endpoints" field.
+func (_u *APIKeyUpdateOne) ClearAllowedEndpoints() *APIKeyUpdateOne {
+	_u.mutation.ClearAllowedEndpoints()
+	return _u
+}
+
+// SetPermissionUpdatedAt sets the "permission_updated_at" field.
+func (_u *APIKeyUpdateOne) SetPermissionUpdatedAt(v time.Time) *APIKeyUpdateOne {
+	_u.mutation.SetPermissionUpdatedAt(v)
+	return _u
+}
+
+// SetNillablePermissionUpdatedAt sets the "permission_updated_at" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillablePermissionUpdatedAt(v *time.Time) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetPermissionUpdatedAt(*v)
+	}
+	return _u
+}
+
+// ClearPermissionUpdatedAt clears the value of the "permission_updated_at" field.
+func (_u *APIKeyUpdateOne) ClearPermissionUpdatedAt() *APIKeyUpdateOne {
+	_u.mutation.ClearPermissionUpdatedAt()
 	return _u
 }
 
@@ -1360,6 +1536,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PermissionMode(); ok {
+		if err := apikey.PermissionModeValidator(v); err != nil {
+			return &ValidationError{Name: "permission_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.permission_mode": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -1440,6 +1621,37 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if _u.mutation.IPBlacklistCleared() {
 		_spec.ClearField(apikey.FieldIPBlacklist, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PermissionMode(); ok {
+		_spec.SetField(apikey.FieldPermissionMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AllowedModels(); ok {
+		_spec.SetField(apikey.FieldAllowedModels, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAllowedModels(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAllowedModels, value)
+		})
+	}
+	if _u.mutation.AllowedModelsCleared() {
+		_spec.ClearField(apikey.FieldAllowedModels, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.AllowedEndpoints(); ok {
+		_spec.SetField(apikey.FieldAllowedEndpoints, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAllowedEndpoints(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldAllowedEndpoints, value)
+		})
+	}
+	if _u.mutation.AllowedEndpointsCleared() {
+		_spec.ClearField(apikey.FieldAllowedEndpoints, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.PermissionUpdatedAt(); ok {
+		_spec.SetField(apikey.FieldPermissionUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.PermissionUpdatedAtCleared() {
+		_spec.ClearField(apikey.FieldPermissionUpdatedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Quota(); ok {
 		_spec.SetField(apikey.FieldQuota, field.TypeFloat64, value)

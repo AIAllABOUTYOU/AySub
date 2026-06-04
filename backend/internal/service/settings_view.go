@@ -177,6 +177,12 @@ type SystemSettings struct {
 	// Available Channels feature (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
 
+	// Public status page feature (anonymous redacted view)
+	PublicStatusEnabled             bool `json:"public_status_enabled"`
+	PublicStatusShowModels          bool `json:"public_status_show_models"`
+	PublicStatusShowChannels        bool `json:"public_status_show_channels"`
+	PublicStatusShowRecentIncidents bool `json:"public_status_show_recent_incidents"`
+
 	// Claude Code version check
 	MinClaudeCodeVersion string
 	MaxClaudeCodeVersion string

@@ -12,6 +12,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 )
 
 // --- Dashboard & Analytics ---
@@ -49,8 +50,137 @@ func (s *PaymentService) GetDashboardStats(ctx context.Context, days int) (*Dash
 	st.DailySeries = buildDailySeries(orders, since, days)
 	st.PaymentMethods = buildMethodDistribution(orders)
 	st.TopUsers = buildTopUsers(orders)
+	st.Ops, err = s.buildPaymentOpsStats(ctx, since, now, days)
+	if err != nil {
+		return nil, err
+	}
 
 	return st, nil
+}
+
+func (s *PaymentService) buildPaymentOpsStats(ctx context.Context, since, now time.Time, days int) (PaymentOpsStats, error) {
+	stats := PaymentOpsStats{WindowDays: days}
+	stalePendingBefore := now.Add(-time.Duration(defaultOrderTimeoutMin+paymentGraceMinutes) * time.Minute)
+	paidNotCompletedBefore := now.Add(-time.Duration(paymentGraceMinutes) * time.Minute)
+
+	var err error
+	stats.CallbackFailures, err = s.countPaymentAuditActions(ctx, since,
+		"PAYMENT_PROVIDER_MISMATCH",
+		"PAYMENT_PROVIDER_METADATA_MISMATCH",
+		"PAYMENT_INVALID_AMOUNT",
+		"PAYMENT_AMOUNT_MISMATCH",
+		"PAYMENT_AFTER_EXPIRY",
+		"REFUND_PROVIDER_METADATA_MISMATCH",
+		"REFUND_NO_TRADE_NO",
+		"REFUND_GATEWAY_FAILED",
+		"REFUND_FAILED",
+		"REFUND_ROLLBACK_FAILED",
+	)
+	if err != nil {
+		return stats, err
+	}
+
+	stats.OrderInconsistencies, err = s.countPaymentAuditActions(ctx, since,
+		"PAYMENT_PROVIDER_MISMATCH",
+		"PAYMENT_PROVIDER_METADATA_MISMATCH",
+		"PAYMENT_INVALID_AMOUNT",
+		"PAYMENT_AMOUNT_MISMATCH",
+		"PAYMENT_AFTER_EXPIRY",
+		"REFUND_PROVIDER_METADATA_MISMATCH",
+	)
+	if err != nil {
+		return stats, err
+	}
+
+	stats.ProviderUnavailable, err = s.entClient.PaymentProviderInstance.Query().
+		Where(paymentproviderinstance.EnabledEQ(false)).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+
+	stats.RefundRequested, err = s.countPaymentOrdersByStatus(ctx, OrderStatusRefundRequested)
+	if err != nil {
+		return stats, err
+	}
+	stats.Refunding, err = s.countPaymentOrdersByStatus(ctx, OrderStatusRefunding)
+	if err != nil {
+		return stats, err
+	}
+	stats.RefundFailed, err = s.countPaymentOrdersByStatus(ctx, OrderStatusRefundFailed)
+	if err != nil {
+		return stats, err
+	}
+	stats.Refunded, err = s.entClient.PaymentOrder.Query().
+		Where(paymentorder.StatusIn(OrderStatusRefunded, OrderStatusPartiallyRefunded)).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+
+	stats.FulfillmentFailed, err = s.countPaymentAuditActions(ctx, since, "FULFILLMENT_FAILED")
+	if err != nil {
+		return stats, err
+	}
+	stats.PaidNotCompleted, err = s.entClient.PaymentOrder.Query().
+		Where(
+			paymentorder.StatusIn(OrderStatusPaid, OrderStatusRecharging),
+			paymentorder.PaidAtLT(paidNotCompletedBefore),
+			paymentorder.CompletedAtIsNil(),
+		).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+	stats.StalePending, err = s.entClient.PaymentOrder.Query().
+		Where(
+			paymentorder.StatusEQ(OrderStatusPending),
+			paymentorder.ExpiresAtLT(stalePendingBefore),
+		).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+
+	stats.EnabledProviderInstances, err = s.entClient.PaymentProviderInstance.Query().
+		Where(paymentproviderinstance.EnabledEQ(true)).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+	stats.DisabledProviderInstances = stats.ProviderUnavailable
+	stats.RefundEnabledProviderInstances, err = s.entClient.PaymentProviderInstance.Query().
+		Where(paymentproviderinstance.RefundEnabledEQ(true)).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+	stats.UserRefundEnabledProviderInstances, err = s.entClient.PaymentProviderInstance.Query().
+		Where(paymentproviderinstance.AllowUserRefundEQ(true)).
+		Count(ctx)
+	if err != nil {
+		return stats, err
+	}
+
+	return stats, nil
+}
+
+func (s *PaymentService) countPaymentAuditActions(ctx context.Context, since time.Time, actions ...string) (int, error) {
+	if len(actions) == 0 {
+		return 0, nil
+	}
+	return s.entClient.PaymentAuditLog.Query().
+		Where(
+			paymentauditlog.ActionIn(actions...),
+			paymentauditlog.CreatedAtGTE(since),
+		).
+		Count(ctx)
+}
+
+func (s *PaymentService) countPaymentOrdersByStatus(ctx context.Context, status string) (int, error) {
+	return s.entClient.PaymentOrder.Query().
+		Where(paymentorder.StatusEQ(status)).
+		Count(ctx)
 }
 
 func computeBasicStats(st *DashboardStats, orders []*dbent.PaymentOrder, todayStart time.Time) {

@@ -100,6 +100,16 @@ func LastUsedAt(v time.Time) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldLastUsedAt, v))
 }
 
+// PermissionMode applies equality check predicate on the "permission_mode" field. It's identical to PermissionModeEQ.
+func PermissionMode(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldPermissionMode, v))
+}
+
+// PermissionUpdatedAt applies equality check predicate on the "permission_updated_at" field. It's identical to PermissionUpdatedAtEQ.
+func PermissionUpdatedAt(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldPermissionUpdatedAt, v))
+}
+
 // Quota applies equality check predicate on the "quota" field. It's identical to QuotaEQ.
 func Quota(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldQuota, v))
@@ -603,6 +613,141 @@ func IPBlacklistIsNil() predicate.APIKey {
 // IPBlacklistNotNil applies the NotNil predicate on the "ip_blacklist" field.
 func IPBlacklistNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldIPBlacklist))
+}
+
+// PermissionModeEQ applies the EQ predicate on the "permission_mode" field.
+func PermissionModeEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldPermissionMode, v))
+}
+
+// PermissionModeNEQ applies the NEQ predicate on the "permission_mode" field.
+func PermissionModeNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldPermissionMode, v))
+}
+
+// PermissionModeIn applies the In predicate on the "permission_mode" field.
+func PermissionModeIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldPermissionMode, vs...))
+}
+
+// PermissionModeNotIn applies the NotIn predicate on the "permission_mode" field.
+func PermissionModeNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldPermissionMode, vs...))
+}
+
+// PermissionModeGT applies the GT predicate on the "permission_mode" field.
+func PermissionModeGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldPermissionMode, v))
+}
+
+// PermissionModeGTE applies the GTE predicate on the "permission_mode" field.
+func PermissionModeGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldPermissionMode, v))
+}
+
+// PermissionModeLT applies the LT predicate on the "permission_mode" field.
+func PermissionModeLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldPermissionMode, v))
+}
+
+// PermissionModeLTE applies the LTE predicate on the "permission_mode" field.
+func PermissionModeLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldPermissionMode, v))
+}
+
+// PermissionModeContains applies the Contains predicate on the "permission_mode" field.
+func PermissionModeContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldPermissionMode, v))
+}
+
+// PermissionModeHasPrefix applies the HasPrefix predicate on the "permission_mode" field.
+func PermissionModeHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldPermissionMode, v))
+}
+
+// PermissionModeHasSuffix applies the HasSuffix predicate on the "permission_mode" field.
+func PermissionModeHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldPermissionMode, v))
+}
+
+// PermissionModeEqualFold applies the EqualFold predicate on the "permission_mode" field.
+func PermissionModeEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldPermissionMode, v))
+}
+
+// PermissionModeContainsFold applies the ContainsFold predicate on the "permission_mode" field.
+func PermissionModeContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldPermissionMode, v))
+}
+
+// AllowedModelsIsNil applies the IsNil predicate on the "allowed_models" field.
+func AllowedModelsIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldAllowedModels))
+}
+
+// AllowedModelsNotNil applies the NotNil predicate on the "allowed_models" field.
+func AllowedModelsNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldAllowedModels))
+}
+
+// AllowedEndpointsIsNil applies the IsNil predicate on the "allowed_endpoints" field.
+func AllowedEndpointsIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldAllowedEndpoints))
+}
+
+// AllowedEndpointsNotNil applies the NotNil predicate on the "allowed_endpoints" field.
+func AllowedEndpointsNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldAllowedEndpoints))
+}
+
+// PermissionUpdatedAtEQ applies the EQ predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtNEQ applies the NEQ predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtNEQ(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtIn applies the In predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldPermissionUpdatedAt, vs...))
+}
+
+// PermissionUpdatedAtNotIn applies the NotIn predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtNotIn(vs ...time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldPermissionUpdatedAt, vs...))
+}
+
+// PermissionUpdatedAtGT applies the GT predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtGT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtGTE applies the GTE predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtGTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtLT applies the LT predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtLT(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtLTE applies the LTE predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtLTE(v time.Time) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldPermissionUpdatedAt, v))
+}
+
+// PermissionUpdatedAtIsNil applies the IsNil predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldPermissionUpdatedAt))
+}
+
+// PermissionUpdatedAtNotNil applies the NotNil predicate on the "permission_updated_at" field.
+func PermissionUpdatedAtNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldPermissionUpdatedAt))
 }
 
 // QuotaEQ applies the EQ predicate on the "quota" field.

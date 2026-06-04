@@ -950,6 +950,37 @@ func (s *SettingService) GetAvailableChannelsRuntime(ctx context.Context) Availa
 	}
 }
 
+// PublicStatusRuntime is the lightweight feature switch view for the anonymous
+// public status page. It is fail-closed because it exposes an unauthenticated
+// surface, even though all returned data is redacted.
+type PublicStatusRuntime struct {
+	Enabled             bool
+	ShowModels          bool
+	ShowChannels        bool
+	ShowRecentIncidents bool
+}
+
+func (s *SettingService) GetPublicStatusRuntime(ctx context.Context) PublicStatusRuntime {
+	if s == nil || s.settingRepo == nil {
+		return PublicStatusRuntime{}
+	}
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyPublicStatusEnabled,
+		SettingKeyPublicStatusShowModels,
+		SettingKeyPublicStatusShowChannels,
+		SettingKeyPublicStatusShowRecentIncidents,
+	})
+	if err != nil {
+		return PublicStatusRuntime{}
+	}
+	return PublicStatusRuntime{
+		Enabled:             vals[SettingKeyPublicStatusEnabled] == "true",
+		ShowModels:          !isFalseSettingValue(vals[SettingKeyPublicStatusShowModels]),
+		ShowChannels:        !isFalseSettingValue(vals[SettingKeyPublicStatusShowChannels]),
+		ShowRecentIncidents: !isFalseSettingValue(vals[SettingKeyPublicStatusShowRecentIncidents]),
+	}
+}
+
 // GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
 // 后台设置优先；为空、缺失或非法时回退到 ANTIGRAVITY_USER_AGENT_VERSION / 内置默认值。
 func (s *SettingService) GetAntigravityUserAgentVersion(ctx context.Context) string {
@@ -1873,6 +1904,12 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
 
+	// Public status page feature switch
+	updates[SettingKeyPublicStatusEnabled] = strconv.FormatBool(settings.PublicStatusEnabled)
+	updates[SettingKeyPublicStatusShowModels] = strconv.FormatBool(settings.PublicStatusShowModels)
+	updates[SettingKeyPublicStatusShowChannels] = strconv.FormatBool(settings.PublicStatusShowChannels)
+	updates[SettingKeyPublicStatusShowRecentIncidents] = strconv.FormatBool(settings.PublicStatusShowRecentIncidents)
+
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
 
@@ -2795,6 +2832,12 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		// Available channels feature (default disabled; opt-in)
 		SettingKeyAvailableChannelsEnabled: "false",
 
+		// Public status page (page disabled by default; display switches default on)
+		SettingKeyPublicStatusEnabled:             "false",
+		SettingKeyPublicStatusShowModels:          "true",
+		SettingKeyPublicStatusShowChannels:        "true",
+		SettingKeyPublicStatusShowRecentIncidents: "true",
+
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
 
@@ -3301,6 +3344,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"
+
+	// Public status page (page disabled by default; display switches default on)
+	result.PublicStatusEnabled = settings[SettingKeyPublicStatusEnabled] == "true"
+	result.PublicStatusShowModels = !isFalseSettingValue(settings[SettingKeyPublicStatusShowModels])
+	result.PublicStatusShowChannels = !isFalseSettingValue(settings[SettingKeyPublicStatusShowChannels])
+	result.PublicStatusShowRecentIncidents = !isFalseSettingValue(settings[SettingKeyPublicStatusShowRecentIncidents])
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"

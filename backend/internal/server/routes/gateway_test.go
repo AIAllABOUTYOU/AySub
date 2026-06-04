@@ -82,6 +82,26 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 	}
 }
 
+func TestGatewayRoutesOpenAIAudioPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+
+	for _, path := range []string{
+		"/v1/audio/speech",
+		"/v1/audio/transcriptions",
+		"/v1/audio/translations",
+		"/audio/speech",
+		"/audio/transcriptions",
+		"/audio/translations",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"gpt-4o-mini-tts","input":"hello"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI audio handler", path)
+	}
+}
+
 func TestGatewayRoutesOpenAIVideosPathsAreRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
 

@@ -24,8 +24,11 @@ func NewAdminAPIKeyHandler(adminService service.AdminService) *AdminAPIKeyHandle
 
 // AdminUpdateAPIKeyGroupRequest represents the request to update an API key.
 type AdminUpdateAPIKeyGroupRequest struct {
-	GroupID             *int64 `json:"group_id"`               // nil=不修改, 0=解绑, >0=绑定到目标分组
-	ResetRateLimitUsage *bool  `json:"reset_rate_limit_usage"` // true=重置 5h/1d/7d 限速用量
+	GroupID             *int64    `json:"group_id"`               // nil=不修改, 0=解绑, >0=绑定到目标分组
+	ResetRateLimitUsage *bool     `json:"reset_rate_limit_usage"` // true=重置 5h/1d/7d 限速用量
+	PermissionMode      *string   `json:"permission_mode"`
+	AllowedModels       *[]string `json:"allowed_models"`
+	AllowedEndpoints    *[]string `json:"allowed_endpoints"`
 }
 
 // UpdateGroup handles updating an API key's admin-managed fields.
@@ -59,6 +62,19 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 	}
 	if resetKey != nil && req.GroupID == nil {
 		result.APIKey = resetKey
+	}
+
+	if req.PermissionMode != nil || req.AllowedModels != nil || req.AllowedEndpoints != nil {
+		permissionKey, err := h.adminService.AdminUpdateAPIKeyPermissions(c.Request.Context(), keyID, service.AdminUpdateAPIKeyPermissionsInput{
+			PermissionMode:   req.PermissionMode,
+			AllowedModels:    req.AllowedModels,
+			AllowedEndpoints: req.AllowedEndpoints,
+		})
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		result.APIKey = permissionKey
 	}
 
 	resp := struct {

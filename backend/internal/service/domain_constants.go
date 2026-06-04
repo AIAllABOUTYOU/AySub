@@ -398,6 +398,13 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// Public status page switches. These only control the anonymous, redacted
+	// /status surface and never expose account credentials or internal errors.
+	SettingKeyPublicStatusEnabled             = "public_status_enabled"
+	SettingKeyPublicStatusShowModels          = "public_status_show_models"
+	SettingKeyPublicStatusShowChannels        = "public_status_show_channels"
+	SettingKeyPublicStatusShowRecentIncidents = "public_status_show_recent_incidents"
+
 	// =========================
 	// Overload Cooldown (529)
 	// =========================
