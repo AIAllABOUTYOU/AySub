@@ -7,12 +7,14 @@ services:
     ports:
       - "${PRIVOXY_BIND_HOST:-127.0.0.1}:${PRIVOXY_PORT:-8118}:8118"
     networks:
+      - aysub-network
       - aysub-proxy-tools
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     profiles:
       - proxy-tools
+      - flaresolverr
     restart: unless-stopped
     environment:
       - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
@@ -20,13 +22,17 @@ services:
     ports:
       - "${FLARESOLVERR_BIND_HOST:-127.0.0.1}:${FLARESOLVERR_PORT:-8191}:8191"
     networks:
+      - aysub-network
       - aysub-proxy-tools
 
   warp:
     image: caomingjun/warp:latest
     profiles:
+      - proxy-tools
       - warp
     restart: unless-stopped
+    environment:
+      - WARP_SLEEP=${WARP_SLEEP:-2}
     cap_add:
       - NET_ADMIN
     sysctls:
@@ -35,8 +41,11 @@ services:
     ports:
       - "${WARP_BIND_HOST:-127.0.0.1}:${WARP_SOCKS_PORT:-1080}:1080"
     networks:
+      - aysub-network
       - aysub-proxy-tools
 
 networks:
+  aysub-network:
+    driver: bridge
   aysub-proxy-tools:
     driver: bridge

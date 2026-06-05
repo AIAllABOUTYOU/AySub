@@ -43,6 +43,25 @@ func (u *queuedHTTPUpstream) DoWithTLS(req *http.Request, _ string, _ int64, _ i
 	return resp, nil
 }
 
+type grokCookieHTTPUpstream struct {
+	responses []*http.Response
+	requests  []*http.Request
+}
+
+func (u *grokCookieHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	u.requests = append(u.requests, req)
+	if len(u.responses) == 0 {
+		return nil, fmt.Errorf("no mocked response")
+	}
+	resp := u.responses[0]
+	u.responses = u.responses[1:]
+	return resp, nil
+}
+
+func (u *grokCookieHTTPUpstream) DoWithTLS(_ *http.Request, _ string, _ int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return nil, fmt.Errorf("unexpected DoWithTLS call")
+}
+
 func newJSONResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
@@ -52,6 +71,80 @@ func newJSONResponse(status int, body string) *http.Response {
 }
 
 // --- test functions ---
+
+func TestAccountTestService_RoutesXAICookieToGrokWebTest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	resp := newJSONResponse(http.StatusOK, `data: {"result":{"response":{"messageTag":"final","token":"ok"}}}
+data: {"result":{"response":{"finalMetadata":{}}}}
+`)
+	account := &Account{
+		ID:          77,
+		Name:        "grok cookie",
+		Platform:    PlatformXAI,
+		Type:        AccountTypeCookie,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"base_url":  "https://grok.com",
+			"sso_token": "tok",
+		},
+	}
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{account.ID: account},
+		},
+	}
+	upstream := &grokCookieHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+
+	err := svc.TestAccountConnection(ctx, account.ID, "grok-4.20-auto", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 1)
+
+	req := upstream.requests[0]
+	require.Equal(t, "https://grok.com/rest/app-chat/conversations/new", req.URL.String())
+	require.Contains(t, req.Header.Get("Cookie"), "sso=tok")
+	require.Contains(t, req.Header.Get("Cookie"), "sso-rw=tok")
+	body, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.Equal(t, "auto", gjson.GetBytes(body, "modeId").String())
+	require.Equal(t, "hi", gjson.GetBytes(body, "message").String())
+	require.Contains(t, recorder.Body.String(), `"type":"content","text":"ok"`)
+	require.Contains(t, recorder.Body.String(), `"type":"test_complete"`)
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_RoutesXAIAPIKeyToOpenAICompatibleTest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := newTestContext()
+
+	resp := newJSONResponse(http.StatusOK, `data: {"choices":[{"delta":{"content":"ok"}}]}
+data: {"choices":[{"finish_reason":"stop"}]}
+data: [DONE]
+`)
+	account := &Account{
+		ID:          78,
+		Name:        "xai apikey",
+		Platform:    PlatformXAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "xai-key"},
+	}
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{account.ID: account},
+		},
+	}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: &config.Config{}}
+
+	err := svc.TestAccountConnection(ctx, account.ID, "grok-4", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "https://api.x.ai/v1/chat/completions", upstream.requests[0].URL.String())
+	require.Equal(t, "Bearer xai-key", upstream.requests[0].Header.Get("Authorization"))
+}
 
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	gin.SetMode(gin.TestMode)

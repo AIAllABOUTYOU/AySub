@@ -1,401 +1,270 @@
 <template>
   <!-- Custom Home Content: Full Page Mode -->
   <div v-if="homeContent" class="min-h-screen">
-    <!-- iframe mode -->
     <iframe
       v-if="isHomeContentUrl"
       :src="homeContent.trim()"
       class="h-screen w-full border-0"
       allowfullscreen
     ></iframe>
-    <!-- HTML mode - SECURITY: homeContent is admin-only setting, XSS risk is acceptable -->
+    <!-- SECURITY: homeContent is an admin-only setting. -->
     <div v-else v-html="homeContent"></div>
   </div>
 
-  <!-- Default Home Page -->
-  <div
-    v-else
-    class="relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
-  >
-    <!-- Background Decorations -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        class="absolute -right-40 -top-40 h-96 w-96 rounded-full bg-primary-400/20 blur-3xl"
-      ></div>
-      <div
-        class="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-primary-500/15 blur-3xl"
-      ></div>
-      <div
-        class="absolute left-1/3 top-1/4 h-72 w-72 rounded-full bg-primary-300/10 blur-3xl"
-      ></div>
-      <div
-        class="absolute bottom-1/4 right-1/4 h-64 w-64 rounded-full bg-primary-400/10 blur-3xl"
-      ></div>
-      <div
-        class="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"
-      ></div>
-    </div>
-
-    <!-- Header -->
-    <header class="relative z-20 px-6 py-4">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between">
-        <!-- Logo -->
-        <div class="flex items-center">
-          <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
+  <!-- Default Configurable Home Page -->
+  <div v-else class="home-shell min-h-screen overflow-hidden text-slate-100">
+    <header class="sticky top-0 z-30 border-b border-white/10 bg-slate-950/88 backdrop-blur">
+      <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <a href="#top" class="flex min-w-0 items-center gap-3" @click="handleHomeLink($event, '#top')">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/20 bg-white/8">
             <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
-          </div>
+          </span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-semibold text-white">{{ siteName }}</span>
+            <span class="hidden truncate text-xs text-slate-400 sm:block">{{ siteSubtitle }}</span>
+          </span>
+        </a>
+
+        <div class="hidden items-center gap-1 md:flex">
+          <a
+            v-for="item in visibleNavItems"
+            :key="`${item.label}-${item.url}`"
+            :href="item.url"
+            class="rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white"
+            :target="linkTarget(item.url)"
+            :rel="linkRel(item.url)"
+            @click="handleHomeLink($event, item.url)"
+          >
+            {{ item.label }}
+          </a>
         </div>
 
-        <!-- Nav Actions -->
-        <div class="flex items-center gap-3">
-          <!-- Language Switcher -->
+        <div class="flex items-center gap-2">
           <LocaleSwitcher />
-
-          <!-- Doc Link -->
           <a
             v-if="docUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            class="home-icon-button"
             :title="t('home.viewDocs')"
           >
             <Icon name="book" size="md" />
           </a>
-
-          <!-- Theme Toggle -->
           <button
-            @click="toggleTheme"
-            class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+            class="home-icon-button"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            @click="toggleTheme"
           >
             <Icon v-if="isDark" name="sun" size="md" />
             <Icon v-else name="moon" size="md" />
           </button>
-
-          <!-- Login / Dashboard Button -->
-          <router-link
-            v-if="isAuthenticated"
-            :to="dashboardPath"
-            class="inline-flex items-center gap-1.5 rounded-full bg-gray-900 py-1 pl-1 pr-2.5 transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
+          <a
+            :href="isAuthenticated ? dashboardPath : '/login'"
+            class="hidden rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:inline-flex"
+            @click="handleHomeLink($event, isAuthenticated ? dashboardPath : '/login')"
           >
-            <span
-              class="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-[10px] font-semibold text-white"
-            >
-              {{ userInitial }}
-            </span>
-            <span class="text-xs font-medium text-white">{{ t('home.dashboard') }}</span>
-            <svg
-              class="h-3 w-3 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25"
-              />
-            </svg>
-          </router-link>
-          <router-link
-            v-else
-            to="/login"
-            class="inline-flex items-center rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-800 dark:hover:bg-gray-700"
-          >
-            {{ t('home.login') }}
-          </router-link>
+            {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
+          </a>
         </div>
       </nav>
     </header>
 
-    <!-- Main Content -->
-    <main class="relative z-10 flex-1 px-6 py-16">
-      <div class="mx-auto max-w-6xl">
-        <!-- Hero Section - Left/Right Layout -->
-        <div class="mb-12 flex flex-col items-center justify-between gap-12 lg:flex-row lg:gap-16">
-          <!-- Left: Text Content -->
-          <div class="flex-1 text-center lg:text-left">
-            <h1
-              class="mb-4 text-4xl font-bold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"
-            >
-              {{ siteName }}
-            </h1>
-            <p class="mb-8 text-lg text-gray-600 dark:text-dark-300 md:text-xl">
-              {{ siteSubtitle }}
-            </p>
-
-            <!-- CTA Button -->
-            <div>
-              <router-link
-                :to="isAuthenticated ? dashboardPath : '/login'"
-                class="btn btn-primary px-8 py-3 text-base shadow-lg shadow-primary-500/30"
-              >
-                {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
-                <Icon name="arrowRight" size="md" class="ml-2" :stroke-width="2" />
-              </router-link>
-            </div>
+    <main id="top" class="relative">
+      <section class="mx-auto grid min-h-[calc(100vh-64px)] max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_480px] lg:px-8 lg:py-16">
+        <div class="max-w-3xl">
+          <div class="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-sm font-medium text-emerald-100">
+            <span class="h-2 w-2 rounded-full bg-emerald-300"></span>
+            {{ resolvedHome.hero_badge }}
           </div>
 
-          <!-- Right: Terminal Animation -->
-          <div class="flex flex-1 justify-center lg:justify-end">
-            <div class="terminal-container">
-              <div class="terminal-window">
-                <!-- Window header -->
-                <div class="terminal-header">
-                  <div class="terminal-buttons">
-                    <span class="btn-close"></span>
-                    <span class="btn-minimize"></span>
-                    <span class="btn-maximize"></span>
-                  </div>
-                  <span class="terminal-title">terminal</span>
-                </div>
-                <!-- Terminal content -->
-                <div class="terminal-body">
-                  <div class="code-line line-1">
-                    <span class="code-prompt">$</span>
-                    <span class="code-cmd">curl</span>
-                    <span class="code-flag">-X POST</span>
-                    <span class="code-url">/v1/messages</span>
-                  </div>
-                  <div class="code-line line-2">
-                    <span class="code-comment"># Routing to upstream...</span>
-                  </div>
-                  <div class="code-line line-3">
-                    <span class="code-success">200 OK</span>
-                    <span class="code-response">{ "content": "Hello!" }</span>
-                  </div>
-                  <div class="code-line line-4">
-                    <span class="code-prompt">$</span>
-                    <span class="cursor"></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Feature Tags - Centered -->
-        <div class="mb-12 flex flex-wrap items-center justify-center gap-4 md:gap-6">
-          <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
-          >
-            <Icon name="swap" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.subscriptionToApi')
-            }}</span>
-          </div>
-          <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
-          >
-            <Icon name="shield" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.stickySession')
-            }}</span>
-          </div>
-          <div
-            class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
-          >
-            <Icon name="chart" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.realtimeBilling')
-            }}</span>
-          </div>
-        </div>
-
-        <!-- Features Grid -->
-        <div class="mb-12 grid gap-6 md:grid-cols-3">
-          <!-- Feature 1: Unified Gateway -->
-          <div
-            class="group rounded-2xl border border-gray-200/50 bg-white/60 p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50 dark:bg-dark-800/60"
-          >
-            <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30 transition-transform group-hover:scale-110"
-            >
-              <Icon name="server" size="lg" class="text-white" />
-            </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.unifiedGateway') }}
-            </h3>
-            <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.unifiedGatewayDesc') }}
-            </p>
-          </div>
-
-          <!-- Feature 2: Account Pool -->
-          <div
-            class="group rounded-2xl border border-gray-200/50 bg-white/60 p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50 dark:bg-dark-800/60"
-          >
-            <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30 transition-transform group-hover:scale-110"
-            >
-              <svg
-                class="h-6 w-6 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
-                />
-              </svg>
-            </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.multiAccount') }}
-            </h3>
-            <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.multiAccountDesc') }}
-            </p>
-          </div>
-
-          <!-- Feature 3: Billing & Quota -->
-          <div
-            class="group rounded-2xl border border-gray-200/50 bg-white/60 p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary-500/10 dark:border-dark-700/50 dark:bg-dark-800/60"
-          >
-            <div
-              class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 shadow-lg shadow-purple-500/30 transition-transform group-hover:scale-110"
-            >
-              <svg
-                class="h-6 w-6 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
-                />
-              </svg>
-            </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.balanceQuota') }}
-            </h3>
-            <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.balanceQuotaDesc') }}
-            </p>
-          </div>
-        </div>
-
-        <!-- Supported Providers -->
-        <div class="mb-8 text-center">
-          <h2 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
-            {{ t('home.providers.title') }}
-          </h2>
-          <p class="text-sm text-gray-600 dark:text-dark-400">
-            {{ t('home.providers.description') }}
+          <h1 class="max-w-4xl text-4xl font-semibold leading-tight tracking-normal text-white sm:text-5xl lg:text-6xl">
+            {{ resolvedHome.hero_title }}
+            <span class="block text-cyan-200">{{ resolvedHome.hero_highlight }}</span>
+          </h1>
+          <p class="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+            {{ resolvedHome.hero_description }}
           </p>
+
+          <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <a
+              :href="primaryActionUrl"
+              class="inline-flex items-center justify-center rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+              @click="handleHomeLink($event, primaryActionUrl)"
+            >
+              {{ resolvedHome.primary_cta_label }}
+              <Icon name="arrowRight" size="sm" class="ml-2" />
+            </a>
+            <a
+              :href="resolvedHome.secondary_cta_url"
+              class="inline-flex items-center justify-center rounded-md border border-white/14 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/25 hover:bg-white/8"
+              :target="linkTarget(resolvedHome.secondary_cta_url)"
+              :rel="linkRel(resolvedHome.secondary_cta_url)"
+              @click="handleHomeLink($event, resolvedHome.secondary_cta_url)"
+            >
+              {{ resolvedHome.secondary_cta_label }}
+            </a>
+          </div>
+
+          <div class="mt-10 grid gap-3 sm:grid-cols-3">
+            <div
+              v-for="stat in visibleStats"
+              :key="`${stat.value}-${stat.label}`"
+              class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
+            >
+              <div class="text-2xl font-semibold text-white">{{ stat.value }}</div>
+              <div class="mt-1 text-sm text-slate-400">{{ stat.label }}</div>
+            </div>
+          </div>
         </div>
 
-        <div class="mb-16 flex flex-wrap items-center justify-center gap-4">
-          <!-- Claude - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
-            >
-              <span class="text-xs font-bold text-white">C</span>
+        <div class="home-terminal rounded-lg border border-cyan-300/20 bg-slate-950 shadow-2xl shadow-cyan-950/40">
+          <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <div class="flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-amber-300"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-emerald-300"></span>
             </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.claude') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
+            <div class="text-xs font-medium text-slate-500">{{ resolvedHome.terminal_title }}</div>
           </div>
-          <!-- GPT - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
-            >
-              <span class="text-xs font-bold text-white">G</span>
+          <div class="space-y-3 p-4 font-mono text-xs leading-6 text-slate-300 sm:text-sm">
+            <div v-for="(line, index) in terminalLines" :key="`${line}-${index}`" class="home-terminal-line">
+              <span class="mr-2 select-none text-cyan-300">$</span>{{ line }}
             </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">GPT</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
-          </div>
-          <!-- Gemini - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
-            >
-              <span class="text-xs font-bold text-white">G</span>
-            </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.gemini') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
-          </div>
-          <!-- Antigravity - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
-            >
-              <span class="text-xs font-bold text-white">A</span>
-            </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.antigravity') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
-          </div>
-          <!-- More - Coming Soon -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-gray-200/50 bg-white/40 px-5 py-3 opacity-60 backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/40"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"
-            >
-              <span class="text-xs font-bold text-white">+</span>
-            </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.more') }}</span>
-            <span
-              class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-dark-700 dark:text-dark-400"
-              >{{ t('home.providers.soon') }}</span
-            >
           </div>
         </div>
-      </div>
+      </section>
+
+      <section id="features" class="border-y border-white/10 bg-white/[0.025] px-4 py-14 sm:px-6 lg:px-8">
+        <div class="mx-auto max-w-7xl">
+          <div class="max-w-2xl">
+            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.capabilities') }}</p>
+            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.features_title }}</h2>
+            <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.features_description }}</p>
+          </div>
+
+          <div class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <article
+              v-for="feature in visibleFeatures"
+              :key="feature.title"
+              class="rounded-lg border border-white/10 bg-slate-900/70 p-5 transition hover:border-cyan-300/30 hover:bg-slate-900"
+            >
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <span class="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                  <Icon :name="resolveIcon(feature.icon)" size="md" />
+                </span>
+                <span v-if="feature.tag" class="rounded-md bg-white/8 px-2 py-1 text-xs font-medium text-slate-300">
+                  {{ feature.tag }}
+                </span>
+              </div>
+              <h3 class="text-base font-semibold text-white">{{ feature.title }}</h3>
+              <p class="mt-2 text-sm leading-6 text-slate-400">{{ feature.description }}</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="models" class="px-4 py-14 sm:px-6 lg:px-8">
+        <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.models') }}</p>
+            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.models_title }}</h2>
+            <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.models_description }}</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <article
+              v-for="model in visibleModels"
+              :key="`${model.provider}-${model.name}`"
+              class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-semibold text-white">{{ model.name }}</div>
+                  <div class="mt-1 text-xs text-slate-500">{{ model.provider }}</div>
+                </div>
+                <span class="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-xs font-medium text-emerald-100">
+                  {{ model.status || t('home.providers.supported') }}
+                </span>
+              </div>
+              <p v-if="model.description" class="mt-3 text-sm leading-6 text-slate-400">{{ model.description }}</p>
+              <div v-if="model.price" class="mt-4 text-sm font-semibold text-cyan-200">{{ model.price }}</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" class="border-y border-white/10 bg-white/[0.025] px-4 py-14 sm:px-6 lg:px-8">
+        <div class="mx-auto max-w-7xl">
+          <div class="max-w-2xl">
+            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.pricing') }}</p>
+            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.pricing_title }}</h2>
+            <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.pricing_description }}</p>
+          </div>
+
+          <div class="mt-8 grid gap-4 lg:grid-cols-3">
+            <article
+              v-for="item in visiblePricingItems"
+              :key="item.name"
+              class="rounded-lg border p-5"
+              :class="item.highlighted ? 'border-cyan-300/35 bg-cyan-300/10' : 'border-white/10 bg-slate-900/70'"
+            >
+              <div class="text-sm font-semibold text-white">{{ item.name }}</div>
+              <div class="mt-4 flex items-end gap-2">
+                <span class="text-3xl font-semibold text-white">{{ item.price }}</span>
+                <span v-if="item.unit" class="pb-1 text-sm text-slate-400">{{ item.unit }}</span>
+              </div>
+              <p v-if="item.description" class="mt-3 text-sm leading-6 text-slate-400">{{ item.description }}</p>
+              <ul class="mt-5 space-y-2">
+                <li v-for="feature in item.features || []" :key="feature" class="flex gap-2 text-sm text-slate-300">
+                  <Icon name="check" size="sm" class="mt-0.5 shrink-0 text-cyan-200" />
+                  <span>{{ feature }}</span>
+                </li>
+              </ul>
+              <a
+                v-if="item.cta_label"
+                :href="item.cta_url || primaryActionUrl"
+                class="mt-6 inline-flex w-full items-center justify-center rounded-md border border-white/12 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/8"
+                :target="linkTarget(item.cta_url || primaryActionUrl)"
+                :rel="linkRel(item.cta_url || primaryActionUrl)"
+                @click="handleHomeLink($event, item.cta_url || primaryActionUrl)"
+              >
+                {{ item.cta_label }}
+              </a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="info" class="px-4 py-14 sm:px-6 lg:px-8">
+        <div class="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.info') }}</p>
+            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.info_title }}</h2>
+            <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.info_description }}</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div
+              v-for="item in visibleInfoItems"
+              :key="`${item.label}-${item.value}`"
+              class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
+            >
+              <div class="text-xs font-medium uppercase tracking-normal text-slate-500">{{ item.label }}</div>
+              <div class="mt-2 text-lg font-semibold text-white">{{ item.value }}</div>
+              <p v-if="item.description" class="mt-2 text-sm leading-6 text-slate-400">{{ item.description }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
-    <!-- Footer -->
-    <footer class="relative z-10 border-t border-gray-200/50 px-6 py-8 dark:border-dark-800/50">
-      <div
-        class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 text-center sm:flex-row sm:text-left"
-      >
-        <p class="text-sm text-gray-500 dark:text-dark-400">
-          &copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}
-        </p>
-        <div class="flex items-center gap-4">
-          <a
-            v-if="docUrl"
-            :href="docUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-white"
-          >
+    <footer class="border-t border-white/10 px-4 py-8 sm:px-6 lg:px-8">
+      <div class="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <p>&copy; {{ currentYear }} {{ siteName }}. {{ t('home.footer.allRightsReserved') }}</p>
+        <div class="flex flex-wrap items-center gap-4">
+          <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300">
             {{ t('home.docs') }}
           </a>
-          <a
-            :href="githubUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-white"
-          >
+          <a :href="githubUrl" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300">
             GitHub
           </a>
         </div>
@@ -405,57 +274,228 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import type {
+  HomeConfig,
+  HomeFeatureItem,
+  HomeInfoItem,
+  HomeModelItem,
+  HomeNavItem,
+  HomePricingItem,
+  HomeStatItem
+} from '@/types'
+
+type HomeIconName = 'server' | 'shield' | 'chart' | 'database' | 'bolt' | 'key' | 'globe' | 'terminal' | 'cloud' | 'cpu' | 'calculator' | 'brain'
+
+interface ResolvedHomeConfig extends Required<Omit<HomeConfig,
+  'nav_items' | 'stats' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'terminal_lines'
+>> {
+  nav_items: HomeNavItem[]
+  stats: HomeStatItem[]
+  features: HomeFeatureItem[]
+  models: HomeModelItem[]
+  pricing_items: HomePricingItem[]
+  info_items: HomeInfoItem[]
+  terminal_lines: string[]
+}
 
 const { t } = useI18n()
-
+const router = useRouter()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-// Site settings - directly from appStore (already initialized from injected config)
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
-const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'AI API Gateway Platform')
+const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'All Your AI Sub Hub')
 const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
+const homeConfig = computed<HomeConfig>(() => appStore.cachedPublicSettings?.home_config || {})
 
-// Check if homeContent is a URL (for iframe display)
 const isHomeContentUrl = computed(() => {
   const content = homeContent.value.trim()
   return content.startsWith('http://') || content.startsWith('https://')
 })
 
-// Theme
 const isDark = ref(document.documentElement.classList.contains('dark'))
-
-// GitHub URL
 const githubUrl = 'https://github.com/AIAllABOUTYOU/AySub'
 
-// Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
-const dashboardPath = computed(() => isAdmin.value ? '/admin/dashboard' : '/dashboard')
-const userInitial = computed(() => {
-  const user = authStore.user
-  if (!user || !user.email) return ''
-  return user.email.charAt(0).toUpperCase()
-})
-
-// Current year for footer
+const dashboardPath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
 const currentYear = computed(() => new Date().getFullYear())
 
-// Toggle theme
+const defaultHomeConfig = computed<ResolvedHomeConfig>(() => ({
+  nav_items: [
+    { label: t('home.nav.home'), url: '#top', visible: true },
+    { label: t('home.nav.features'), url: '#features', visible: true },
+    { label: t('home.nav.models'), url: '#models', visible: true },
+    { label: t('home.nav.pricing'), url: '#pricing', visible: true },
+    { label: t('home.nav.info'), url: '#info', visible: true }
+  ],
+  hero_badge: t('home.hero.badge'),
+  hero_title: t('home.hero.title'),
+  hero_highlight: t('home.hero.highlight'),
+  hero_description: t('home.hero.description'),
+  primary_cta_label: isAuthenticated.value ? t('home.goToDashboard') : t('home.getStarted'),
+  primary_cta_url: isAuthenticated.value ? dashboardPath.value : '/login',
+  secondary_cta_label: t('home.hero.secondaryCta'),
+  secondary_cta_url: '#features',
+  stats: [
+    { value: '300+', label: t('home.stats.models'), visible: true },
+    { value: '99.9%', label: t('home.stats.availability'), visible: true },
+    { value: '<200ms', label: t('home.stats.routing'), visible: true }
+  ],
+  terminal_title: 'aysub-api',
+  terminal_lines: [
+    'curl https://api.example.com/v1/chat/completions',
+    'model: claude-sonnet-4-5',
+    'route: group/pro -> healthy channel',
+    'usage: logged, billed, audited'
+  ],
+  features_title: t('home.featuresSection.title'),
+  features_description: t('home.featuresSection.description'),
+  features: [
+    { icon: 'server', title: t('home.features.unifiedGateway'), description: t('home.features.unifiedGatewayDesc'), tag: 'API', visible: true },
+    { icon: 'shield', title: t('home.features.multiAccount'), description: t('home.features.multiAccountDesc'), tag: 'Routing', visible: true },
+    { icon: 'chart', title: t('home.features.balanceQuota'), description: t('home.features.balanceQuotaDesc'), tag: 'Billing', visible: true },
+    { icon: 'key', title: t('home.features.keyAcl'), description: t('home.features.keyAclDesc'), tag: 'ACL', visible: true },
+    { icon: 'database', title: t('home.features.logs'), description: t('home.features.logsDesc'), tag: 'Ops', visible: true },
+    { icon: 'terminal', title: t('home.features.compatible'), description: t('home.features.compatibleDesc'), tag: 'OpenAI', visible: true }
+  ],
+  models_title: t('home.modelsSection.title'),
+  models_description: t('home.modelsSection.description'),
+  models: [
+    { name: 'Claude Sonnet / Opus', provider: 'Anthropic', description: t('home.modelsSection.claude'), price: t('home.modelsSection.payAsYouGo'), status: t('home.providers.supported'), visible: true },
+    { name: 'GPT-4.1 / GPT-5', provider: 'OpenAI', description: t('home.modelsSection.gpt'), price: t('home.modelsSection.payAsYouGo'), status: t('home.providers.supported'), visible: true },
+    { name: 'Gemini 2.5', provider: 'Google', description: t('home.modelsSection.gemini'), price: t('home.modelsSection.payAsYouGo'), status: t('home.providers.supported'), visible: true },
+    { name: 'Grok', provider: 'xAI', description: t('home.modelsSection.grok'), price: t('home.modelsSection.payAsYouGo'), status: t('home.providers.supported'), visible: true }
+  ],
+  pricing_title: t('home.pricingSection.title'),
+  pricing_description: t('home.pricingSection.description'),
+  pricing_items: [
+    {
+      name: t('home.pricingSection.starter.name'),
+      price: t('home.pricingSection.starter.price'),
+      unit: t('home.pricingSection.starter.unit'),
+      description: t('home.pricingSection.starter.description'),
+      features: [t('home.pricingSection.features.unifiedKey'), t('home.pricingSection.features.usageLogs'), t('home.pricingSection.features.modelSwitch')],
+      cta_label: t('home.getStarted'),
+      cta_url: '/login',
+      visible: true
+    },
+    {
+      name: t('home.pricingSection.team.name'),
+      price: t('home.pricingSection.team.price'),
+      unit: t('home.pricingSection.team.unit'),
+      description: t('home.pricingSection.team.description'),
+      features: [t('home.pricingSection.features.quota'), t('home.pricingSection.features.permissions'), t('home.pricingSection.features.reports')],
+      cta_label: t('home.getStarted'),
+      cta_url: '/login',
+      highlighted: true,
+      visible: true
+    },
+    {
+      name: t('home.pricingSection.custom.name'),
+      price: t('home.pricingSection.custom.price'),
+      unit: '',
+      description: t('home.pricingSection.custom.description'),
+      features: [t('home.pricingSection.features.privateDeploy'), t('home.pricingSection.features.channelPolicy'), t('home.pricingSection.features.audit')],
+      cta_label: t('home.pricingSection.custom.cta'),
+      cta_url: docUrl.value || '#info',
+      visible: true
+    }
+  ],
+  info_title: t('home.infoSection.title'),
+  info_description: t('home.infoSection.description'),
+  info_items: [
+    { label: t('home.infoSection.apiEndpoint'), value: appStore.apiBaseUrl || window.location.origin, description: t('home.infoSection.apiEndpointDesc'), visible: true },
+    { label: t('home.infoSection.billing'), value: t('home.infoSection.billingValue'), description: t('home.infoSection.billingDesc'), visible: true },
+    { label: t('home.infoSection.security'), value: t('home.infoSection.securityValue'), description: t('home.infoSection.securityDesc'), visible: true },
+    { label: t('home.infoSection.contact'), value: appStore.contactInfo || t('home.infoSection.contactValue'), description: t('home.infoSection.contactDesc'), visible: true }
+  ]
+}))
+
+const resolvedHome = computed<ResolvedHomeConfig>(() => mergeHomeConfig(defaultHomeConfig.value, homeConfig.value))
+const visibleNavItems = computed(() => visibleItems(resolvedHome.value.nav_items))
+const visibleStats = computed(() => visibleItems(resolvedHome.value.stats))
+const visibleFeatures = computed(() => visibleItems(resolvedHome.value.features))
+const visibleModels = computed(() => visibleItems(resolvedHome.value.models))
+const visiblePricingItems = computed(() => visibleItems(resolvedHome.value.pricing_items))
+const visibleInfoItems = computed(() => visibleItems(resolvedHome.value.info_items))
+const terminalLines = computed(() => resolvedHome.value.terminal_lines.filter((line) => line.trim().length > 0))
+const primaryActionUrl = computed(() => resolvedHome.value.primary_cta_url || (isAuthenticated.value ? dashboardPath.value : '/login'))
+
+function mergeHomeConfig(base: ResolvedHomeConfig, custom: HomeConfig | null | undefined): ResolvedHomeConfig {
+  const source = custom || {}
+  return {
+    ...base,
+    ...nonEmptyStrings(source),
+    nav_items: Array.isArray(source.nav_items) ? source.nav_items : base.nav_items,
+    stats: Array.isArray(source.stats) ? source.stats : base.stats,
+    terminal_lines: Array.isArray(source.terminal_lines) ? source.terminal_lines : base.terminal_lines,
+    features: Array.isArray(source.features) ? source.features : base.features,
+    models: Array.isArray(source.models) ? source.models : base.models,
+    pricing_items: Array.isArray(source.pricing_items) ? source.pricing_items : base.pricing_items,
+    info_items: Array.isArray(source.info_items) ? source.info_items : base.info_items
+  }
+}
+
+function nonEmptyStrings(config: HomeConfig): Partial<ResolvedHomeConfig> {
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      result[key] = value
+    }
+  }
+  return result as Partial<ResolvedHomeConfig>
+}
+
+function visibleItems<T extends { visible?: boolean }>(items: T[]): T[] {
+  return items.filter((item) => item.visible !== false)
+}
+
+function resolveIcon(icon?: string): HomeIconName {
+  const allowed: HomeIconName[] = ['server', 'shield', 'chart', 'database', 'bolt', 'key', 'globe', 'terminal', 'cloud', 'cpu', 'calculator', 'brain']
+  return allowed.includes(icon as HomeIconName) ? icon as HomeIconName : 'server'
+}
+
+function isInternalURL(url: string): boolean {
+  return url.startsWith('/') || url.startsWith('#')
+}
+
+function linkTarget(url: string): string | undefined {
+  return url && !isInternalURL(url) ? '_blank' : undefined
+}
+
+function linkRel(url: string): string | undefined {
+  return url && !isInternalURL(url) ? 'noopener noreferrer' : undefined
+}
+
+function handleHomeLink(event: MouseEvent, url: string) {
+  if (!url) return
+  if (url.startsWith('#')) {
+    event.preventDefault()
+    const target = document.querySelector(url)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  if (url.startsWith('/')) {
+    event.preventDefault()
+    router.push(url)
+  }
+}
+
 function toggleTheme() {
   isDark.value = !isDark.value
   document.documentElement.classList.toggle('dark', isDark.value)
   localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
 }
 
-// Initialize theme
 function initTheme() {
   const savedTheme = localStorage.getItem('theme')
   if (
@@ -469,11 +509,7 @@ function initTheme() {
 
 onMounted(() => {
   initTheme()
-
-  // Check auth state
   authStore.checkAuth()
-
-  // Ensure public settings are loaded (will use cache if already loaded from injected config)
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }
@@ -481,164 +517,42 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Terminal Container */
-.terminal-container {
-  position: relative;
-  display: inline-block;
+.home-shell {
+  background:
+    linear-gradient(rgba(34, 211, 238, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.045) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(8, 47, 73, 0.38), rgba(2, 6, 23, 0.2) 42rem),
+    #020617;
+  background-size: 56px 56px, 56px 56px, auto, auto;
 }
 
-/* Terminal Window */
-.terminal-window {
-  width: 420px;
-  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
-  border-radius: 14px;
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-  transform: perspective(1000px) rotateX(2deg) rotateY(-2deg);
-  transition: transform 0.3s ease;
-}
-
-.terminal-window:hover {
-  transform: perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(-4px);
-}
-
-/* Terminal Header */
-.terminal-header {
-  display: flex;
+.home-icon-button {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
   align-items: center;
-  padding: 12px 16px;
-  background: rgba(30, 41, 59, 0.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: rgb(203 213 225);
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
-.terminal-buttons {
-  display: flex;
-  gap: 8px;
+.home-icon-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
 }
 
-.terminal-buttons span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+.home-terminal {
+  transform: perspective(1200px) rotateX(1deg) rotateY(-2deg);
 }
 
-.btn-close {
-  background: #ef4444;
-}
-.btn-minimize {
-  background: #eab308;
-}
-.btn-maximize {
-  background: #22c55e;
+.home-terminal-line {
+  overflow-wrap: anywhere;
 }
 
-.terminal-title {
-  flex: 1;
-  text-align: center;
-  font-size: 12px;
-  font-family: ui-monospace, monospace;
-  color: #64748b;
-  margin-right: 52px;
-}
-
-/* Terminal Body */
-.terminal-body {
-  padding: 20px 24px;
-  font-family: ui-monospace, 'Fira Code', monospace;
-  font-size: 14px;
-  line-height: 2;
-}
-
-.code-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  opacity: 0;
-  animation: line-appear 0.5s ease forwards;
-}
-
-.line-1 {
-  animation-delay: 0.3s;
-}
-.line-2 {
-  animation-delay: 1s;
-}
-.line-3 {
-  animation-delay: 1.8s;
-}
-.line-4 {
-  animation-delay: 2.5s;
-}
-
-@keyframes line-appear {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
+@media (max-width: 1023px) {
+  .home-terminal {
+    transform: none;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.code-prompt {
-  color: #22c55e;
-  font-weight: bold;
-}
-.code-cmd {
-  color: #38bdf8;
-}
-.code-flag {
-  color: #a78bfa;
-}
-.code-url {
-  color: #14b8a6;
-}
-.code-comment {
-  color: #64748b;
-  font-style: italic;
-}
-.code-success {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.15);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-.code-response {
-  color: #fbbf24;
-}
-
-/* Blinking Cursor */
-.cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background: #22c55e;
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  51%,
-  100% {
-    opacity: 0;
-  }
-}
-
-/* Dark mode adjustments */
-:deep(.dark) .terminal-window {
-  box-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(20, 184, 166, 0.2),
-    0 0 40px rgba(20, 184, 166, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 </style>

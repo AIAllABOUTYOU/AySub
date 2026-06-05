@@ -7,6 +7,7 @@ import { apiClient } from "../client";
 import type {
   CustomEndpoint,
   CustomMenuItem,
+  HomeConfig,
   LoginAgreementDocument,
   NotifyEmailEntry,
 } from "@/types";
@@ -434,6 +435,7 @@ export interface SystemSettings {
   contact_info: string;
   doc_url: string;
   home_content: string;
+  home_config?: HomeConfig | null;
   hide_ccs_import_button: boolean;
   checkin_enabled: boolean;
   checkin_reward_amount: number;
@@ -699,6 +701,7 @@ export interface UpdateSettingsRequest {
   contact_info?: string;
   doc_url?: string;
   home_content?: string;
+  home_config?: HomeConfig | null;
   hide_ccs_import_button?: boolean;
   checkin_enabled?: boolean;
   checkin_reward_amount?: number;

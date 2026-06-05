@@ -154,6 +154,9 @@ func (s *OpenAIGatewayService) ForwardGrokAnthropicMessages(ctx context.Context,
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	resp = s.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "messages", func() (*http.Request, error) {
+		return s.buildGrokWebChatRequest(ctx, account, upstreamBody)
+	})
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
@@ -260,6 +263,9 @@ func (s *OpenAIGatewayService) ForwardGrokChatCompletions(ctx context.Context, c
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	resp = s.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "chat_completions", func() (*http.Request, error) {
+		return s.buildGrokWebChatRequest(ctx, account, upstreamBody)
+	})
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
@@ -372,6 +378,9 @@ func (s *OpenAIGatewayService) ForwardGrokResponses(ctx context.Context, c *gin.
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	resp = s.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "responses", func() (*http.Request, error) {
+		return s.buildGrokWebChatRequest(ctx, account, upstreamBody)
+	})
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
@@ -469,6 +478,9 @@ func (s *OpenAIGatewayService) ForwardGrokImages(ctx context.Context, c *gin.Con
 		return nil, fmt.Errorf("grok images upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	resp = s.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "images", func() (*http.Request, error) {
+		return s.buildGrokWebChatRequest(ctx, account, upstreamBody)
+	})
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))

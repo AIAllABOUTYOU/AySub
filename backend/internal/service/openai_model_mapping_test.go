@@ -279,6 +279,18 @@ func TestNormalizeOpenAIModelForUpstream(t *testing.T) {
 			model:   "gpt-4.1",
 			want:    "gpt-4.1",
 		},
+		{
+			name:    "xai cookie normalizes grok 4.2 fast alias",
+			account: &Account{Platform: PlatformXAI, Type: AccountTypeCookie},
+			model:   "grok-4.2-fast",
+			want:    "grok-4.20-fast",
+		},
+		{
+			name:    "xai apikey preserves grok 4.2 custom model",
+			account: &Account{Platform: PlatformXAI, Type: AccountTypeAPIKey},
+			model:   "grok-4.2-fast",
+			want:    "grok-4.2-fast",
+		},
 	}
 
 	for _, tt := range tests {

@@ -186,6 +186,81 @@ export interface LoginAgreementDocument {
   content_md: string
 }
 
+export interface HomeNavItem {
+  label: string
+  url: string
+  visible?: boolean
+}
+
+export interface HomeStatItem {
+  value: string
+  label: string
+  visible?: boolean
+}
+
+export interface HomeFeatureItem {
+  title: string
+  description: string
+  icon?: string
+  tag?: string
+  visible?: boolean
+}
+
+export interface HomeModelItem {
+  name: string
+  provider: string
+  description?: string
+  price?: string
+  status?: string
+  visible?: boolean
+}
+
+export interface HomePricingItem {
+  name: string
+  price: string
+  unit?: string
+  description?: string
+  features?: string[]
+  cta_label?: string
+  cta_url?: string
+  highlighted?: boolean
+  visible?: boolean
+}
+
+export interface HomeInfoItem {
+  label: string
+  value: string
+  description?: string
+  visible?: boolean
+}
+
+export interface HomeConfig {
+  nav_items?: HomeNavItem[]
+  hero_badge?: string
+  hero_title?: string
+  hero_highlight?: string
+  hero_description?: string
+  primary_cta_label?: string
+  primary_cta_url?: string
+  secondary_cta_label?: string
+  secondary_cta_url?: string
+  stats?: HomeStatItem[]
+  terminal_title?: string
+  terminal_lines?: string[]
+  features_title?: string
+  features_description?: string
+  features?: HomeFeatureItem[]
+  models_title?: string
+  models_description?: string
+  models?: HomeModelItem[]
+  pricing_title?: string
+  pricing_description?: string
+  pricing_items?: HomePricingItem[]
+  info_title?: string
+  info_description?: string
+  info_items?: HomeInfoItem[]
+}
+
 export interface PublicSettings {
   registration_enabled: boolean
   email_verify_enabled: boolean
@@ -209,6 +284,7 @@ export interface PublicSettings {
   contact_info: string
   doc_url: string
   home_content: string
+  home_config?: HomeConfig | null
   hide_ccs_import_button: boolean
   checkin_enabled: boolean
   checkin_reward_amount: number

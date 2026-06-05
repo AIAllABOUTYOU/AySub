@@ -718,6 +718,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyContactInfo,
 		SettingKeyDocURL,
 		SettingKeyHomeContent,
+		SettingKeyHomeConfig,
 		SettingKeyHideCcsImportButton,
 		SettingKeyPurchaseSubscriptionEnabled,
 		SettingKeyPurchaseSubscriptionURL,
@@ -845,6 +846,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ContactInfo:                              settings[SettingKeyContactInfo],
 		DocURL:                                   settings[SettingKeyDocURL],
 		HomeContent:                              settings[SettingKeyHomeContent],
+		HomeConfig:                               settings[SettingKeyHomeConfig],
 		HideCcsImportButton:                      settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:              settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
 		PurchaseSubscriptionURL:                  strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
@@ -1189,6 +1191,7 @@ type PublicSettingsInjectionPayload struct {
 	ContactInfo                              string                   `json:"contact_info"`
 	DocURL                                   string                   `json:"doc_url"`
 	HomeContent                              string                   `json:"home_content"`
+	HomeConfig                               json.RawMessage          `json:"home_config"`
 	HideCcsImportButton                      bool                     `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled              bool                     `json:"purchase_subscription_enabled"`
 	PurchaseSubscriptionURL                  string                   `json:"purchase_subscription_url"`
@@ -1257,6 +1260,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ContactInfo:                              settings.ContactInfo,
 		DocURL:                                   settings.DocURL,
 		HomeContent:                              settings.HomeContent,
+		HomeConfig:                               safeRawJSONObject(settings.HomeConfig),
 		HideCcsImportButton:                      settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:              settings.PurchaseSubscriptionEnabled,
 		PurchaseSubscriptionURL:                  settings.PurchaseSubscriptionURL,
@@ -1488,6 +1492,22 @@ func safeRawJSONArray(raw string) json.RawMessage {
 		return json.RawMessage(raw)
 	}
 	return json.RawMessage("[]")
+}
+
+// safeRawJSONObject returns raw as json.RawMessage if it's a valid JSON object, otherwise "{}".
+func safeRawJSONObject(raw string) json.RawMessage {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return json.RawMessage("{}")
+	}
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return json.RawMessage("{}")
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(raw)
 }
 
 // GetFrameSrcOrigins returns deduplicated http(s) origins from home_content URL,
@@ -1865,6 +1885,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyContactInfo] = settings.ContactInfo
 	updates[SettingKeyDocURL] = settings.DocURL
 	updates[SettingKeyHomeContent] = settings.HomeContent
+	updates[SettingKeyHomeConfig] = string(safeRawJSONObject(settings.HomeConfig))
 	updates[SettingKeyHideCcsImportButton] = strconv.FormatBool(settings.HideCcsImportButton)
 	updates[SettingKeyPurchaseSubscriptionEnabled] = strconv.FormatBool(settings.PurchaseSubscriptionEnabled)
 	updates[SettingKeyPurchaseSubscriptionURL] = strings.TrimSpace(settings.PurchaseSubscriptionURL)
@@ -2772,6 +2793,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAPIKeyACLTrustForwardedIP:                 "false",
 		SettingKeySiteName:                                  "AySub",
 		SettingKeySiteLogo:                                  "",
+		SettingKeyHomeConfig:                                "{}",
 		SettingKeyPurchaseSubscriptionEnabled:               "false",
 		SettingKeyPurchaseSubscriptionURL:                   "",
 		SettingKeyTableDefaultPageSize:                      "20",
@@ -2977,6 +2999,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		ContactInfo:                              settings[SettingKeyContactInfo],
 		DocURL:                                   settings[SettingKeyDocURL],
 		HomeContent:                              settings[SettingKeyHomeContent],
+		HomeConfig:                               settings[SettingKeyHomeConfig],
 		HideCcsImportButton:                      settings[SettingKeyHideCcsImportButton] == "true",
 		PurchaseSubscriptionEnabled:              settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
 		PurchaseSubscriptionURL:                  strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),

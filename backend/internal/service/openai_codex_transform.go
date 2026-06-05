@@ -837,6 +837,9 @@ func normalizeOpenAIModelForUpstream(account *Account, model string) string {
 	if account == nil || account.Type == AccountTypeOAuth {
 		return normalizeCodexModel(model)
 	}
+	if account.IsXAICookie() {
+		return normalizeGrokCookieModelAlias(model)
+	}
 	return strings.TrimSpace(model)
 }
 

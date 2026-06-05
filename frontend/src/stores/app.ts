@@ -335,6 +335,7 @@ export const useAppStore = defineStore('app', () => {
         contact_info: contactInfo.value,
         doc_url: docUrl.value,
         home_content: '',
+        home_config: null,
         hide_ccs_import_button: false,
         checkin_enabled: false,
         checkin_reward_amount: 0,

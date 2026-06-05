@@ -136,6 +136,7 @@ type SystemSettings struct {
 	ContactInfo                 string           `json:"contact_info"`
 	DocURL                      string           `json:"doc_url"`
 	HomeContent                 string           `json:"home_content"`
+	HomeConfig                  json.RawMessage  `json:"home_config"`
 	HideCcsImportButton         bool             `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled bool             `json:"purchase_subscription_enabled"`
 	PurchaseSubscriptionURL     string           `json:"purchase_subscription_url"`
@@ -295,6 +296,7 @@ type PublicSettings struct {
 	ContactInfo                              string                   `json:"contact_info"`
 	DocURL                                   string                   `json:"doc_url"`
 	HomeContent                              string                   `json:"home_content"`
+	HomeConfig                               json.RawMessage          `json:"home_config"`
 	HideCcsImportButton                      bool                     `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled              bool                     `json:"purchase_subscription_enabled"`
 	PurchaseSubscriptionURL                  string                   `json:"purchase_subscription_url"`
@@ -498,4 +500,20 @@ func ParseCustomEndpoints(raw string) []CustomEndpoint {
 		return []CustomEndpoint{}
 	}
 	return items
+}
+
+// ParseRawJSONObject returns raw as JSON object payload, or "{}" for empty/invalid input.
+func ParseRawJSONObject(raw string) json.RawMessage {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return json.RawMessage("{}")
+	}
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return json.RawMessage("{}")
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(raw)
 }

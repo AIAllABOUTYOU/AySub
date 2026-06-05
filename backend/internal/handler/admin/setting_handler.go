@@ -220,6 +220,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ContactInfo:                              settings.ContactInfo,
 		DocURL:                                   settings.DocURL,
 		HomeContent:                              settings.HomeContent,
+		HomeConfig:                               dto.ParseRawJSONObject(settings.HomeConfig),
 		HideCcsImportButton:                      settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:              settings.PurchaseSubscriptionEnabled,
 		PurchaseSubscriptionURL:                  settings.PurchaseSubscriptionURL,
@@ -508,6 +509,7 @@ type UpdateSettingsRequest struct {
 	ContactInfo                 string                `json:"contact_info"`
 	DocURL                      string                `json:"doc_url"`
 	HomeContent                 string                `json:"home_content"`
+	HomeConfig                  json.RawMessage       `json:"home_config"`
 	HideCcsImportButton         bool                  `json:"hide_ccs_import_button"`
 	PurchaseSubscriptionEnabled *bool                 `json:"purchase_subscription_enabled"`
 	PurchaseSubscriptionURL     *string               `json:"purchase_subscription_url"`
@@ -1419,6 +1421,26 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		customEndpointsJSON = string(endpointBytes)
 	}
 
+	homeConfigJSON := previousSettings.HomeConfig
+	if len(req.HomeConfig) > 0 {
+		const maxHomeConfigLen = 128 * 1024
+		if len(req.HomeConfig) > maxHomeConfigLen {
+			response.BadRequest(c, "Home config is too large (max 128KB)")
+			return
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(req.HomeConfig, &raw); err != nil {
+			response.BadRequest(c, "Home config must be a valid JSON object")
+			return
+		}
+		normalized, err := json.Marshal(raw)
+		if err != nil {
+			response.BadRequest(c, "Failed to serialize home config")
+			return
+		}
+		homeConfigJSON = string(normalized)
+	}
+
 	// Ops metrics collector interval validation (seconds).
 	if req.OpsMetricsIntervalSeconds != nil {
 		v := *req.OpsMetricsIntervalSeconds
@@ -1588,6 +1610,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ContactInfo:                            req.ContactInfo,
 		DocURL:                                 req.DocURL,
 		HomeContent:                            req.HomeContent,
+		HomeConfig:                             homeConfigJSON,
 		HideCcsImportButton:                    req.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:            purchaseEnabled,
 		PurchaseSubscriptionURL:                purchaseURL,
@@ -2066,6 +2089,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ContactInfo:                              updatedSettings.ContactInfo,
 		DocURL:                                   updatedSettings.DocURL,
 		HomeContent:                              updatedSettings.HomeContent,
+		HomeConfig:                               dto.ParseRawJSONObject(updatedSettings.HomeConfig),
 		HideCcsImportButton:                      updatedSettings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:              updatedSettings.PurchaseSubscriptionEnabled,
 		PurchaseSubscriptionURL:                  updatedSettings.PurchaseSubscriptionURL,
@@ -2478,6 +2502,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.HomeContent != after.HomeContent {
 		changed = append(changed, "home_content")
+	}
+	if before.HomeConfig != after.HomeConfig {
+		changed = append(changed, "home_config")
 	}
 	if before.HideCcsImportButton != after.HideCcsImportButton {
 		changed = append(changed, "hide_ccs_import_button")

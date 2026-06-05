@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -353,6 +354,123 @@ func TestForwardGrokChatCompletionsNonStreaming(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "Hello world", gjson.Get(rec.Body.String(), "choices.0.message.content").String())
 	require.Equal(t, "thinking", gjson.Get(rec.Body.String(), "choices.0.message.reasoning_content").String())
+}
+
+func TestForwardGrokChatCompletionsNormalizesGrok42Alias(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamBody := strings.Join([]string{
+		`data: {"result":{"response":{"token":"Hello","messageTag":"final"}}}`,
+		`data: {"result":{"response":{"isSoftStop":true}}}`,
+		``,
+	}, "\n\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"X-Request-Id": []string{"grok-alias-1"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+
+	account := &Account{
+		ID:       99,
+		Name:     "grok-cookie",
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+		Credentials: map[string]any{
+			"base_url":  "https://grok.example",
+			"sso_token": "tok",
+		},
+		Concurrency: 1,
+	}
+	body := []byte(`{"model":"grok-4.2-fast","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+
+	result, err := svc.ForwardGrokChatCompletions(c.Request.Context(), c, account, body, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "grok-4.2-fast", result.Model)
+	require.Equal(t, "grok-4.2-fast", result.BillingModel)
+	require.Equal(t, "grok-4.20-fast", result.UpstreamModel)
+	require.Equal(t, "fast", gjson.GetBytes(upstream.lastBody, "modeId").String())
+}
+
+func TestForwardGrokChatCompletionsRefreshesCloudflareClearance(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var solverPayload struct {
+		Cmd   string `json:"cmd"`
+		URL   string `json:"url"`
+		Proxy struct {
+			URL string `json:"url"`
+		} `json:"proxy"`
+	}
+	solver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1", r.URL.Path)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&solverPayload))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok","solution":{"userAgent":"Mozilla/5.0 Solver","cookies":[{"name":"cf_clearance","value":"cf-new","domain":".grok.example"},{"name":"other","value":"1","domain":".grok.example"}]}}`)
+	}))
+	defer solver.Close()
+
+	upstreamBody := strings.Join([]string{
+		`data: {"result":{"response":{"token":"Solved","messageTag":"final"}}}`,
+		`data: {"result":{"response":{"isSoftStop":true}}}`,
+		``,
+	}, "\n\n")
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusForbidden,
+			Header:     http.Header{"Cf-Mitigated": []string{"challenge"}},
+			Body:       io.NopCloser(strings.NewReader(`<!doctype html><title>Just a moment...</title>`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"X-Request-Id": []string{"grok-cf-2"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+		},
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream: upstream,
+		cfg: &config.Config{Grok: config.GrokConfig{
+			FlareSolverrURL:            solver.URL,
+			FlareSolverrTimeoutSeconds: 2,
+		}},
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+
+	account := &Account{
+		ID:       99,
+		Name:     "grok-cookie",
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+		Credentials: map[string]any{
+			"base_url":  "https://grok.example/rest",
+			"sso_token": "tok",
+		},
+		Proxy:       &Proxy{Protocol: "socks5", Host: "warp", Port: 1080, Status: StatusActive},
+		Concurrency: 1,
+	}
+	body := []byte(`{"model":"grok-4.20-auto","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+
+	result, err := svc.ForwardGrokChatCompletions(c.Request.Context(), c, account, body, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, "request.get", solverPayload.Cmd)
+	require.Equal(t, "https://grok.example", solverPayload.URL)
+	require.Equal(t, "socks5://warp:1080", solverPayload.Proxy.URL)
+	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "cf_clearance=cf-new")
+	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "other=1")
+	require.Equal(t, "Mozilla/5.0 Solver", upstream.requests[1].Header.Get("User-Agent"))
+	require.Equal(t, "cf-new", account.GetCredential("cf_clearance"))
+	require.Equal(t, "Solved", gjson.Get(rec.Body.String(), "choices.0.message.content").String())
 }
 
 func TestForwardGrokChatCompletionsUploadsDataURIFileAttachments(t *testing.T) {

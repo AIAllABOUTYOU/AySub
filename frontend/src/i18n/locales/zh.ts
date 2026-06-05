@@ -10,6 +10,31 @@ export default {
     login: '登录',
     getStarted: '立即开始',
     goToDashboard: '进入控制台',
+    nav: {
+      home: '首页',
+      features: '功能',
+      models: '模型',
+      pricing: '价格',
+      info: '资料'
+    },
+    hero: {
+      badge: '稳定运行中',
+      title: 'AI 能力',
+      highlight: '一站接入',
+      description: '聚合 Claude、GPT、Gemini、Grok 等主流大模型，统一 API 接口，按量计费，智能调度账号与渠道。',
+      secondaryCta: '了解能力'
+    },
+    stats: {
+      models: '可配置模型',
+      availability: '目标可用性',
+      routing: '调度响应'
+    },
+    sections: {
+      capabilities: '核心能力',
+      models: '模型支持',
+      pricing: '模型价格',
+      info: '资料信息'
+    },
     // 新增：面向用户的价值主张
     heroSubtitle: '一个密钥，畅用多个 AI 模型',
     heroDescription: '无需管理多个订阅账号，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
@@ -51,7 +76,74 @@ export default {
       multiAccount: '稳定可靠',
       multiAccountDesc: '智能调度多个上游账号，自动切换和负载均衡，告别频繁报错。',
       balanceQuota: '用多少付多少',
-      balanceQuotaDesc: '按实际使用量计费，支持设置配额上限，团队用量一目了然。'
+      balanceQuotaDesc: '按实际使用量计费，支持设置配额上限，团队用量一目了然。',
+      keyAcl: 'Key 级权限',
+      keyAclDesc: '按 API Key 控制模型、端点、额度和限流，拒绝请求由后端统一执行。',
+      logs: '请求日志',
+      logsDesc: '成功、失败、成本、渠道、耗时和错误摘要统一记录，方便排查和报表统计。',
+      compatible: '协议兼容',
+      compatibleDesc: '兼容 OpenAI 风格接口，同时保留 Claude、Gemini、Grok 等入口能力。'
+    },
+    featuresSection: {
+      title: '把多模型接入、账号调度和用量管理放到一个入口',
+      description: '默认首页展示的是 AySub 当前已经落地的网关、权限、日志、模型和计费能力。'
+    },
+    modelsSection: {
+      title: '统一展示可用模型和计费口径',
+      description: '管理员可以在首页配置里维护展示模型、供应商、说明和价格文字，不影响真实网关定价。',
+      claude: '长上下文、代码和复杂推理场景。',
+      gpt: 'OpenAI-compatible 对话、工具调用和多模态入口。',
+      gemini: 'Google Gemini 与 Code Assist 相关能力。',
+      grok: 'xAI / Grok Web、Console 与媒体任务入口。',
+      payAsYouGo: '按量计费'
+    },
+    pricingSection: {
+      title: '按模型和套餐清楚展示价格',
+      description: '这里是首页展示价格，可由后台自定义；真实扣费仍以渠道、分组和模型定价为准。',
+      starter: {
+        name: '个人使用',
+        price: '按量',
+        unit: '无固定月费',
+        description: '适合个人或小工具接入。'
+      },
+      team: {
+        name: '团队协作',
+        price: '配额',
+        unit: '可控预算',
+        description: '适合多成员共用 Key、分组和报表。'
+      },
+      custom: {
+        name: '专属部署',
+        price: '定制',
+        description: '适合需要私有化、代理、审计和专属渠道策略的场景。',
+        cta: '查看文档'
+      },
+      features: {
+        unifiedKey: '统一 API Key',
+        usageLogs: '请求日志和用量查询',
+        modelSwitch: '多模型切换',
+        quota: '额度和限流控制',
+        permissions: '模型与端点权限',
+        reports: '运营报表',
+        privateDeploy: '私有化部署',
+        channelPolicy: '渠道策略配置',
+        audit: '安全审计'
+      }
+    },
+    infoSection: {
+      title: '公开资料可以直接在后台维护',
+      description: '首页底部适合放 API 地址、客服、计费说明、安全承诺或业务联系信息。',
+      apiEndpoint: 'API 地址',
+      apiEndpointDesc: '用户复制 Key 后调用的基础地址。',
+      billing: '计费方式',
+      billingValue: '按量扣费',
+      billingDesc: '最终以后台模型、分组和渠道定价为准。',
+      security: '安全边界',
+      securityValue: '后端校验',
+      securityDesc: '权限拒绝、内容审核和风控事件不依赖前端隐藏。',
+      contact: '联系信息',
+      contactValue: '后台未配置',
+      contactDesc: '可在首页配置模块中填写客服或商务联系。'
     },
     // 优势对比
     comparison: {
@@ -376,6 +468,7 @@ export default {
     redeemCodes: '兑换码',
     ops: '运维监控',
     promoCodes: '优惠码',
+    homeConfig: '首页配置',
     settings: '系统设置',
     myAccount: '我的账户',
     lightMode: '浅色模式',
@@ -1774,6 +1867,90 @@ export default {
 
   // Admin
   admin: {
+    homeConfig: {
+      title: '首页配置',
+      description: '配置 /home 默认首页的导航、Hero、模型展示、价格和资料信息。home_content 有内容时会整页覆盖默认首页。',
+      preview: '预览首页',
+      loadFailed: '加载首页配置失败',
+      saveSuccess: '首页配置已保存',
+      saveFailed: '保存首页配置失败',
+      basic: {
+        title: '站点与覆盖内容',
+        description: '这些字段同时用于登录页、侧边栏和公开页面。',
+        siteName: '站点名称',
+        subtitle: '副标题',
+        docUrl: '文档地址',
+        apiBaseUrl: 'API 基础地址',
+        contactInfo: '联系信息',
+        homeContent: '整页覆盖内容',
+        homeContentPlaceholder: '可填写完整 HTML，或填写 http(s) URL 作为 iframe 地址。留空则使用下方结构化首页。',
+        homeContentHint: '只要这里非空，/home 会优先展示该内容，下方结构化配置不会显示。'
+      },
+      nav: {
+        title: '导航栏',
+        description: '支持页内锚点、站内路径或外部链接。',
+        newItem: '新导航'
+      },
+      hero: {
+        title: '首屏 Hero',
+        description: '配置首页第一屏的主标题、按钮和终端演示内容。',
+        badge: '状态标签',
+        terminalTitle: '终端标题',
+        mainTitle: '主标题',
+        highlight: '强调标题',
+        copy: '说明文案',
+        primaryCta: '主按钮文字',
+        primaryUrl: '主按钮链接',
+        secondaryCta: '次按钮文字',
+        secondaryUrl: '次按钮链接',
+        terminalLines: '终端行（每行一条）'
+      },
+      stats: {
+        title: '统计数据',
+        description: '展示在首屏按钮下方。',
+        newItem: '统计项'
+      },
+      info: {
+        title: '资料信息',
+        description: '展示 API 地址、计费、安全、联系等公开信息。',
+        newItem: '资料项'
+      },
+      features: {
+        title: '核心能力',
+        description: '首页的功能卡片。',
+        newItem: '新能力'
+      },
+      models: {
+        title: '模型展示',
+        description: '展示模型名称、供应商、说明和首页价格文案。',
+        newItem: '新模型',
+        provider: '供应商',
+        price: '价格文案',
+        status: '状态'
+      },
+      pricing: {
+        title: '价格卡片',
+        description: '展示套餐、模型价格或接入方式。真实扣费仍以后台模型定价为准。',
+        newItem: '新价格',
+        price: '价格',
+        unit: '单位',
+        features: '权益（每行一条）',
+        ctaLabel: '按钮文字',
+        ctaUrl: '按钮链接',
+        highlighted: '高亮'
+      },
+      fields: {
+        label: '标签',
+        value: '数值',
+        url: '链接',
+        visible: '显示',
+        title: '标题',
+        icon: '图标',
+        tag: '标签',
+        description: '描述',
+        name: '名称'
+      }
+    },
     // Dashboard
     dashboard: {
       title: '管理控制台',

@@ -91,6 +91,7 @@ type Config struct {
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
+	Grok                    GrokConfig                    `mapstructure:"grok"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 }
@@ -130,6 +131,11 @@ type LogSamplingConfig struct {
 type GeminiConfig struct {
 	OAuth GeminiOAuthConfig `mapstructure:"oauth"`
 	Quota GeminiQuotaConfig `mapstructure:"quota"`
+}
+
+type GrokConfig struct {
+	FlareSolverrURL            string `mapstructure:"flaresolverr_url"`
+	FlareSolverrTimeoutSeconds int    `mapstructure:"flaresolverr_timeout_seconds"`
 }
 
 type GeminiOAuthConfig struct {
@@ -1603,6 +1609,10 @@ func setDefaults() {
 	viper.SetDefault("linuxdo_connect.scopes", "user")
 	viper.SetDefault("linuxdo_connect.redirect_url", "")
 	viper.SetDefault("linuxdo_connect.frontend_redirect_url", "/auth/linuxdo/callback")
+
+	// Grok Web reverse proxy helpers.
+	viper.SetDefault("grok.flaresolverr_url", "")
+	viper.SetDefault("grok.flaresolverr_timeout_seconds", 60)
 	viper.SetDefault("linuxdo_connect.token_auth_method", "client_secret_post")
 	viper.SetDefault("linuxdo_connect.use_pkce", false)
 	viper.SetDefault("linuxdo_connect.userinfo_email_path", "")

@@ -102,6 +102,37 @@ docker compose -f docker-compose.standalone.yml up -d --build
 docker compose -f docker-compose.standalone.yml logs -f aysub
 ```
 
+## Optional Grok WARP / FlareSolverr Stack
+
+`deploy/docker-compose.proxy-profiles.yml` provides optional proxy services for Grok Cookie accounts:
+
+- `warp`: SOCKS5 egress proxy at `socks5://warp:1080` inside the Compose network.
+- `flaresolverr`: Cloudflare clearance helper at `http://flaresolverr:8191` inside the Compose network.
+- `privoxy`: optional HTTP proxy helper at `http://privoxy:8118`.
+
+Enable FlareSolverr for automatic Cloudflare clearance refresh:
+
+```bash
+cd deploy
+GROK_FLARESOLVERR_URL=http://flaresolverr:8191 \
+docker compose -f docker-compose.image.yml -f docker-compose.proxy-profiles.yml --profile flaresolverr up -d
+```
+
+Enable WARP and bind it to a Grok Cookie account:
+
+```bash
+cd deploy
+docker compose -f docker-compose.image.yml -f docker-compose.proxy-profiles.yml --profile warp up -d
+```
+
+Then create an active proxy in the admin proxy page:
+
+```text
+socks5://warp:1080
+```
+
+Bind that proxy to the Grok Cookie account. When both WARP and FlareSolverr are enabled, AySub passes the account proxy to FlareSolverr so the clearance cookie is solved from the same egress path used by the Grok request.
+
 ## Defaults
 
 | Item | Default |

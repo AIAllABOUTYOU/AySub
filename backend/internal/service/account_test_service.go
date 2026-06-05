@@ -21,7 +21,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -54,6 +53,8 @@ const (
 	defaultGeminiTextTestPrompt  = "hi"
 	defaultGeminiImageTestPrompt = "Generate a cute orange cat astronaut sticker on a clean pastel background."
 	defaultOpenAIImageTestPrompt = "Generate a cute orange cat astronaut sticker on a clean pastel background."
+	defaultXAITextTestPrompt     = "hi"
+	defaultXAITestModel          = "grok-4.20-auto"
 )
 
 // isOpenAIImageModel checks if the model is an OpenAI image generation model (e.g. gpt-image-2).
@@ -180,7 +181,11 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	// Route to platform-specific test method
-	if account.IsOpenAI() {
+	if account.IsXAICookie() {
+		return s.testXAICookieAccountConnection(c, account, modelID, prompt)
+	}
+
+	if account.IsOpenAICompatible() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
 
@@ -554,7 +559,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
-		if !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		if !shouldUseResponsesAPIForAccount(account) {
 			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}
 		apiURL = buildOpenAIResponsesURL(normalizedBaseURL)
@@ -629,6 +634,72 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// Process SSE stream
 	return s.processOpenAIStream(c, resp.Body)
+}
+
+// testXAICookieAccountConnection tests a Grok Web cookie account through the
+// same reverse path used by xAI cookie chat completions.
+func (s *AccountTestService) testXAICookieAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+	ctx := c.Request.Context()
+
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = defaultXAITestModel
+	}
+	testModelID = account.GetMappedModel(testModelID)
+
+	testPrompt := strings.TrimSpace(prompt)
+	if testPrompt == "" {
+		testPrompt = defaultXAITextTestPrompt
+	}
+
+	upstreamModel := normalizeOpenAIModelForUpstream(account, resolveOpenAIForwardModel(account, testModelID, ""))
+	payload, err := buildGrokWebChatPayload(account, upstreamModel, testPrompt, nil)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to create Grok request payload: %s", err.Error()))
+	}
+	req, err := (&OpenAIGatewayService{}).buildGrokWebChatRequest(ctx, account, payload)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to create Grok request: %s", err.Error()))
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+
+	if s.httpUpstream == nil {
+		return s.sendErrorAndEnd(c, "HTTP upstream is not configured")
+	}
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok request failed: %s", err.Error()))
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		message := strings.TrimSpace(extractUpstreamErrorMessage(body))
+		if message == "" {
+			message = strings.TrimSpace(string(body))
+		}
+		if message == "" {
+			message = http.StatusText(resp.StatusCode)
+		}
+		errMsg := fmt.Sprintf("Grok returned %d: %s", resp.StatusCode, message)
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+		}
+		return s.sendErrorAndEnd(c, errMsg)
+	}
+
+	return s.processGrokWebStream(c, resp.Body)
 }
 
 // testOpenAIChatCompletionsConnection tests an OpenAI-compatible APIKey account
@@ -1398,6 +1469,61 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 			}
 		}
 	}
+}
+
+func (s *AccountTestService) processGrokWebStream(c *gin.Context, body io.Reader) error {
+	adapter := newGrokWebStreamAdapter()
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	seenContent := false
+	seenDone := false
+
+	for scanner.Scan() {
+		events, done, err := adapter.FeedLine(scanner.Text())
+		if err != nil {
+			message := err.Error()
+			var failoverErr *UpstreamFailoverError
+			if errors.As(err, &failoverErr) {
+				if extracted := strings.TrimSpace(extractUpstreamErrorMessage(failoverErr.ResponseBody)); extracted != "" {
+					message = extracted
+				}
+			}
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Grok stream error: %s", message))
+		}
+		for _, ev := range events {
+			switch ev.Kind {
+			case "text":
+				if ev.Content == "" {
+					continue
+				}
+				seenContent = true
+				s.sendEvent(c, TestEvent{Type: "content", Text: ev.Content})
+			case "image":
+				if ev.Content == "" {
+					continue
+				}
+				seenContent = true
+				s.sendEvent(c, TestEvent{Type: "content", Text: "\n" + ev.Content})
+			}
+		}
+		if done {
+			seenDone = true
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok stream read error: %s", err.Error()))
+	}
+	if imageMarkdown := adapter.ImageMarkdownSuffix(); imageMarkdown != "" {
+		seenContent = true
+		s.sendEvent(c, TestEvent{Type: "content", Text: imageMarkdown})
+	}
+	if !seenContent && !seenDone {
+		return s.sendErrorAndEnd(c, "Invalid Grok response: expected stream content")
+	}
+	s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 Grok Web Cookie 验证"})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
 }
 
 // processOpenAIStream processes the SSE stream from OpenAI Responses API

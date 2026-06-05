@@ -1095,6 +1095,20 @@ gemini:
         cooldown_minutes: 5
 
 # =============================================================================
+# Grok Configuration
+# Grok 配置
+# =============================================================================
+grok:
+  # Optional FlareSolverr URL used to refresh Cloudflare clearance for Grok Cookie accounts.
+  # Grok Cookie 账号遇到 Cloudflare challenge 时用于刷新 clearance 的 FlareSolverr 地址。
+  # Docker proxy profile example: "http://flaresolverr:8191"
+  # Docker proxy profile 示例："http://flaresolverr:8191"
+  flaresolverr_url: ""
+  # FlareSolverr challenge timeout in seconds.
+  # FlareSolverr 解决挑战的超时时间（秒）。
+  flaresolverr_timeout_seconds: 60
+
+# =============================================================================
 # Update Configuration (在线更新配置)
 # =============================================================================
 update:

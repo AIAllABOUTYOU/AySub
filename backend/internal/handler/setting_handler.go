@@ -66,6 +66,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		ContactInfo:                              settings.ContactInfo,
 		DocURL:                                   settings.DocURL,
 		HomeContent:                              settings.HomeContent,
+		HomeConfig:                               dto.ParseRawJSONObject(settings.HomeConfig),
 		HideCcsImportButton:                      settings.HideCcsImportButton,
 		PurchaseSubscriptionEnabled:              settings.PurchaseSubscriptionEnabled,
 		PurchaseSubscriptionURL:                  settings.PurchaseSubscriptionURL,

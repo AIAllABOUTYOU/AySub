@@ -621,6 +621,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/home-config',
+    name: 'AdminHomeConfig',
+    component: () => import('@/views/admin/HomeConfigView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Home Page Configuration',
+      titleKey: 'admin.homeConfig.title',
+      descriptionKey: 'admin.homeConfig.description'
+    }
+  },
+  {
     path: '/admin/risk-control',
     name: 'AdminRiskControl',
     component: () => import('@/views/admin/RiskControlView.vue'),

@@ -10,6 +10,31 @@ export default {
     login: 'Login',
     getStarted: 'Get Started',
     goToDashboard: 'Go to Dashboard',
+    nav: {
+      home: 'Home',
+      features: 'Features',
+      models: 'Models',
+      pricing: 'Pricing',
+      info: 'Info'
+    },
+    hero: {
+      badge: 'Operational',
+      title: 'AI Access',
+      highlight: 'One Gateway',
+      description: 'Aggregate Claude, GPT, Gemini, Grok and other mainstream models behind one API, with usage-based billing and smart account routing.',
+      secondaryCta: 'Explore Features'
+    },
+    stats: {
+      models: 'Configurable models',
+      availability: 'Target availability',
+      routing: 'Routing latency'
+    },
+    sections: {
+      capabilities: 'Capabilities',
+      models: 'Models',
+      pricing: 'Pricing',
+      info: 'Information'
+    },
     // User-focused value proposition
     heroSubtitle: 'One Key, All AI Models',
     heroDescription: 'No need to manage multiple subscriptions. Access Claude, GPT, Gemini and more with a single API key',
@@ -51,7 +76,74 @@ export default {
       multiAccount: 'Always Reliable',
       multiAccountDesc: 'Smart routing across multiple upstream accounts with automatic failover. Say goodbye to errors.',
       balanceQuota: 'Pay What You Use',
-      balanceQuotaDesc: 'Usage-based billing with quota limits. Full visibility into team consumption.'
+      balanceQuotaDesc: 'Usage-based billing with quota limits. Full visibility into team consumption.',
+      keyAcl: 'Key-Level Permissions',
+      keyAclDesc: 'Restrict models, endpoints, quota and rate limits per API key. Denials are enforced by the backend.',
+      logs: 'Request Logs',
+      logsDesc: 'Track success, failure, cost, channel, latency and error summaries in one place.',
+      compatible: 'Protocol Compatible',
+      compatibleDesc: 'OpenAI-style APIs with Claude, Gemini, Grok and media endpoint coverage.'
+    },
+    featuresSection: {
+      title: 'One entry for model access, account routing and usage control',
+      description: 'The default home page reflects the gateway, permissions, logging, model and billing capabilities available in AySub.'
+    },
+    modelsSection: {
+      title: 'Show available models and pricing notes clearly',
+      description: 'Admins can edit displayed models, providers, descriptions and pricing text without changing real gateway billing rules.',
+      claude: 'Long-context, coding and complex reasoning workloads.',
+      gpt: 'OpenAI-compatible chat, tool calls and multimodal access.',
+      gemini: 'Google Gemini and Code Assist related access.',
+      grok: 'xAI / Grok Web, Console and media task access.',
+      payAsYouGo: 'Pay as you go'
+    },
+    pricingSection: {
+      title: 'Present model and plan pricing',
+      description: 'These are home-page display prices. Actual billing still follows backend model, group and channel pricing.',
+      starter: {
+        name: 'Personal',
+        price: 'Metered',
+        unit: 'no fixed monthly fee',
+        description: 'For individuals and small tools.'
+      },
+      team: {
+        name: 'Team',
+        price: 'Quota',
+        unit: 'controlled budget',
+        description: 'For shared keys, groups and reporting.'
+      },
+      custom: {
+        name: 'Dedicated',
+        price: 'Custom',
+        description: 'For private deployment, proxies, audit and dedicated channel policy.',
+        cta: 'View Docs'
+      },
+      features: {
+        unifiedKey: 'Unified API key',
+        usageLogs: 'Request logs and usage query',
+        modelSwitch: 'Multi-model switching',
+        quota: 'Quota and rate limits',
+        permissions: 'Model and endpoint permissions',
+        reports: 'Operational reports',
+        privateDeploy: 'Private deployment',
+        channelPolicy: 'Channel policy',
+        audit: 'Security audit'
+      }
+    },
+    infoSection: {
+      title: 'Public information managed from admin',
+      description: 'Use this area for API base URL, contact details, billing notes, security boundaries or business information.',
+      apiEndpoint: 'API Endpoint',
+      apiEndpointDesc: 'Base URL users call after creating a key.',
+      billing: 'Billing',
+      billingValue: 'Metered billing',
+      billingDesc: 'Final cost follows backend model, group and channel pricing.',
+      security: 'Security',
+      securityValue: 'Backend enforced',
+      securityDesc: 'Permission denial, moderation and risk events do not rely on frontend hiding.',
+      contact: 'Contact',
+      contactValue: 'Not configured',
+      contactDesc: 'Set support or business contact information in Home Config.'
     },
     // Comparison section
     comparison: {
@@ -376,6 +468,7 @@ export default {
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
     promoCodes: 'Promo Codes',
+    homeConfig: 'Home Config',
     settings: 'Settings',
     myAccount: 'My Account',
     lightMode: 'Light Mode',
@@ -1771,6 +1864,90 @@ export default {
 
   // Admin
   admin: {
+    homeConfig: {
+      title: 'Home Config',
+      description: 'Configure the default /home page navigation, hero, model display, pricing and public information. Non-empty home_content overrides the structured page.',
+      preview: 'Preview Home',
+      loadFailed: 'Failed to load home config',
+      saveSuccess: 'Home config saved',
+      saveFailed: 'Failed to save home config',
+      basic: {
+        title: 'Site and Override',
+        description: 'These fields are also used by login, sidebar and public pages.',
+        siteName: 'Site Name',
+        subtitle: 'Subtitle',
+        docUrl: 'Docs URL',
+        apiBaseUrl: 'API Base URL',
+        contactInfo: 'Contact Info',
+        homeContent: 'Full Page Override',
+        homeContentPlaceholder: 'Enter full HTML, or an http(s) URL to render in an iframe. Leave empty to use the structured home page below.',
+        homeContentHint: 'When this is non-empty, /home renders this content first and the structured page is hidden.'
+      },
+      nav: {
+        title: 'Navigation',
+        description: 'Supports page anchors, internal paths and external links.',
+        newItem: 'New nav'
+      },
+      hero: {
+        title: 'Hero',
+        description: 'Configure the first viewport title, buttons and terminal demo.',
+        badge: 'Status badge',
+        terminalTitle: 'Terminal title',
+        mainTitle: 'Main title',
+        highlight: 'Highlight title',
+        copy: 'Description',
+        primaryCta: 'Primary CTA',
+        primaryUrl: 'Primary URL',
+        secondaryCta: 'Secondary CTA',
+        secondaryUrl: 'Secondary URL',
+        terminalLines: 'Terminal lines'
+      },
+      stats: {
+        title: 'Stats',
+        description: 'Shown below the hero buttons.',
+        newItem: 'Stat'
+      },
+      info: {
+        title: 'Public Info',
+        description: 'Show API endpoint, billing, security, contact and other public details.',
+        newItem: 'Info item'
+      },
+      features: {
+        title: 'Capabilities',
+        description: 'Feature cards on the home page.',
+        newItem: 'New capability'
+      },
+      models: {
+        title: 'Model Display',
+        description: 'Show model name, provider, description and pricing text.',
+        newItem: 'New model',
+        provider: 'Provider',
+        price: 'Pricing text',
+        status: 'Status'
+      },
+      pricing: {
+        title: 'Pricing Cards',
+        description: 'Show plans, model prices or access options. Real billing still follows backend model pricing.',
+        newItem: 'New price',
+        price: 'Price',
+        unit: 'Unit',
+        features: 'Features',
+        ctaLabel: 'CTA label',
+        ctaUrl: 'CTA URL',
+        highlighted: 'Highlighted'
+      },
+      fields: {
+        label: 'Label',
+        value: 'Value',
+        url: 'URL',
+        visible: 'Visible',
+        title: 'Title',
+        icon: 'Icon',
+        tag: 'Tag',
+        description: 'Description',
+        name: 'Name'
+      }
+    },
     // Dashboard
     dashboard: {
       title: 'Admin Dashboard',
