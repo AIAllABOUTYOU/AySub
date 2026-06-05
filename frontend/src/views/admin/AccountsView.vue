@@ -443,7 +443,7 @@ import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRules
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
-import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
+import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, XaiSSOBasicToken } from '@/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -1544,6 +1544,20 @@ const downloadTextFile = (content: string, filename: string, type = 'text/plain'
   link.click()
   URL.revokeObjectURL(url)
 }
+const buildGrok2ApiSSOBasicExport = (tokens: string[], ssoBasic?: XaiSSOBasicToken[]) => {
+  const source = ssoBasic?.length
+    ? ssoBasic
+    : tokens.map((token) => ({ token, status: 'active' }))
+  return {
+    ssoBasic: source
+      .map((item) => ({
+        ...item,
+        token: item.token.trim(),
+        status: item.status || 'active'
+      }))
+      .filter((item) => item.token)
+  }
+}
 const openExportDataDialog = () => {
   includeProxyOnExport.value = true
   showExportDataDialog.value = true
@@ -1586,7 +1600,8 @@ const handleExportXaiCookieTokens = async () => {
       return
     }
     const timestamp = formatExportTimestamp()
-    downloadTextFile(result.tokens.join('\n'), `grok-tokens-${timestamp}.txt`)
+    const payload = buildGrok2ApiSSOBasicExport(result.tokens, result.ssoBasic)
+    downloadTextFile(JSON.stringify(payload, null, 2), `grok2api-sso-basic-${timestamp}.txt`, 'application/json')
     appStore.showSuccess(t('admin.accounts.xaiCookieTokenExported', { count: result.count }))
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.accounts.xaiCookieTokenExportFailed'))

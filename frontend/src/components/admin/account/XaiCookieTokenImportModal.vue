@@ -21,7 +21,7 @@
             <div class="truncate text-sm text-gray-700 dark:text-dark-200">
               {{ fileName || t('admin.accounts.xaiCookieTokenImportSelectFile') }}
             </div>
-            <div class="text-xs text-gray-500 dark:text-dark-400">TXT (.txt)</div>
+            <div class="text-xs text-gray-500 dark:text-dark-400">TXT / JSON (.txt, .json)</div>
           </div>
           <button type="button" class="btn btn-secondary shrink-0" @click="openFilePicker">
             {{ t('common.chooseFile') }}
@@ -31,7 +31,7 @@
           ref="fileInput"
           type="file"
           class="hidden"
-          accept=".txt,text/plain"
+          accept=".txt,.json,text/plain,application/json"
           @change="handleFileChange"
         />
       </div>
@@ -166,6 +166,37 @@ const readFileAsText = async (sourceFile: File): Promise<string> => {
   })
 }
 
+const extractTokenFromValue = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim()
+  if (value && typeof value === 'object') {
+    const token = (value as { token?: unknown }).token
+    if (typeof token === 'string') return token.trim()
+  }
+  return ''
+}
+
+const parseTokenFile = (text: string): string[] => {
+  const normalized = text.replace(/^\ufeff/, '').trim()
+  if (!normalized) return []
+
+  if (normalized.startsWith('{') || normalized.startsWith('[')) {
+    const payload = JSON.parse(normalized)
+    const source = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.ssoBasic)
+        ? payload.ssoBasic
+        : Array.isArray(payload?.tokens)
+          ? payload.tokens
+          : null
+
+    if (source) {
+      return source.map(extractTokenFromValue).filter(Boolean)
+    }
+  }
+
+  return normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+}
+
 const handleImport = async () => {
   if (!file.value) {
     appStore.showError(t('admin.accounts.xaiCookieTokenImportSelectFile'))
@@ -175,7 +206,7 @@ const handleImport = async () => {
   importing.value = true
   try {
     const text = await readFileAsText(file.value)
-    const tokens = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    const tokens = parseTokenFile(text)
     if (!tokens.length) {
       appStore.showError(t('admin.accounts.xaiCookieTokenImportEmptyFile'))
       return

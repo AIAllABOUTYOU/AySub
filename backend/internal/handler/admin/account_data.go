@@ -83,9 +83,10 @@ type DataImportError struct {
 }
 
 type XaiCookieTokenImportRequest struct {
-	Tokens     []string `json:"tokens"`
-	NamePrefix string   `json:"name_prefix"`
-	BaseURL    string   `json:"base_url"`
+	Tokens     []string           `json:"tokens"`
+	SSOBasic   []XaiSSOBasicToken `json:"ssoBasic"`
+	NamePrefix string             `json:"name_prefix"`
+	BaseURL    string             `json:"base_url"`
 }
 
 type XaiCookieTokenImportResult struct {
@@ -101,8 +102,22 @@ type XaiCookieTokenImportError struct {
 }
 
 type XaiCookieTokenExportResult struct {
-	Tokens []string `json:"tokens"`
-	Count  int      `json:"count"`
+	Tokens   []string           `json:"tokens"`
+	SSOBasic []XaiSSOBasicToken `json:"ssoBasic"`
+	Count    int                `json:"count"`
+}
+
+type XaiSSOBasicToken struct {
+	UseCount   int      `json:"use_count,omitempty"`
+	Token      string   `json:"token"`
+	LastUsedAt int64    `json:"last_used_at,omitempty"`
+	CreatedAt  int64    `json:"created_at,omitempty"`
+	Quota      int      `json:"quota,omitempty"`
+	LastSyncAt int64    `json:"last_sync_at,omitempty"`
+	Status     string   `json:"status,omitempty"`
+	Note       string   `json:"note,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	FailCount  int      `json:"fail_count,omitempty"`
 }
 
 func buildProxyKey(protocol, host string, port int, username, password string) string {
@@ -259,6 +274,7 @@ func (h *AccountHandler) ExportXaiCookieTokens(c *gin.Context) {
 	}
 
 	tokens := make([]string, 0, len(accounts))
+	ssoBasic := make([]XaiSSOBasicToken, 0, len(accounts))
 	seen := map[string]struct{}{}
 	for i := range accounts {
 		acc := accounts[i]
@@ -274,11 +290,16 @@ func (h *AccountHandler) ExportXaiCookieTokens(c *gin.Context) {
 		}
 		seen[token] = struct{}{}
 		tokens = append(tokens, token)
+		ssoBasic = append(ssoBasic, XaiSSOBasicToken{
+			Token:  token,
+			Status: "active",
+		})
 	}
 
 	response.Success(c, XaiCookieTokenExportResult{
-		Tokens: tokens,
-		Count:  len(tokens),
+		Tokens:   tokens,
+		SSOBasic: ssoBasic,
+		Count:    len(tokens),
 	})
 }
 
@@ -462,7 +483,8 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 
 func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCookieTokenImportRequest) (XaiCookieTokenImportResult, error) {
 	result := XaiCookieTokenImportResult{}
-	if len(req.Tokens) == 0 {
+	importItems := buildXaiCookieTokenImportItems(req)
+	if len(importItems) == 0 {
 		return result, errors.New("tokens is required")
 	}
 
@@ -489,12 +511,12 @@ func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCooki
 
 	seenInput := map[string]struct{}{}
 	createIndex := 0
-	for line, raw := range req.Tokens {
-		token := normalizeXaiCookieToken(raw)
+	for _, item := range importItems {
+		token := normalizeXaiCookieToken(item.Token)
 		if token == "" {
 			result.Failed++
 			result.Errors = append(result.Errors, XaiCookieTokenImportError{
-				Line:    line + 1,
+				Line:    item.Line,
 				Message: "token is empty",
 			})
 			continue
@@ -521,7 +543,7 @@ func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCooki
 		if createErr != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, XaiCookieTokenImportError{
-				Line:    line + 1,
+				Line:    item.Line,
 				Message: createErr.Error(),
 			})
 			continue
@@ -531,6 +553,28 @@ func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCooki
 	}
 
 	return result, nil
+}
+
+type xaiCookieTokenImportItem struct {
+	Token string
+	Line  int
+}
+
+func buildXaiCookieTokenImportItems(req XaiCookieTokenImportRequest) []xaiCookieTokenImportItem {
+	items := make([]xaiCookieTokenImportItem, 0, len(req.Tokens)+len(req.SSOBasic))
+	for i, token := range req.Tokens {
+		items = append(items, xaiCookieTokenImportItem{
+			Token: token,
+			Line:  i + 1,
+		})
+	}
+	for i, item := range req.SSOBasic {
+		items = append(items, xaiCookieTokenImportItem{
+			Token: item.Token,
+			Line:  i + 1,
+		})
+	}
+	return items
 }
 
 func (h *AccountHandler) listAllProxies(ctx context.Context) ([]service.Proxy, error) {

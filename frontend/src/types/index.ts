@@ -1254,7 +1254,8 @@ export interface AdminDataImportResult {
 }
 
 export interface XaiCookieTokenImportRequest {
-  tokens: string[]
+  tokens?: string[]
+  ssoBasic?: XaiSSOBasicToken[]
   name_prefix?: string
   base_url?: string
 }
@@ -1273,7 +1274,21 @@ export interface XaiCookieTokenImportResult {
 
 export interface XaiCookieTokenExportResult {
   tokens: string[]
+  ssoBasic?: XaiSSOBasicToken[]
   count: number
+}
+
+export interface XaiSSOBasicToken {
+  use_count?: number
+  token: string
+  last_used_at?: number
+  created_at?: number
+  quota?: number
+  last_sync_at?: number
+  status?: string
+  note?: string
+  tags?: string[]
+  fail_count?: number
 }
 
 export interface CodexSessionImportRequest {

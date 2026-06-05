@@ -326,6 +326,57 @@ func TestImportXaiCookieTokensCreatesAccountsAndSkipsDuplicates(t *testing.T) {
 	require.Equal(t, 1, adminSvc.createdAccounts[0].Priority)
 }
 
+func TestImportXaiCookieTokensAcceptsGrok2APISSOBasicJSON(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	adminSvc.accounts = []service.Account{
+		{
+			ID:          1,
+			Name:        "existing",
+			Platform:    service.PlatformXAI,
+			Type:        service.AccountTypeCookie,
+			Credentials: map[string]any{"sso_token": "existing-token"},
+		},
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"ssoBasic": []map[string]any{
+			{
+				"token":      "json-token",
+				"status":     "active",
+				"quota":      8,
+				"use_count":  4,
+				"fail_count": 0,
+			},
+			{
+				"token":  "existing-token",
+				"status": "active",
+			},
+			{
+				"token": "",
+			},
+		},
+		"name_prefix": "Imported Grok",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/xai-cookie-tokens", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Code int                        `json:"code"`
+		Data XaiCookieTokenImportResult `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 0, resp.Code)
+	require.Equal(t, 1, resp.Data.Created)
+	require.Equal(t, 1, resp.Data.Skipped)
+	require.Equal(t, 1, resp.Data.Failed)
+	require.Len(t, adminSvc.createdAccounts, 1)
+	require.Equal(t, "json-token", adminSvc.createdAccounts[0].Credentials["sso_token"])
+	require.Equal(t, "https://grok.com", adminSvc.createdAccounts[0].Credentials["base_url"])
+}
+
 func TestExportXaiCookieTokensFiltersAndExtractsTokens(t *testing.T) {
 	router, adminSvc := setupAccountDataRouter()
 	adminSvc.accounts = []service.Account{
@@ -372,6 +423,10 @@ func TestExportXaiCookieTokensFiltersAndExtractsTokens(t *testing.T) {
 	require.Equal(t, 0, resp.Code)
 	require.Equal(t, []string{"token-a", "token-b"}, resp.Data.Tokens)
 	require.Equal(t, 2, resp.Data.Count)
+	require.Equal(t, []XaiSSOBasicToken{
+		{Token: "token-a", Status: "active"},
+		{Token: "token-b", Status: "active"},
+	}, resp.Data.SSOBasic)
 	require.Equal(t, service.PlatformXAI, adminSvc.lastListAccounts.platform)
 	require.Equal(t, service.AccountTypeCookie, adminSvc.lastListAccounts.accountType)
 }
