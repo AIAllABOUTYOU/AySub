@@ -118,8 +118,10 @@ WORKDIR /app
 COPY --from=backend-builder --chown=aysub:aysub /app/aysub /app/aysub
 COPY --from=backend-builder --chown=aysub:aysub /app/backend/resources /app/resources
 
-# Create data directory
-RUN mkdir -p /app/data && chown aysub:aysub /app/data
+# Create writable runtime directories.
+# /app must be writable because the admin release updater stages files next to
+# the binary and atomically replaces /app/aysub before the service restart.
+RUN mkdir -p /app/data && chown aysub:aysub /app /app/data
 
 # Copy entrypoint script (fixes volume permissions then drops to aysub)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
