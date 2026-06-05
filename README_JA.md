@@ -183,6 +183,52 @@ SERVER_PORT=8080
 
 Docker auto setup で `ADMIN_PASSWORD` が空の場合、AySub は管理者パスワードを生成して container log に出力します。
 
+### 任意の Grok WARP / FlareSolverr スタック
+
+Grok Cookie account で Cloudflare challenge が検出された場合、FlareSolverr で `cf_clearance` を自動更新できます。WARP は Grok request 用の SOCKS5 egress proxy として利用できます。どちらも `deploy/docker-compose.proxy-profiles.yml` に定義されています。詳細は [`deploy/DOCKER.md`](deploy/DOCKER.md) を参照してください。
+
+FlareSolverr と WARP を一緒に有効化する例:
+
+```bash
+cd deploy
+GROK_FLARESOLVERR_URL=http://flaresolverr:8191 \
+docker compose -f docker-compose.image.yml -f docker-compose.proxy-profiles.yml --profile flaresolverr --profile warp up -d
+```
+
+WARP 起動後、admin proxy page で active proxy を追加します:
+
+```text
+socks5://warp:1080
+```
+
+その proxy を Grok Cookie account に紐付けてください。AySub は account proxy を FlareSolverr に渡すため、clearance cookie は実際の Grok request と同じ egress path で解決されます。この stack が扱うのは Cloudflare challenge と egress IP の問題だけです。token 失効、account risk control、region restriction、upstream access denial の場合は、有効な account、Cookie、proxy が別途必要です。
+
+## Sub2API からの移行
+
+AySub は既存 Sub2API デプロイからの forward-compatible upgrade として扱えます。既存の user、API Key、group、account、balance、usage log、settings、PostgreSQL data、Redis data、`DATA_DIR` files は再利用できます。
+
+既存 Docker デプロイの移行手順:
+
+1. PostgreSQL と runtime data directory をバックアップします。
+2. 旧 Sub2API application container を停止します。
+3. 既存の `.env`、PostgreSQL volume、Redis volume、`DATA_DIR` volume を保持します。
+4. application image または compose の source build target だけを AySub に差し替えます。
+5. AySub を起動します。新しい migration と settings key は起動時に追加されます。
+
+database backup の例:
+
+```bash
+pg_dump -h 127.0.0.1 -U sub2api -d sub2api > sub2api_backup.sql
+```
+
+Docker volume を使っている場合は、`postgres_data`、`redis_data`、`data` を AySub compose にそのまま mount してください。既存 database に対して `/setup` を再実行しないでください。既存の admin user はそのまま有効です。
+
+互換性メモ:
+
+- `home_content` は引き続き互換です。値が空でない場合、`/home` は AySub の構造化 `home_config` より先に custom HTML または iframe URL を表示します。
+- AySub は table、column、settings を追加します。upgrade 後に同じ database を古い Sub2API build へ直接戻すことは推奨しません。
+- Go module path は code と migration compatibility のため `github.com/Wei-Shaw/sub2api` のままです。runtime image、container、service、network、volume は AySub 名を使います。
+
 ## ソースビルド
 
 ```bash

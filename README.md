@@ -183,6 +183,52 @@ SERVER_PORT=8080
 
 If `ADMIN_PASSWORD` is empty during Docker auto setup, AySub generates one and writes it to container logs.
 
+### Optional Grok WARP / FlareSolverr Stack
+
+For Grok Cookie accounts, FlareSolverr can refresh `cf_clearance` when a Cloudflare challenge is detected, and WARP can provide a SOCKS5 egress proxy for Grok requests. Both services are defined in `deploy/docker-compose.proxy-profiles.yml`; see [`deploy/DOCKER.md`](deploy/DOCKER.md) for the detailed deployment notes.
+
+Enable FlareSolverr and WARP together:
+
+```bash
+cd deploy
+GROK_FLARESOLVERR_URL=http://flaresolverr:8191 \
+docker compose -f docker-compose.image.yml -f docker-compose.proxy-profiles.yml --profile flaresolverr --profile warp up -d
+```
+
+After WARP is running, create an active proxy in the admin proxy page:
+
+```text
+socks5://warp:1080
+```
+
+Bind that proxy to the Grok Cookie account. AySub passes the account proxy to FlareSolverr so the clearance cookie is solved from the same egress path used by the Grok request. This stack only helps with Cloudflare challenges and egress IP issues; expired tokens, account risk controls, regional restrictions, or upstream access denial still require a valid account, Cookie, or proxy.
+
+## Migrating From Sub2API
+
+AySub is designed as a forward-compatible upgrade from existing Sub2API deployments. Users, API Keys, groups, accounts, balances, usage logs, settings, PostgreSQL data, Redis data, and `DATA_DIR` files can be reused.
+
+Upgrade path for an existing Docker deployment:
+
+1. Back up PostgreSQL and the runtime data directory.
+2. Stop the old Sub2API application container.
+3. Keep the existing `.env`, PostgreSQL volume, Redis volume, and `DATA_DIR` volume.
+4. Replace only the application image or compose source with AySub.
+5. Start AySub. New migrations and settings keys are added on startup.
+
+Example database backup:
+
+```bash
+pg_dump -h 127.0.0.1 -U sub2api -d sub2api > sub2api_backup.sql
+```
+
+If the original deployment uses Docker volumes, keep `postgres_data`, `redis_data`, and `data` mounted into the AySub compose file. Do not run `/setup` again against an existing database; the original admin user remains valid.
+
+Compatibility notes:
+
+- `home_content` remains compatible. When it is non-empty, `/home` still renders that custom HTML or iframe URL before AySub's structured `home_config`.
+- AySub adds new tables, columns, and settings. After upgrading, rolling the same database back to an older Sub2API build is not recommended.
+- The Go module path remains `github.com/Wei-Shaw/sub2api` only to keep code and migration compatibility; runtime assets use AySub names.
+
 ## Build From Source
 
 ```bash

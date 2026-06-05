@@ -183,6 +183,52 @@ SERVER_PORT=8080
 
 Docker 自动初始化时如果 `ADMIN_PASSWORD` 留空，AySub 会生成管理员密码并写入容器日志。
 
+### Grok WARP / FlareSolverr 可选防封栈
+
+Grok Cookie 账号遇到 Cloudflare challenge 时，可启用 FlareSolverr 自动刷新 `cf_clearance`；WARP 可作为 Grok Cookie 请求的 SOCKS5 出口代理。两者都定义在 `deploy/docker-compose.proxy-profiles.yml`，详细部署说明见 [`deploy/DOCKER.md`](deploy/DOCKER.md)。
+
+同时启用 FlareSolverr 和 WARP：
+
+```bash
+cd deploy
+GROK_FLARESOLVERR_URL=http://flaresolverr:8191 \
+docker compose -f docker-compose.image.yml -f docker-compose.proxy-profiles.yml --profile flaresolverr --profile warp up -d
+```
+
+启用 WARP 后，在后台 IP 管理新增代理：
+
+```text
+socks5://warp:1080
+```
+
+再把该代理绑定到 Grok Cookie 账号。AySub 调用 FlareSolverr 时会复用账号绑定的代理，确保 clearance cookie 与实际 Grok 请求使用同一出口。这个栈只处理 Cloudflare challenge 和出口 IP 问题；如果是 token 失效、账号风控、地区限制或上游拒绝访问，仍需更换账号、Cookie 或代理。
+
+## 从 Sub2API 迁移
+
+AySub 按 Sub2API 的向前兼容升级来处理。原来的用户、API Key、分组、账号、余额、用量日志、settings、PostgreSQL 数据、Redis 数据和 `DATA_DIR` 文件可以继续使用。
+
+已有 Docker 部署的升级步骤：
+
+1. 备份 PostgreSQL 和运行时数据目录。
+2. 停掉旧的 Sub2API 应用容器。
+3. 保留原 `.env`、PostgreSQL volume、Redis volume 和 `DATA_DIR` volume。
+4. 只把应用镜像或 compose 源码构建目标换成 AySub。
+5. 启动 AySub。新增迁移和 settings key 会在启动时补齐。
+
+数据库备份示例：
+
+```bash
+pg_dump -h 127.0.0.1 -U sub2api -d sub2api > sub2api_backup.sql
+```
+
+如果原部署使用 Docker volume，继续把 `postgres_data`、`redis_data`、`data` 挂载到 AySub compose 中。已有数据库不要重新跑 `/setup` 初始化；原管理员账号继续有效。
+
+兼容边界：
+
+- `home_content` 继续兼容。它非空时，`/home` 仍优先展示这段自定义 HTML 或 iframe URL，不会展示 AySub 新增的结构化 `home_config`。
+- AySub 会新增表、字段和 settings。升级后不建议把同一份数据库直接回退到旧 Sub2API 版本。
+- Go module path 保持 `github.com/Wei-Shaw/sub2api` 只是为了代码和迁移兼容；运行时镜像、容器、服务、网络和卷使用 AySub 命名。
+
 ## 源码构建
 
 ```bash
