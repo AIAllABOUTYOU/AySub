@@ -16,6 +16,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       bulkUpdate: vi.fn(),
+      batchDelete: vi.fn(),
       checkMixedChannelRisk: vi.fn()
     }
   }
@@ -49,7 +50,16 @@ function mountModal(extraProps: Record<string, unknown> = {}) {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
-        ConfirmDialog: true,
+        ConfirmDialog: {
+          props: ['show'],
+          emits: ['confirm', 'cancel'],
+          template: `
+            <div v-if="show" data-testid="confirm-dialog">
+              <button data-testid="confirm-dialog-confirm" @click="$emit('confirm')">confirm</button>
+              <button data-testid="confirm-dialog-cancel" @click="$emit('cancel')">cancel</button>
+            </div>
+          `
+        },
         Select: {
           props: ['modelValue', 'options'],
           emits: ['update:modelValue'],
@@ -76,9 +86,15 @@ function mountModal(extraProps: Record<string, unknown> = {}) {
 describe('BulkEditAccountModal', () => {
   beforeEach(() => {
     vi.mocked(adminAPI.accounts.bulkUpdate).mockReset()
+    vi.mocked(adminAPI.accounts.batchDelete).mockReset()
     vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockReset()
 
     vi.mocked(adminAPI.accounts.bulkUpdate).mockResolvedValue({
+      success: 2,
+      failed: 0,
+      results: []
+    } as any)
+    vi.mocked(adminAPI.accounts.batchDelete).mockResolvedValue({
       success: 2,
       failed: 0,
       results: []
@@ -349,5 +365,34 @@ describe('BulkEditAccountModal', () => {
       },
       status: 'active'
     })
+  })
+
+  it('filtered-results 模式下批量删除应提交 filters', async () => {
+    const filters = {
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active',
+      group: '12',
+      search: 'bulk-target',
+      privacy_mode: 'training_set_cf_blocked'
+    }
+    const wrapper = mountModal({
+      accountIds: [],
+      target: {
+        mode: 'filtered',
+        filters,
+        previewCount: 5,
+        selectedPlatforms: ['openai'],
+        selectedTypes: ['oauth']
+      }
+    })
+
+    await wrapper.get('[data-testid="bulk-edit-delete-button"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-dialog-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(adminAPI.accounts.batchDelete).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.batchDelete).toHaveBeenCalledWith({ filters })
+    expect(wrapper.emitted('updated')).toHaveLength(1)
   })
 })

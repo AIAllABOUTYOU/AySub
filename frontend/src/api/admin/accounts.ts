@@ -169,6 +169,28 @@ export async function deleteAccount(id: number): Promise<{ message: string }> {
   return data
 }
 
+export async function batchDelete(
+  accountIdsOrPayload: number[] | Record<string, unknown>
+): Promise<{
+  success: number
+  failed: number
+  success_ids?: number[]
+  failed_ids?: number[]
+  results: Array<{ account_id: number; success: boolean; error?: string }>
+}> {
+  const payload = Array.isArray(accountIdsOrPayload)
+    ? { account_ids: accountIdsOrPayload }
+    : accountIdsOrPayload
+  const { data } = await apiClient.post<{
+    success: number
+    failed: number
+    success_ids?: number[]
+    failed_ids?: number[]
+    results: Array<{ account_id: number; success: boolean; error?: string }>
+  }>('/admin/accounts/batch-delete', payload)
+  return data
+}
+
 /**
  * Toggle account status
  * @param id - Account ID
@@ -738,6 +760,7 @@ export const accountsAPI = {
   update,
   checkMixedChannelRisk,
   delete: deleteAccount,
+  batchDelete,
   toggleStatus,
   testAccount,
   refreshCredentials,

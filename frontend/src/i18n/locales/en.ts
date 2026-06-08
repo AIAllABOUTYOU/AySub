@@ -10,11 +10,13 @@ export default {
     login: 'Login',
     getStarted: 'Get Started',
     goToDashboard: 'Go to Dashboard',
+    recommended: 'Recommended',
     nav: {
       home: 'Home',
       features: 'Features',
       models: 'Models',
       pricing: 'Pricing',
+      extensions: 'Extensions',
       info: 'Info'
     },
     hero: {
@@ -1935,6 +1937,22 @@ export default {
         ctaLabel: 'CTA label',
         ctaUrl: 'CTA URL',
         highlighted: 'Highlighted'
+      },
+      customSections: {
+        title: 'Extension Sections',
+        description: 'Append configurable home sections for use cases, partners, announcements, roadmap or more product capabilities.',
+        newItem: 'New extension section',
+        eyebrow: 'Eyebrow',
+        layout: 'Layout',
+        items: 'Section items',
+        defaultEyebrow: 'Extensible',
+        defaultTitle: 'Keep extending the home page by business need',
+        defaultDescription: 'This section is hidden by default. Enable it to show more capabilities, use cases or operational information.',
+        layouts: {
+          cards: 'Cards',
+          metrics: 'Metrics',
+          text: 'Text'
+        }
       },
       fields: {
         label: 'Label',
@@ -4052,6 +4070,9 @@ export default {
         failed: 'Bulk update failed',
         noSelection: 'Please select accounts to edit',
         noFieldsSelected: 'Select at least one field to update',
+        deleting: 'Deleting...',
+        deleteHint: 'Delete {count} matching account(s). This action cannot be undone.',
+        deleteFilteredConfirm: 'Delete all {count} account(s) matching the current filters? This action cannot be undone.',
         mixedPlatformWarning: 'Selected accounts span multiple platforms ({platforms}). Model mapping presets shown are combined — ensure mappings are appropriate for each platform.'
       },
       bulkDeleteTitle: 'Bulk Delete Accounts',

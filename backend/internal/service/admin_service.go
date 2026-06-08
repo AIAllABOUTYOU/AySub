@@ -83,6 +83,7 @@ type AdminService interface {
 	// 用于刷新流程持久化 account_uuid / org_uuid 等少量键，避免被全量快照覆盖。
 	UpdateAccountExtra(ctx context.Context, id int64, updates map[string]any) error
 	DeleteAccount(ctx context.Context, id int64) error
+	BatchDeleteAccounts(ctx context.Context, input *BatchDeleteAccountsInput) (*BatchDeleteAccountsResult, error)
 	RefreshAccountCredentials(ctx context.Context, id int64) (*Account, error)
 	ClearAccountError(ctx context.Context, id int64) (*Account, error)
 	SetAccountError(ctx context.Context, id int64, errorMsg string) error
@@ -388,6 +389,25 @@ type BulkUpdateAccountsResult struct {
 	SuccessIDs []int64                   `json:"success_ids"`
 	FailedIDs  []int64                   `json:"failed_ids"`
 	Results    []BulkUpdateAccountResult `json:"results"`
+}
+
+type BatchDeleteAccountsInput struct {
+	AccountIDs []int64
+	Filters    *BulkUpdateAccountFilters
+}
+
+type BatchDeleteAccountResult struct {
+	AccountID int64  `json:"account_id"`
+	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
+}
+
+type BatchDeleteAccountsResult struct {
+	Success    int                        `json:"success"`
+	Failed     int                        `json:"failed"`
+	SuccessIDs []int64                    `json:"success_ids"`
+	FailedIDs  []int64                    `json:"failed_ids"`
+	Results    []BatchDeleteAccountResult `json:"results"`
 }
 
 type CreateProxyInput struct {
@@ -2948,6 +2968,41 @@ func (s *adminServiceImpl) DeleteAccount(ctx context.Context, id int64) error {
 		return err
 	}
 	return nil
+}
+
+func (s *adminServiceImpl) BatchDeleteAccounts(ctx context.Context, input *BatchDeleteAccountsInput) (*BatchDeleteAccountsResult, error) {
+	if input == nil {
+		input = &BatchDeleteAccountsInput{}
+	}
+	if len(input.AccountIDs) == 0 && input.Filters != nil {
+		accountIDs, err := s.resolveBulkUpdateTargetIDs(ctx, input.Filters)
+		if err != nil {
+			return nil, err
+		}
+		input.AccountIDs = accountIDs
+	}
+
+	result := &BatchDeleteAccountsResult{
+		SuccessIDs: make([]int64, 0, len(input.AccountIDs)),
+		FailedIDs:  make([]int64, 0, len(input.AccountIDs)),
+		Results:    make([]BatchDeleteAccountResult, 0, len(input.AccountIDs)),
+	}
+	for _, accountID := range input.AccountIDs {
+		entry := BatchDeleteAccountResult{AccountID: accountID}
+		if err := s.DeleteAccount(ctx, accountID); err != nil {
+			entry.Success = false
+			entry.Error = err.Error()
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, accountID)
+			result.Results = append(result.Results, entry)
+			continue
+		}
+		entry.Success = true
+		result.Success++
+		result.SuccessIDs = append(result.SuccessIDs, accountID)
+		result.Results = append(result.Results, entry)
+	}
+	return result, nil
 }
 
 func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int64) (*Account, error) {

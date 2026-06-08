@@ -10,11 +10,13 @@ export default {
     login: '登录',
     getStarted: '立即开始',
     goToDashboard: '进入控制台',
+    recommended: '推荐',
     nav: {
       home: '首页',
       features: '功能',
       models: '模型',
       pricing: '价格',
+      extensions: '扩展',
       info: '资料'
     },
     hero: {
@@ -1938,6 +1940,22 @@ export default {
         ctaLabel: '按钮文字',
         ctaUrl: '按钮链接',
         highlighted: '高亮'
+      },
+      customSections: {
+        title: '扩展区块',
+        description: '为首页追加可增删的展示区块，适合放场景、合作、公告、路线图或更多产品能力。',
+        newItem: '新扩展区块',
+        eyebrow: '小标题',
+        layout: '布局',
+        items: '区块条目',
+        defaultEyebrow: '可扩展能力',
+        defaultTitle: '按业务继续扩展首页内容',
+        defaultDescription: '这个区块默认隐藏，开启后可展示更多能力、场景或运营信息。',
+        layouts: {
+          cards: '卡片',
+          metrics: '指标',
+          text: '文本'
+        }
       },
       fields: {
         label: '标签',
@@ -4197,6 +4215,9 @@ export default {
         failed: '批量更新失败',
         noSelection: '请选择要编辑的账号',
         noFieldsSelected: '请至少选择一个要更新的字段',
+        deleting: '删除中...',
+        deleteHint: '删除 {count} 个匹配账号。此操作无法撤销。',
+        deleteFilteredConfirm: '确定要删除当前筛选条件下的 {count} 个账号吗？此操作无法撤销。',
         mixedPlatformWarning: '所选账号跨越多个平台（{platforms}）。显示的模型映射预设为合并结果——请确保映射对每个平台都适用。'
       },
       bulkDeleteTitle: '批量删除账号',

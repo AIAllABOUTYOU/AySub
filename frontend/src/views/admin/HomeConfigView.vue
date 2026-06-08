@@ -282,6 +282,78 @@
             </div>
           </div>
         </section>
+
+        <section class="card space-y-5 p-5">
+          <SectionHeader :title="t('admin.homeConfig.customSections.title')" :description="t('admin.homeConfig.customSections.description')" @add="addCustomSection" />
+          <div class="space-y-4">
+            <div v-for="(section, sectionIndex) in config.custom_sections" :key="sectionIndex" class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+              <div class="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label class="input-label">{{ t('admin.homeConfig.customSections.eyebrow') }}</label>
+                  <input v-model.trim="section.eyebrow" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">{{ t('admin.homeConfig.fields.title') }}</label>
+                  <input v-model.trim="section.title" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">{{ t('admin.homeConfig.customSections.layout') }}</label>
+                  <select v-model="section.layout" class="input">
+                    <option value="cards">{{ t('admin.homeConfig.customSections.layouts.cards') }}</option>
+                    <option value="metrics">{{ t('admin.homeConfig.customSections.layouts.metrics') }}</option>
+                    <option value="text">{{ t('admin.homeConfig.customSections.layouts.text') }}</option>
+                  </select>
+                </div>
+                <label class="flex items-center gap-2 pt-7 text-sm text-gray-700 dark:text-gray-300">
+                  <input v-model="section.visible" type="checkbox" class="rounded border-gray-300 text-primary-600" />
+                  {{ t('admin.homeConfig.fields.visible') }}
+                </label>
+                <div class="md:col-span-2">
+                  <label class="input-label">{{ t('admin.homeConfig.fields.description') }}</label>
+                  <textarea v-model="section.description" class="input min-h-20"></textarea>
+                </div>
+                <div>
+                  <label class="input-label">{{ t('admin.homeConfig.pricing.ctaLabel') }}</label>
+                  <input v-model.trim="section.cta_label" class="input" />
+                </div>
+                <div>
+                  <label class="input-label">{{ t('admin.homeConfig.pricing.ctaUrl') }}</label>
+                  <input v-model.trim="section.cta_url" class="input" />
+                </div>
+              </div>
+
+              <div class="mt-5 rounded-lg bg-gray-50 p-4 dark:bg-dark-800/60">
+                <div class="mb-3 flex items-center justify-between gap-3">
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.homeConfig.customSections.items') }}</h3>
+                  <button class="btn btn-secondary btn-sm" @click="addCustomSectionItem(sectionIndex)">{{ t('common.add') }}</button>
+                </div>
+                <div class="space-y-3">
+                  <div v-for="(item, itemIndex) in section.items || []" :key="itemIndex" class="rounded-lg border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900">
+                    <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                      <div>
+                        <label class="input-label">{{ t('admin.homeConfig.fields.label') }}</label>
+                        <input v-model.trim="item.label" class="input" />
+                      </div>
+                      <div>
+                        <label class="input-label">{{ t('admin.homeConfig.fields.value') }}</label>
+                        <input v-model.trim="item.value" class="input" />
+                      </div>
+                      <button class="btn btn-danger btn-sm" @click="section.items?.splice(itemIndex, 1)">{{ t('common.delete') }}</button>
+                    </div>
+                    <div class="mt-3">
+                      <label class="input-label">{{ t('admin.homeConfig.fields.description') }}</label>
+                      <textarea v-model="item.description" class="input min-h-16"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3 flex justify-end">
+                <button class="btn btn-danger btn-sm" @click="config.custom_sections.splice(sectionIndex, 1)">{{ t('common.delete') }}</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </template>
     </div>
   </AppLayout>
@@ -295,13 +367,13 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api/admin'
 import type { SystemSettings } from '@/api/admin/settings'
-import type { HomeConfig, HomeFeatureItem, HomeInfoItem, HomeModelItem, HomeNavItem, HomePricingItem, HomeStatItem } from '@/types'
+import type { HomeConfig, HomeCustomSectionItem, HomeFeatureItem, HomeInfoItem, HomeModelItem, HomeNavItem, HomePricingItem, HomeStatItem } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 type EditableHomeConfig = Required<Pick<HomeConfig,
-  'nav_items' | 'stats' | 'terminal_lines' | 'features' | 'models' | 'pricing_items' | 'info_items'
->> & Omit<HomeConfig, 'nav_items' | 'stats' | 'terminal_lines' | 'features' | 'models' | 'pricing_items' | 'info_items'>
+  'nav_items' | 'stats' | 'terminal_lines' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'custom_sections'
+>> & Omit<HomeConfig, 'nav_items' | 'stats' | 'terminal_lines' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'custom_sections'>
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -473,7 +545,8 @@ function emptyHomeConfig(): EditableHomeConfig {
     pricing_items: [],
     info_title: '',
     info_description: '',
-    info_items: []
+    info_items: [],
+    custom_sections: []
   }
 }
 
@@ -494,7 +567,8 @@ function normalizeHomeConfig(raw: HomeConfig | null | undefined): EditableHomeCo
     features: Array.isArray(source.features) ? normalizeList<HomeFeatureItem>(source.features, () => ({ title: '', description: '', icon: 'server', tag: '', visible: true })) : base.features,
     models: Array.isArray(source.models) ? normalizeList<HomeModelItem>(source.models, () => ({ name: '', provider: '', description: '', price: '', status: '', visible: true })) : base.models,
     pricing_items: Array.isArray(source.pricing_items) ? normalizeList<HomePricingItem>(source.pricing_items, () => ({ name: '', price: '', unit: '', description: '', features: [], cta_label: '', cta_url: '', highlighted: false, visible: true })) : base.pricing_items,
-    info_items: Array.isArray(source.info_items) ? normalizeList<HomeInfoItem>(source.info_items, () => ({ label: '', value: '', description: '', visible: true })) : base.info_items
+    info_items: Array.isArray(source.info_items) ? normalizeList<HomeInfoItem>(source.info_items, () => ({ label: '', value: '', description: '', visible: true })) : base.info_items,
+    custom_sections: Array.isArray(source.custom_sections) ? normalizeCustomSections(source.custom_sections) : base.custom_sections
   }
 }
 
@@ -587,6 +661,20 @@ function defaultAdminHomeConfig(): EditableHomeConfig {
       { label: t('home.infoSection.billing'), value: t('home.infoSection.billingValue'), description: t('home.infoSection.billingDesc'), visible: true },
       { label: t('home.infoSection.security'), value: t('home.infoSection.securityValue'), description: t('home.infoSection.securityDesc'), visible: true },
       { label: t('home.infoSection.contact'), value: siteForm.contact_info || t('home.infoSection.contactValue'), description: t('home.infoSection.contactDesc'), visible: true }
+    ],
+    custom_sections: [
+      {
+        eyebrow: t('admin.homeConfig.customSections.defaultEyebrow'),
+        title: t('admin.homeConfig.customSections.defaultTitle'),
+        description: t('admin.homeConfig.customSections.defaultDescription'),
+        layout: 'cards',
+        items: [
+          { label: 'SDK', value: 'OpenAI Compatible', description: t('home.features.compatibleDesc'), visible: true },
+          { label: 'Routing', value: 'Smart Failover', description: t('home.features.multiAccountDesc'), visible: true },
+          { label: 'Ops', value: 'Usage Insights', description: t('home.features.logsDesc'), visible: true }
+        ],
+        visible: false
+      }
     ]
   }
 }
@@ -594,6 +682,21 @@ function defaultAdminHomeConfig(): EditableHomeConfig {
 function normalizeList<T extends { visible?: boolean }>(items: T[] | undefined, fallback: () => T): T[] {
   if (!Array.isArray(items)) return []
   return items.map((item) => ({ ...fallback(), ...item, visible: item.visible !== false }))
+}
+
+function normalizeCustomSections(items: HomeCustomSectionItem[] | undefined): HomeCustomSectionItem[] {
+  if (!Array.isArray(items)) return []
+  return items.map((section) => ({
+    ...section,
+    eyebrow: section.eyebrow || '',
+    title: section.title || '',
+    description: section.description || '',
+    layout: section.layout || 'cards',
+    cta_label: section.cta_label || '',
+    cta_url: section.cta_url || '',
+    visible: section.visible !== false,
+    items: normalizeList<HomeInfoItem>(section.items, () => ({ label: '', value: '', description: '', visible: true }))
+  }))
 }
 
 function toHomeConfigPayload(): HomeConfig {
@@ -622,6 +725,26 @@ function addModel() {
 
 function addPricing() {
   config.pricing_items.push({ name: t('admin.homeConfig.pricing.newItem'), price: '', unit: '', description: '', features: [], cta_label: '', cta_url: '', highlighted: false, visible: true })
+}
+
+function addCustomSection() {
+  config.custom_sections.push({
+    eyebrow: '',
+    title: t('admin.homeConfig.customSections.newItem'),
+    description: '',
+    layout: 'cards',
+    items: [],
+    cta_label: '',
+    cta_url: '',
+    visible: true
+  })
+}
+
+function addCustomSectionItem(sectionIndex: number) {
+  const section = config.custom_sections[sectionIndex]
+  if (!section) return
+  if (!Array.isArray(section.items)) section.items = []
+  section.items.push({ label: t('admin.homeConfig.info.newItem'), value: '', description: '', visible: true })
 }
 
 function textareaLines(event: Event): string[] {

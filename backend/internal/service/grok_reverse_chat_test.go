@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -9,9 +10,11 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -851,27 +854,12 @@ func TestForwardGrokImagesNonStreamingReturnsURL(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("DATA_DIR", dataDir)
 
-	imageCard := `{"id":"img-1","image_chunk":{"progress":100,"imageUuid":"image-uuid","imageUrl":"generated/image.jpg","moderated":false}}`
-	upstreamBody := strings.Join([]string{
-		grokDataFrame(map[string]any{
-			"cardAttachment": map[string]any{"jsonData": imageCard},
-		}),
-		`data: {"result":{"response":{"isSoftStop":true}}}`,
-		``,
-	}, "\n\n")
-	upstream := &httpUpstreamRecorder{responses: []*http.Response{
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"X-Request-Id": []string{"grok-image-1"}},
-			Body:       io.NopCloser(strings.NewReader(upstreamBody)),
-		},
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"image/png"}},
-			Body:       io.NopCloser(strings.NewReader("image-bytes")),
-		},
-	}}
-	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	upstream := newGrokImagineTestFrameConn()
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"json","current_status":"start_stage","image_id":"image-uuid","order":0,"width":1024,"height":1536}`))
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"image","url":"https://assets.grok.com/images/image-uuid.png","blob":"aW1hZ2UtYnl0ZXM=","percentage_complete":100}`))
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"json","current_status":"completed","image_id":"image-uuid","order":0,"width":1024,"height":1536,"moderated":false}`))
+	dialer := &grokImagineTestDialer{conn: upstream}
+	svc := &OpenAIGatewayService{openaiWSPassthroughDialer: dialer}
 
 	body := []byte(`{"prompt":"draw a cat","n":1}`)
 	rec := httptest.NewRecorder()
@@ -896,14 +884,11 @@ func TestForwardGrokImagesNonStreamingReturnsURL(t *testing.T) {
 	result, err := svc.ForwardImages(c.Request.Context(), c, account, body, parsed, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "grok-image-1", result.RequestID)
 	require.Equal(t, 1, result.ImageCount)
 	require.Equal(t, []string{"2K"}, result.ImageOutputSizes)
-	require.Len(t, upstream.requests, 2)
-	require.Equal(t, "https://grok.example/rest/app-chat/conversations/new", upstream.requests[0].URL.String())
-	require.Equal(t, "https://assets.grok.com/generated/image.jpg", upstream.requests[1].URL.String())
-	require.Equal(t, "draw a cat", gjson.GetBytes(upstream.bodies[0], "message").String())
-	require.Equal(t, int64(1), gjson.GetBytes(upstream.bodies[0], "imageGenerationCount").Int())
+	require.NotEmpty(t, result.RequestID)
+	require.Equal(t, grokImagineWSURL, dialer.wsURL)
+	require.Contains(t, dialer.headers.Get("Cookie"), "sso=tok")
 
 	raw := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)
@@ -918,27 +903,12 @@ func TestForwardGrokImagesNonStreamingReturnsURL(t *testing.T) {
 func TestForwardGrokImagesB64DownloadsAsset(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	imageCard := `{"id":"img-1","image_chunk":{"progress":100,"imageUuid":"image-uuid","imageUrl":"generated/image.jpg","moderated":false}}`
-	upstreamBody := strings.Join([]string{
-		grokDataFrame(map[string]any{
-			"cardAttachment": map[string]any{"jsonData": imageCard},
-		}),
-		`data: {"result":{"response":{"isSoftStop":true}}}`,
-		``,
-	}, "\n\n")
-	upstream := &httpUpstreamRecorder{responses: []*http.Response{
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"X-Request-Id": []string{"grok-image-2"}},
-			Body:       io.NopCloser(strings.NewReader(upstreamBody)),
-		},
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"image/png"}},
-			Body:       io.NopCloser(strings.NewReader("image-bytes")),
-		},
-	}}
-	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	upstream := newGrokImagineTestFrameConn()
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"json","current_status":"start_stage","image_id":"image-uuid","order":0,"width":1024,"height":1536}`))
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"image","url":"https://assets.grok.com/images/image-uuid.png","blob":"aW1hZ2UtYnl0ZXM=","percentage_complete":100}`))
+	upstream.queueRead(coderws.MessageText, []byte(`{"type":"json","current_status":"completed","image_id":"image-uuid","order":0,"width":1024,"height":1536,"moderated":false}`))
+	dialer := &grokImagineTestDialer{conn: upstream}
+	svc := &OpenAIGatewayService{openaiWSPassthroughDialer: dialer}
 
 	body := []byte(`{"prompt":"draw a cat","response_format":"b64_json"}`)
 	rec := httptest.NewRecorder()
@@ -964,9 +934,7 @@ func TestForwardGrokImagesB64DownloadsAsset(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, 1, result.ImageCount)
-	require.Len(t, upstream.requests, 2)
-	require.Equal(t, http.MethodGet, upstream.requests[1].Method)
-	require.Equal(t, "https://assets.grok.com/generated/image.jpg", upstream.requests[1].URL.String())
+	require.Equal(t, grokImagineWSURL, dialer.wsURL)
 	require.Equal(t, "aW1hZ2UtYnl0ZXM=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
 }
 
@@ -1075,4 +1043,73 @@ func grokDataFrame(response map[string]any) string {
 		panic(err)
 	}
 	return "data: " + string(raw)
+}
+
+type grokImagineTestFrame struct {
+	msgType coderws.MessageType
+	payload []byte
+}
+
+type grokImagineTestFrameConn struct {
+	readCh  chan grokImagineTestFrame
+	writeCh chan any
+	closed  chan struct{}
+	once    sync.Once
+}
+
+func newGrokImagineTestFrameConn() *grokImagineTestFrameConn {
+	return &grokImagineTestFrameConn{
+		readCh:  make(chan grokImagineTestFrame, 8),
+		writeCh: make(chan any, 8),
+		closed:  make(chan struct{}),
+	}
+}
+
+func (c *grokImagineTestFrameConn) queueRead(msgType coderws.MessageType, payload []byte) {
+	c.readCh <- grokImagineTestFrame{msgType: msgType, payload: append([]byte(nil), payload...)}
+}
+
+func (c *grokImagineTestFrameConn) WriteJSON(_ context.Context, value any) error {
+	select {
+	case c.writeCh <- value:
+		return nil
+	case <-c.closed:
+		return coderws.CloseError{Code: coderws.StatusNormalClosure}
+	}
+}
+
+func (c *grokImagineTestFrameConn) ReadMessage(ctx context.Context) ([]byte, error) {
+	select {
+	case frame := <-c.readCh:
+		return append([]byte(nil), frame.payload...), nil
+	case <-c.closed:
+		return nil, coderws.CloseError{Code: coderws.StatusNormalClosure}
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (c *grokImagineTestFrameConn) Ping(context.Context) error {
+	return nil
+}
+
+func (c *grokImagineTestFrameConn) Close() error {
+	c.once.Do(func() {
+		close(c.closed)
+	})
+	return nil
+}
+
+type grokImagineTestDialer struct {
+	conn    *grokImagineTestFrameConn
+	wsURL   string
+	headers http.Header
+}
+
+func (d *grokImagineTestDialer) Dial(ctx context.Context, wsURL string, headers http.Header, proxyURL string) (openAIWSClientConn, int, http.Header, error) {
+	_ = ctx
+	_ = proxyURL
+	d.wsURL = wsURL
+	d.headers = cloneHeader(headers)
+	return d.conn, 0, nil, nil
 }

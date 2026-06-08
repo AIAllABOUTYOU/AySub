@@ -13,11 +13,13 @@
 
   <!-- Default Configurable Home Page -->
   <div v-else class="home-shell min-h-screen overflow-hidden text-slate-100">
-    <header class="sticky top-0 z-30 border-b border-white/10 bg-slate-950/88 backdrop-blur">
+    <div class="home-grid" aria-hidden="true"></div>
+
+    <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl">
       <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <a href="#top" class="flex min-w-0 items-center gap-3" @click="handleHomeLink($event, '#top')">
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/20 bg-white/8">
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/25 bg-white/8 shadow-lg shadow-cyan-500/10">
+            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" />
           </span>
           <span class="min-w-0">
             <span class="block truncate text-sm font-semibold text-white">{{ siteName }}</span>
@@ -71,16 +73,16 @@
     </header>
 
     <main id="top" class="relative">
-      <section class="mx-auto grid min-h-[calc(100vh-64px)] max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_480px] lg:px-8 lg:py-16">
+      <section class="mx-auto grid min-h-[calc(100vh-64px)] max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_500px] lg:px-8 lg:py-16">
         <div class="max-w-3xl">
-          <div class="mb-5 inline-flex items-center gap-2 rounded-md border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-sm font-medium text-emerald-100">
-            <span class="h-2 w-2 rounded-full bg-emerald-300"></span>
+          <div class="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-4 py-1.5 text-sm font-semibold text-emerald-100">
+            <span class="home-pulse h-2 w-2 rounded-full bg-emerald-300"></span>
             {{ resolvedHome.hero_badge }}
           </div>
 
-          <h1 class="max-w-4xl text-4xl font-semibold leading-tight tracking-normal text-white sm:text-5xl lg:text-6xl">
+          <h1 class="max-w-4xl text-4xl font-black leading-tight tracking-normal text-white sm:text-5xl lg:text-6xl">
             {{ resolvedHome.hero_title }}
-            <span class="block text-cyan-200">{{ resolvedHome.hero_highlight }}</span>
+            <span class="home-shine block">{{ resolvedHome.hero_highlight }}</span>
           </h1>
           <p class="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
             {{ resolvedHome.hero_description }}
@@ -89,7 +91,7 @@
           <div class="mt-8 flex flex-col gap-3 sm:flex-row">
             <a
               :href="primaryActionUrl"
-              class="inline-flex items-center justify-center rounded-md bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+              class="inline-flex items-center justify-center rounded-md bg-cyan-300 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:bg-cyan-200"
               @click="handleHomeLink($event, primaryActionUrl)"
             >
               {{ resolvedHome.primary_cta_label }}
@@ -97,7 +99,7 @@
             </a>
             <a
               :href="resolvedHome.secondary_cta_url"
-              class="inline-flex items-center justify-center rounded-md border border-white/14 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/25 hover:bg-white/8"
+              class="inline-flex items-center justify-center rounded-md border border-white/14 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/25 hover:bg-white/8"
               :target="linkTarget(resolvedHome.secondary_cta_url)"
               :rel="linkRel(resolvedHome.secondary_cta_url)"
               @click="handleHomeLink($event, resolvedHome.secondary_cta_url)"
@@ -110,7 +112,7 @@
             <div
               v-for="stat in visibleStats"
               :key="`${stat.value}-${stat.label}`"
-              class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
+              class="rounded-lg border border-white/10 bg-white/[0.045] p-4 backdrop-blur"
             >
               <div class="text-2xl font-semibold text-white">{{ stat.value }}</div>
               <div class="mt-1 text-sm text-slate-400">{{ stat.label }}</div>
@@ -118,8 +120,8 @@
           </div>
         </div>
 
-        <div class="home-terminal rounded-lg border border-cyan-300/20 bg-slate-950 shadow-2xl shadow-cyan-950/40">
-          <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div class="home-terminal rounded-lg border border-cyan-300/20 bg-[#0d1117] shadow-2xl shadow-cyan-950/35">
+          <div class="flex items-center justify-between border-b border-white/10 bg-white/[0.035] px-4 py-3">
             <div class="flex items-center gap-2">
               <span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span>
               <span class="h-2.5 w-2.5 rounded-full bg-amber-300"></span>
@@ -127,19 +129,20 @@
             </div>
             <div class="text-xs font-medium text-slate-500">{{ resolvedHome.terminal_title }}</div>
           </div>
-          <div class="space-y-3 p-4 font-mono text-xs leading-6 text-slate-300 sm:text-sm">
+          <div class="space-y-3 p-5 font-mono text-xs leading-6 text-slate-300 sm:text-sm">
             <div v-for="(line, index) in terminalLines" :key="`${line}-${index}`" class="home-terminal-line">
-              <span class="mr-2 select-none text-cyan-300">$</span>{{ line }}
+              <span class="mr-2 select-none" :class="index % 3 === 0 ? 'text-emerald-300' : 'text-cyan-300'">$</span>{{ line }}
             </div>
+            <div class="home-cursor mt-2 inline-block h-4 w-2 bg-cyan-300/80 align-text-bottom"></div>
           </div>
         </div>
       </section>
 
-      <section id="features" class="border-y border-white/10 bg-white/[0.025] px-4 py-14 sm:px-6 lg:px-8">
+      <section id="features" class="border-y border-white/10 bg-white/[0.025] px-4 py-16 sm:px-6 lg:px-8">
         <div class="mx-auto max-w-7xl">
           <div class="max-w-2xl">
-            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.capabilities') }}</p>
-            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.features_title }}</h2>
+            <p class="text-sm font-bold uppercase tracking-normal text-cyan-200">{{ t('home.sections.capabilities') }}</p>
+            <h2 class="mt-3 text-3xl font-black text-white">{{ resolvedHome.features_title }}</h2>
             <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.features_description }}</p>
           </div>
 
@@ -147,10 +150,10 @@
             <article
               v-for="feature in visibleFeatures"
               :key="feature.title"
-              class="rounded-lg border border-white/10 bg-slate-900/70 p-5 transition hover:border-cyan-300/30 hover:bg-slate-900"
+              class="home-card rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-white/[0.07]"
             >
               <div class="mb-4 flex items-center justify-between gap-3">
-                <span class="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
+                <span class="flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
                   <Icon :name="resolveIcon(feature.icon)" size="md" />
                 </span>
                 <span v-if="feature.tag" class="rounded-md bg-white/8 px-2 py-1 text-xs font-medium text-slate-300">
@@ -167,20 +170,25 @@
       <section id="models" class="px-4 py-14 sm:px-6 lg:px-8">
         <div class="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.models') }}</p>
-            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.models_title }}</h2>
+            <p class="text-sm font-bold uppercase tracking-normal text-cyan-200">{{ t('home.sections.models') }}</p>
+            <h2 class="mt-3 text-3xl font-black text-white">{{ resolvedHome.models_title }}</h2>
             <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.models_description }}</p>
           </div>
-          <div class="grid gap-3 sm:grid-cols-2">
+          <div class="grid gap-4 sm:grid-cols-2">
             <article
               v-for="model in visibleModels"
               :key="`${model.provider}-${model.name}`"
-              class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
+              class="home-card rounded-lg border border-white/10 bg-white/[0.04] p-4 transition hover:-translate-y-1 hover:border-cyan-300/35"
             >
               <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="truncate text-sm font-semibold text-white">{{ model.name }}</div>
-                  <div class="mt-1 text-xs text-slate-500">{{ model.provider }}</div>
+                <div class="flex min-w-0 items-start gap-3">
+                  <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-black text-white" :class="modelAccentClass(model.provider)">
+                    {{ modelInitial(model) }}
+                  </span>
+                  <div class="min-w-0">
+                    <div class="truncate text-sm font-semibold text-white">{{ model.name }}</div>
+                    <div class="mt-1 text-xs text-slate-500">{{ model.provider }}</div>
+                  </div>
                 </div>
                 <span class="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-xs font-medium text-emerald-100">
                   {{ model.status || t('home.providers.supported') }}
@@ -196,8 +204,8 @@
       <section id="pricing" class="border-y border-white/10 bg-white/[0.025] px-4 py-14 sm:px-6 lg:px-8">
         <div class="mx-auto max-w-7xl">
           <div class="max-w-2xl">
-            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.pricing') }}</p>
-            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.pricing_title }}</h2>
+            <p class="text-sm font-bold uppercase tracking-normal text-cyan-200">{{ t('home.sections.pricing') }}</p>
+            <h2 class="mt-3 text-3xl font-black text-white">{{ resolvedHome.pricing_title }}</h2>
             <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.pricing_description }}</p>
           </div>
 
@@ -205,12 +213,17 @@
             <article
               v-for="item in visiblePricingItems"
               :key="item.name"
-              class="rounded-lg border p-5"
-              :class="item.highlighted ? 'border-cyan-300/35 bg-cyan-300/10' : 'border-white/10 bg-slate-900/70'"
+              class="home-card rounded-lg border p-5 transition hover:-translate-y-1"
+              :class="item.highlighted ? 'border-cyan-300/40 bg-cyan-300/10 shadow-xl shadow-cyan-950/25' : 'border-white/10 bg-white/[0.045]'"
             >
-              <div class="text-sm font-semibold text-white">{{ item.name }}</div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold text-white">{{ item.name }}</div>
+                <span v-if="item.highlighted" class="rounded-full bg-cyan-300 px-2.5 py-1 text-xs font-bold text-slate-950">
+                  {{ t('home.recommended') }}
+                </span>
+              </div>
               <div class="mt-4 flex items-end gap-2">
-                <span class="text-3xl font-semibold text-white">{{ item.price }}</span>
+                <span class="text-4xl font-black text-white">{{ item.price }}</span>
                 <span v-if="item.unit" class="pb-1 text-sm text-slate-400">{{ item.unit }}</span>
               </div>
               <p v-if="item.description" class="mt-3 text-sm leading-6 text-slate-400">{{ item.description }}</p>
@@ -235,11 +248,52 @@
         </div>
       </section>
 
+      <section
+        v-for="(section, sectionIndex) in visibleCustomSections"
+        :id="customSectionId(sectionIndex)"
+        :key="`${section.title}-${sectionIndex}`"
+        class="px-4 py-14 sm:px-6 lg:px-8"
+      >
+        <div class="mx-auto max-w-7xl">
+          <div class="max-w-2xl">
+            <p v-if="section.eyebrow" class="text-sm font-bold uppercase tracking-normal text-amber-200">{{ section.eyebrow }}</p>
+            <h2 class="mt-3 text-3xl font-black text-white">{{ section.title }}</h2>
+            <p v-if="section.description" class="mt-3 text-sm leading-7 text-slate-400">{{ section.description }}</p>
+          </div>
+          <div
+            v-if="section.items?.length"
+            class="mt-8 grid gap-4"
+            :class="section.layout === 'metrics' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'"
+          >
+            <article
+              v-for="item in visibleSectionItems(section.items)"
+              :key="`${item.label}-${item.value}`"
+              class="home-card rounded-lg border border-white/10 bg-white/[0.04] p-5"
+            >
+              <div class="text-xs font-bold uppercase tracking-normal text-slate-500">{{ item.label }}</div>
+              <div class="mt-3 text-xl font-bold text-white">{{ item.value }}</div>
+              <p v-if="item.description" class="mt-2 text-sm leading-6 text-slate-400">{{ item.description }}</p>
+            </article>
+          </div>
+          <a
+            v-if="section.cta_label"
+            :href="section.cta_url || primaryActionUrl"
+            class="mt-8 inline-flex items-center justify-center rounded-md border border-amber-200/25 bg-amber-200/10 px-5 py-3 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/16"
+            :target="linkTarget(section.cta_url || primaryActionUrl)"
+            :rel="linkRel(section.cta_url || primaryActionUrl)"
+            @click="handleHomeLink($event, section.cta_url || primaryActionUrl)"
+          >
+            {{ section.cta_label }}
+            <Icon name="arrowRight" size="sm" class="ml-2" />
+          </a>
+        </div>
+      </section>
+
       <section id="info" class="px-4 py-14 sm:px-6 lg:px-8">
         <div class="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-normal text-cyan-200">{{ t('home.sections.info') }}</p>
-            <h2 class="mt-3 text-3xl font-semibold text-white">{{ resolvedHome.info_title }}</h2>
+            <p class="text-sm font-bold uppercase tracking-normal text-cyan-200">{{ t('home.sections.info') }}</p>
+            <h2 class="mt-3 text-3xl font-black text-white">{{ resolvedHome.info_title }}</h2>
             <p class="mt-3 text-sm leading-7 text-slate-400">{{ resolvedHome.info_description }}</p>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
@@ -248,11 +302,26 @@
               :key="`${item.label}-${item.value}`"
               class="rounded-lg border border-white/10 bg-white/[0.04] p-4"
             >
-              <div class="text-xs font-medium uppercase tracking-normal text-slate-500">{{ item.label }}</div>
+              <div class="text-xs font-bold uppercase tracking-normal text-slate-500">{{ item.label }}</div>
               <div class="mt-2 text-lg font-semibold text-white">{{ item.value }}</div>
               <p v-if="item.description" class="mt-2 text-sm leading-6 text-slate-400">{{ item.description }}</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="px-4 pb-16 pt-2 sm:px-6 lg:px-8">
+        <div class="home-cta mx-auto max-w-7xl overflow-hidden rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-6 py-10 text-center sm:px-10">
+          <h2 class="text-3xl font-black text-white">{{ resolvedHome.hero_highlight }}</h2>
+          <p class="mx-auto mt-3 max-w-2xl text-sm leading-7 text-cyan-50/75">{{ resolvedHome.hero_description }}</p>
+          <a
+            :href="primaryActionUrl"
+            class="mt-7 inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-bold text-cyan-800 transition hover:-translate-y-0.5 hover:bg-cyan-50"
+            @click="handleHomeLink($event, primaryActionUrl)"
+          >
+            {{ resolvedHome.primary_cta_label }}
+            <Icon name="arrowRight" size="sm" class="ml-2" />
+          </a>
         </div>
       </section>
     </main>
@@ -282,6 +351,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type {
   HomeConfig,
+  HomeCustomSectionItem,
   HomeFeatureItem,
   HomeInfoItem,
   HomeModelItem,
@@ -293,7 +363,7 @@ import type {
 type HomeIconName = 'server' | 'shield' | 'chart' | 'database' | 'bolt' | 'key' | 'globe' | 'terminal' | 'cloud' | 'cpu' | 'calculator' | 'brain'
 
 interface ResolvedHomeConfig extends Required<Omit<HomeConfig,
-  'nav_items' | 'stats' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'terminal_lines'
+  'nav_items' | 'stats' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'terminal_lines' | 'custom_sections'
 >> {
   nav_items: HomeNavItem[]
   stats: HomeStatItem[]
@@ -302,6 +372,7 @@ interface ResolvedHomeConfig extends Required<Omit<HomeConfig,
   pricing_items: HomePricingItem[]
   info_items: HomeInfoItem[]
   terminal_lines: string[]
+  custom_sections: HomeCustomSectionItem[]
 }
 
 const { t } = useI18n()
@@ -335,6 +406,7 @@ const defaultHomeConfig = computed<ResolvedHomeConfig>(() => ({
     { label: t('home.nav.features'), url: '#features', visible: true },
     { label: t('home.nav.models'), url: '#models', visible: true },
     { label: t('home.nav.pricing'), url: '#pricing', visible: true },
+    { label: t('home.nav.extensions'), url: '#custom-0', visible: false },
     { label: t('home.nav.info'), url: '#info', visible: true }
   ],
   hero_badge: t('home.hero.badge'),
@@ -417,7 +489,8 @@ const defaultHomeConfig = computed<ResolvedHomeConfig>(() => ({
     { label: t('home.infoSection.billing'), value: t('home.infoSection.billingValue'), description: t('home.infoSection.billingDesc'), visible: true },
     { label: t('home.infoSection.security'), value: t('home.infoSection.securityValue'), description: t('home.infoSection.securityDesc'), visible: true },
     { label: t('home.infoSection.contact'), value: appStore.contactInfo || t('home.infoSection.contactValue'), description: t('home.infoSection.contactDesc'), visible: true }
-  ]
+  ],
+  custom_sections: []
 }))
 
 const resolvedHome = computed<ResolvedHomeConfig>(() => mergeHomeConfig(defaultHomeConfig.value, homeConfig.value))
@@ -427,6 +500,7 @@ const visibleFeatures = computed(() => visibleItems(resolvedHome.value.features)
 const visibleModels = computed(() => visibleItems(resolvedHome.value.models))
 const visiblePricingItems = computed(() => visibleItems(resolvedHome.value.pricing_items))
 const visibleInfoItems = computed(() => visibleItems(resolvedHome.value.info_items))
+const visibleCustomSections = computed(() => visibleItems(resolvedHome.value.custom_sections))
 const terminalLines = computed(() => resolvedHome.value.terminal_lines.filter((line) => line.trim().length > 0))
 const primaryActionUrl = computed(() => resolvedHome.value.primary_cta_url || (isAuthenticated.value ? dashboardPath.value : '/login'))
 
@@ -441,7 +515,8 @@ function mergeHomeConfig(base: ResolvedHomeConfig, custom: HomeConfig | null | u
     features: Array.isArray(source.features) ? source.features : base.features,
     models: Array.isArray(source.models) ? source.models : base.models,
     pricing_items: Array.isArray(source.pricing_items) ? source.pricing_items : base.pricing_items,
-    info_items: Array.isArray(source.info_items) ? source.info_items : base.info_items
+    info_items: Array.isArray(source.info_items) ? source.info_items : base.info_items,
+    custom_sections: Array.isArray(source.custom_sections) ? source.custom_sections : base.custom_sections
   }
 }
 
@@ -459,9 +534,30 @@ function visibleItems<T extends { visible?: boolean }>(items: T[]): T[] {
   return items.filter((item) => item.visible !== false)
 }
 
+function visibleSectionItems(items?: HomeInfoItem[]): HomeInfoItem[] {
+  return visibleItems(items || [])
+}
+
 function resolveIcon(icon?: string): HomeIconName {
   const allowed: HomeIconName[] = ['server', 'shield', 'chart', 'database', 'bolt', 'key', 'globe', 'terminal', 'cloud', 'cpu', 'calculator', 'brain']
   return allowed.includes(icon as HomeIconName) ? icon as HomeIconName : 'server'
+}
+
+function modelInitial(model: HomeModelItem): string {
+  return (model.name || model.provider || 'AI').trim().slice(0, 1).toUpperCase()
+}
+
+function modelAccentClass(provider: string): string {
+  const normalized = provider.toLowerCase()
+  if (normalized.includes('anthropic') || normalized.includes('claude')) return 'bg-amber-500'
+  if (normalized.includes('openai') || normalized.includes('gpt')) return 'bg-emerald-500'
+  if (normalized.includes('google') || normalized.includes('gemini')) return 'bg-blue-500'
+  if (normalized.includes('xai') || normalized.includes('grok')) return 'bg-fuchsia-500'
+  return 'bg-cyan-500'
+}
+
+function customSectionId(index: number): string {
+  return `custom-${index}`
 }
 
 function isInternalURL(url: string): boolean {
@@ -518,12 +614,31 @@ onMounted(() => {
 
 <style scoped>
 .home-shell {
+  position: relative;
   background:
-    linear-gradient(rgba(34, 211, 238, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.045) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(8, 47, 73, 0.38), rgba(2, 6, 23, 0.2) 42rem),
-    #020617;
-  background-size: 56px 56px, 56px 56px, auto, auto;
+    radial-gradient(circle at 15% 6%, rgba(6, 182, 212, 0.18), transparent 34rem),
+    radial-gradient(circle at 82% 30%, rgba(14, 165, 233, 0.1), transparent 30rem),
+    linear-gradient(180deg, rgba(8, 10, 18, 1), rgba(2, 6, 23, 1) 46rem, rgba(6, 8, 14, 1));
+}
+
+.home-grid {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 22%, black, transparent);
+  opacity: 0.55;
+}
+
+.home-shell > header,
+.home-shell > main,
+.home-shell > footer {
+  position: relative;
+  z-index: 1;
 }
 
 .home-icon-button {
@@ -542,12 +657,67 @@ onMounted(() => {
   color: white;
 }
 
+.home-shine {
+  background: linear-gradient(90deg, #f8fafc 0%, #f8fafc 35%, #67e8f9 50%, #38bdf8 62%, #f8fafc 100%);
+  background-clip: text;
+  background-size: 200% 100%;
+  color: transparent;
+  animation: home-shine 4s linear infinite;
+  -webkit-background-clip: text;
+}
+
+.home-pulse {
+  box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.55);
+  animation: home-pulse 2s ease-in-out infinite;
+}
+
+.home-card {
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.18);
+}
+
 .home-terminal {
   transform: perspective(1200px) rotateX(1deg) rotateY(-2deg);
 }
 
 .home-terminal-line {
   overflow-wrap: anywhere;
+}
+
+.home-cursor {
+  animation: home-cursor 1s step-end infinite;
+}
+
+.home-cta {
+  background:
+    radial-gradient(circle at 25% 35%, rgba(255, 255, 255, 0.16), transparent 35%),
+    linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(14, 165, 233, 0.8), rgba(56, 189, 248, 0.75));
+}
+
+@keyframes home-shine {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes home-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.45);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(110, 231, 183, 0);
+  }
+}
+
+@keyframes home-cursor {
+  50% {
+    opacity: 0;
+  }
 }
 
 @media (max-width: 1023px) {

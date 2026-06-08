@@ -28,12 +28,14 @@ const (
 	grokWebChatPath       = "/rest/app-chat/conversations/new"
 	grokWebUploadPath     = "/rest/app-chat/upload-file"
 	grokWebAssetsBaseURL  = "https://assets.grok.com/"
+	grokImagineWSURL      = "wss://grok.com/ws/imagine/listen"
 	grokWebMaxUploadBytes = 25 << 20
 )
 
 var (
 	grokRenderTagRE       = regexp.MustCompile(`(?s)<grok:render\s+[^>]*>.*?</grok:render>`)
 	grokRenderTagDetailRE = regexp.MustCompile(`(?s)<grok:render\s+card_id="([^"]+)"\s+card_type="([^"]+)"\s+type="([^"]+)"[^>]*>.*?</grok:render>`)
+	grokImagineImageURLRE = regexp.MustCompile(`/images/([A-Za-z0-9_-]+)\.(png|jpg|jpeg|webp|gif|bmp)`)
 	whitespaceRE          = regexp.MustCompile(`\s+`)
 )
 
@@ -63,8 +65,9 @@ type grokSearchSource struct {
 }
 
 type grokGeneratedImage struct {
-	URL string
-	ID  string
+	URL  string
+	ID   string
+	Blob string
 }
 
 type grokWebFileInput struct {
@@ -440,6 +443,9 @@ func (s *OpenAIGatewayService) ForwardGrokImages(ctx context.Context, c *gin.Con
 	if strings.TrimSpace(prompt) == "" {
 		return nil, errors.New("prompt is required")
 	}
+	if !parsed.IsEdits() && len(files) == 0 {
+		return s.forwardGrokImagineImages(ctx, c, account, requestModel, billingModel, upstreamModel, parsed, prompt, startTime)
+	}
 	fileAttachments, err := s.uploadGrokWebFileAttachments(ctx, account, files)
 	if err != nil {
 		return nil, err
@@ -512,6 +518,210 @@ func (s *OpenAIGatewayService) ForwardGrokImages(ctx context.Context, c *gin.Con
 		return s.streamGrokWebImages(ctx, c, resp, account, requestModel, billingModel, upstreamModel, parsed, prompt, startTime)
 	}
 	return s.bufferGrokWebImages(ctx, c, resp, account, requestModel, billingModel, upstreamModel, parsed, prompt, startTime)
+}
+
+func (s *OpenAIGatewayService) forwardGrokImagineImages(ctx context.Context, c *gin.Context, account *Account, requestModel, billingModel, upstreamModel string, parsed *OpenAIImagesRequest, prompt string, startTime time.Time) (*OpenAIForwardResult, error) {
+	requestID := newGrokRequestID()
+	images, err := s.collectGrokImagineImages(ctx, account, prompt, upstreamModel, parsed.N, grokImagineAspectRatio(parsed.Size), requestID)
+	if err != nil {
+		return nil, err
+	}
+	if len(images) == 0 {
+		return nil, errors.New("grok imagine websocket did not include generated images")
+	}
+	resolved, err := s.resolveGrokImageOutputs(ctx, account, images, parsed)
+	if err != nil {
+		return nil, err
+	}
+	if len(resolved) == 0 {
+		return nil, errors.New("grok imagine websocket did not resolve generated images")
+	}
+	if parsed.Stream {
+		if s.responseHeaderFilter != nil {
+			_ = s.responseHeaderFilter
+		}
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Status(http.StatusOK)
+		flusher, _ := c.Writer.(http.Flusher)
+		firstTokenMs := int(time.Since(startTime).Milliseconds())
+		for idx, image := range resolved {
+			event := map[string]any{
+				"type":           "image_generation.completed",
+				"id":             fmt.Sprintf("grok_img_%d", idx),
+				"created":        time.Now().Unix(),
+				"revised_prompt": prompt,
+				"size":           grokImagesOutputSize(parsed),
+			}
+			for key, value := range image {
+				event[key] = value
+			}
+			if err := writeGrokSSEJSON(c.Writer, event); err != nil {
+				return nil, err
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if _, err := io.WriteString(c.Writer, "data: [DONE]\n\n"); err != nil {
+			return nil, err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return &OpenAIForwardResult{
+			RequestID:        requestID,
+			Usage:            OpenAIUsage{InputTokens: estimateGrokTextTokens(prompt), OutputTokens: len(resolved)},
+			Model:            requestModel,
+			BillingModel:     billingModel,
+			UpstreamModel:    upstreamModel,
+			Stream:           true,
+			ResponseHeaders:  http.Header{"Content-Type": []string{"text/event-stream"}},
+			Duration:         time.Since(startTime),
+			FirstTokenMs:     &firstTokenMs,
+			ImageCount:       len(resolved),
+			ImageSize:        parsed.SizeTier,
+			ImageInputSize:   parsed.Size,
+			ImageOutputSizes: grokImagesOutputSizes(parsed, len(resolved)),
+		}, nil
+	}
+	data := make([]any, 0, len(resolved))
+	for _, image := range resolved {
+		item := map[string]any{
+			"revised_prompt": prompt,
+			"size":           grokImagesOutputSize(parsed),
+		}
+		for key, value := range image {
+			item[key] = value
+		}
+		data = append(data, item)
+	}
+	c.JSON(http.StatusOK, map[string]any{
+		"created": time.Now().Unix(),
+		"data":    data,
+		"usage": map[string]any{
+			"input_tokens":  estimateGrokTextTokens(prompt),
+			"output_tokens": len(resolved),
+			"total_tokens":  estimateGrokTextTokens(prompt) + len(resolved),
+		},
+	})
+	return &OpenAIForwardResult{
+		RequestID:        requestID,
+		Usage:            OpenAIUsage{InputTokens: estimateGrokTextTokens(prompt), OutputTokens: len(resolved)},
+		Model:            requestModel,
+		BillingModel:     billingModel,
+		UpstreamModel:    upstreamModel,
+		Stream:           false,
+		ResponseHeaders:  http.Header{"Content-Type": []string{"application/json"}},
+		Duration:         time.Since(startTime),
+		ImageCount:       len(resolved),
+		ImageSize:        parsed.SizeTier,
+		ImageInputSize:   parsed.Size,
+		ImageOutputSizes: grokImagesOutputSizes(parsed, len(resolved)),
+	}, nil
+}
+
+func (s *OpenAIGatewayService) collectGrokImagineImages(ctx context.Context, account *Account, prompt, upstreamModel string, wantCount int, aspectRatio, requestID string) ([]grokGeneratedImage, error) {
+	if wantCount <= 0 {
+		wantCount = 1
+	}
+	headers, err := buildGrokImagineWSHeaders(account)
+	if err != nil {
+		return nil, err
+	}
+	headers.Set("x-xai-request-id", requestID)
+	dialer := s.getOpenAIWSPassthroughDialer()
+	if dialer == nil {
+		return nil, errors.New("websocket dialer is not configured")
+	}
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	dialCtx, cancelDial := context.WithTimeout(ctx, 30*time.Second)
+	conn, status, _, err := dialer.Dial(dialCtx, grokImagineWSURL, headers, proxyURL)
+	cancelDial()
+	if err != nil {
+		if status > 0 {
+			return nil, fmt.Errorf("grok imagine websocket dial returned %d: %s", status, sanitizeUpstreamErrorMessage(err.Error()))
+		}
+		return nil, fmt.Errorf("grok imagine websocket dial failed: %s", sanitizeUpstreamErrorMessage(err.Error()))
+	}
+	defer func() { _ = conn.Close() }()
+	if err := conn.WriteJSON(ctx, buildGrokImagineResetMessage()); err != nil {
+		return nil, fmt.Errorf("write grok imagine reset message: %w", err)
+	}
+	if err := conn.WriteJSON(ctx, buildGrokImagineRequestMessage(requestID, prompt, aspectRatio, grokImagineEnablePro(upstreamModel))); err != nil {
+		return nil, fmt.Errorf("write grok imagine request message: %w", err)
+	}
+
+	type slot struct {
+		image     grokGeneratedImage
+		completed bool
+		moderated bool
+	}
+	slots := make(map[string]*slot)
+	images := make([]grokGeneratedImage, 0, wantCount)
+	deadline := time.Now().Add(120 * time.Second)
+	for len(images) < wantCount && time.Now().Before(deadline) {
+		readCtx, cancelRead := context.WithTimeout(ctx, 15*time.Second)
+		payload, err := conn.ReadMessage(readCtx)
+		cancelRead()
+		if err != nil {
+			if len(images) > 0 {
+				break
+			}
+			return nil, fmt.Errorf("read grok imagine websocket message: %w", err)
+		}
+		msg := gjson.ParseBytes(payload)
+		switch msg.Get("type").String() {
+		case "error":
+			code := strings.TrimSpace(msg.Get("err_code").String())
+			message := sanitizeUpstreamErrorMessage(strings.TrimSpace(grokFirstNonEmpty(msg.Get("err_msg").String(), string(payload))))
+			if code == "" {
+				code = "upstream_error"
+			}
+			return nil, fmt.Errorf("grok imagine websocket %s: %s", code, message)
+		case "json":
+			imageID := strings.TrimSpace(grokFirstNonEmpty(msg.Get("image_id").String(), msg.Get("job_id").String()))
+			if imageID == "" {
+				continue
+			}
+			current := slots[imageID]
+			if current == nil {
+				current = &slot{image: grokGeneratedImage{ID: imageID}}
+				slots[imageID] = current
+			}
+			status := strings.TrimSpace(msg.Get("current_status").String())
+			if status == "completed" {
+				current.completed = true
+				current.moderated = msg.Get("moderated").Bool()
+				if !current.moderated && current.image.URL != "" {
+					images = append(images, current.image)
+					delete(slots, imageID)
+				}
+			}
+		case "image":
+			imageURL := strings.TrimSpace(msg.Get("url").String())
+			imageID := grokImagineImageIDFromMessage(msg)
+			if imageID == "" {
+				continue
+			}
+			current := slots[imageID]
+			if current == nil {
+				current = &slot{image: grokGeneratedImage{ID: imageID}}
+				slots[imageID] = current
+			}
+			current.image.URL = imageURL
+			current.image.Blob = strings.TrimSpace(msg.Get("blob").String())
+			if current.completed && !current.moderated {
+				images = append(images, current.image)
+				delete(slots, imageID)
+			}
+		}
+	}
+	return images, nil
 }
 
 func (s *OpenAIGatewayService) buildGrokWebChatRequest(ctx context.Context, account *Account, body []byte) (*http.Request, error) {
@@ -1985,6 +2195,10 @@ func (s *OpenAIGatewayService) resolveGrokImageOutputs(ctx context.Context, acco
 			out = append(out, map[string]any{"url": localURL})
 			continue
 		}
+		if blob := strings.TrimSpace(image.Blob); blob != "" {
+			out = append(out, map[string]any{"b64_json": blob})
+			continue
+		}
 		b64, err := s.downloadGrokImageAsBase64(ctx, account, url)
 		if err != nil {
 			return nil, err
@@ -1995,9 +2209,22 @@ func (s *OpenAIGatewayService) resolveGrokImageOutputs(ctx context.Context, acco
 }
 
 func (s *OpenAIGatewayService) cacheGrokImageAsLocalURL(ctx context.Context, account *Account, image grokGeneratedImage) (string, error) {
-	raw, contentType, err := s.downloadGrokImageBytes(ctx, account, image.URL)
-	if err != nil {
-		return "", err
+	var (
+		raw         []byte
+		contentType string
+		err         error
+	)
+	if blob := strings.TrimSpace(image.Blob); blob != "" {
+		raw, err = base64.StdEncoding.DecodeString(blob)
+		if err != nil {
+			return "", fmt.Errorf("decode grok image blob: %w", err)
+		}
+		contentType = grokContentTypeFromImageURL(image.URL)
+	} else {
+		raw, contentType, err = s.downloadGrokImageBytes(ctx, account, image.URL)
+		if err != nil {
+			return "", err
+		}
 	}
 	seed := grokFirstNonEmpty(image.ID, image.URL)
 	id, err := saveLocalImage(raw, contentType, seed)
@@ -2062,6 +2289,22 @@ func isAllowedGrokAssetURL(imageURL string) bool {
 	return strings.EqualFold(parsed.Hostname(), "assets.grok.com")
 }
 
+func grokContentTypeFromImageURL(imageURL string) string {
+	lower := strings.ToLower(strings.TrimSpace(imageURL))
+	switch {
+	case strings.HasSuffix(lower, ".png"):
+		return "image/png"
+	case strings.HasSuffix(lower, ".webp"):
+		return "image/webp"
+	case strings.HasSuffix(lower, ".gif"):
+		return "image/gif"
+	case strings.HasSuffix(lower, ".bmp"):
+		return "image/bmp"
+	default:
+		return "image/jpeg"
+	}
+}
+
 func grokImagesOutputSize(parsed *OpenAIImagesRequest) string {
 	if parsed == nil {
 		return ""
@@ -2082,6 +2325,92 @@ func grokImagesOutputSizes(parsed *OpenAIImagesRequest, count int) []string {
 		out[i] = size
 	}
 	return out
+}
+
+func buildGrokImagineWSHeaders(account *Account) (http.Header, error) {
+	if account == nil {
+		return nil, errors.New("account is required")
+	}
+	cookie := buildGrokWebCookieHeader(account)
+	if cookie == "" {
+		return nil, errors.New("sso_token or cookie is required for Grok Cookie account")
+	}
+	headers := http.Header{}
+	headers.Set("Accept-Language", grokFirstNonEmpty(account.GetCredential("accept_language"), "zh-CN,zh;q=0.9,en;q=0.8"))
+	headers.Set("Cookie", cookie)
+	headers.Set("Origin", grokFirstNonEmpty(account.GetCredential("origin"), grokWebDefaultBaseURL))
+	headers.Set("Referer", grokFirstNonEmpty(account.GetCredential("referer"), "https://grok.com/imagine"))
+	headers.Set("User-Agent", grokFirstNonEmpty(account.GetCredential("user_agent"), defaultGrokWebUserAgent()))
+	return headers, nil
+}
+
+func buildGrokImagineResetMessage() map[string]any {
+	return map[string]any{
+		"type":      "conversation.item.create",
+		"timestamp": time.Now().UnixMilli(),
+		"item": map[string]any{
+			"type":    "message",
+			"content": []map[string]any{{"type": "reset"}},
+		},
+	}
+}
+
+func buildGrokImagineRequestMessage(requestID, prompt, aspectRatio string, enablePro bool) map[string]any {
+	return map[string]any{
+		"type":      "conversation.item.create",
+		"timestamp": time.Now().UnixMilli(),
+		"item": map[string]any{
+			"type": "message",
+			"content": []map[string]any{{
+				"requestId": requestID,
+				"text":      prompt,
+				"type":      "input_text",
+				"properties": map[string]any{
+					"section_count":       0,
+					"is_kids_mode":        false,
+					"enable_nsfw":         true,
+					"skip_upsampler":      false,
+					"enable_side_by_side": true,
+					"is_initial":          false,
+					"aspect_ratio":        aspectRatio,
+					"enable_pro":          enablePro,
+				},
+			}},
+		},
+	}
+}
+
+func grokImagineAspectRatio(size string) string {
+	switch strings.TrimSpace(strings.ToLower(size)) {
+	case "1280x720", "16:9":
+		return "16:9"
+	case "720x1280", "9:16":
+		return "9:16"
+	case "1792x1024", "3:2":
+		return "3:2"
+	case "1024x1792", "2:3":
+		return "2:3"
+	case "1024x1024", "1:1":
+		return "1:1"
+	default:
+		return "2:3"
+	}
+}
+
+func grokImagineEnablePro(model string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(model)), "pro")
+}
+
+func grokImagineImageIDFromMessage(msg gjson.Result) string {
+	if imageID := strings.TrimSpace(grokFirstNonEmpty(msg.Get("image_id").String(), msg.Get("job_id").String())); imageID != "" {
+		return imageID
+	}
+	imageURL := strings.TrimSpace(msg.Get("url").String())
+	matches := grokImagineImageURLRE.FindStringSubmatch(imageURL)
+	if len(matches) >= 2 {
+		return matches[1]
+	}
+	return ""
 }
 
 func buildGrokWebCookieHeader(account *Account) string {

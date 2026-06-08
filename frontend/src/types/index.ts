@@ -234,6 +234,17 @@ export interface HomeInfoItem {
   visible?: boolean
 }
 
+export interface HomeCustomSectionItem {
+  eyebrow?: string
+  title: string
+  description?: string
+  layout?: 'cards' | 'metrics' | 'text'
+  items?: HomeInfoItem[]
+  cta_label?: string
+  cta_url?: string
+  visible?: boolean
+}
+
 export interface HomeConfig {
   nav_items?: HomeNavItem[]
   hero_badge?: string
@@ -259,6 +270,7 @@ export interface HomeConfig {
   info_title?: string
   info_description?: string
   info_items?: HomeInfoItem[]
+  custom_sections?: HomeCustomSectionItem[]
 }
 
 export interface PublicSettings {

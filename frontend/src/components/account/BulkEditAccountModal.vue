@@ -1079,6 +1079,51 @@
           />
         </div>
       </div>
+
+      <!-- Danger zone -->
+      <div class="border-t border-red-200 pt-4 dark:border-red-900/50">
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-900/20">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 class="text-sm font-semibold text-red-700 dark:text-red-300">
+                {{ t('admin.accounts.bulkDeleteTitle') }}
+              </h3>
+              <p class="mt-1 text-xs text-red-600 dark:text-red-300">
+                {{ t('admin.accounts.bulkEdit.deleteHint', { count: deleteTargetCount }) }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-danger"
+              data-testid="bulk-edit-delete-button"
+              :disabled="deleting || deleteTargetCount === 0"
+              @click="openBulkDeleteConfirm"
+            >
+              <svg
+                v-if="deleting"
+                class="-ml-1 mr-2 h-4 w-4 animate-spin"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              {{ deleting ? t('admin.accounts.bulkEdit.deleting') : t('admin.accounts.bulkActions.delete') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </form>
 
     <template #footer>
@@ -1129,6 +1174,16 @@
     :danger="true"
     @confirm="handleMixedChannelConfirm"
     @cancel="handleMixedChannelCancel"
+  />
+  <ConfirmDialog
+    :show="showBulkDeleteConfirm"
+    :title="t('admin.accounts.bulkDeleteTitle')"
+    :message="bulkDeleteConfirmMessage"
+    :confirm-text="t('common.delete')"
+    :cancel-text="t('common.cancel')"
+    :danger="true"
+    @confirm="confirmBulkDelete"
+    @cancel="showBulkDeleteConfirm = false"
   />
 </template>
 
@@ -1270,7 +1325,9 @@ const enableRpmLimit = ref(false)
 
 // State - field values
 const submitting = ref(false)
+const deleting = ref(false)
 const showMixedChannelWarning = ref(false)
+const showBulkDeleteConfirm = ref(false)
 const mixedChannelWarningMessage = ref('')
 const pendingUpdatesForConfirm = ref<Record<string, unknown> | null>(null)
 const baseUrl = ref('')
@@ -1342,6 +1399,17 @@ const openAIWSModeConcurrencyHintKey = computed(() =>
 )
 const openAIAPIKeyWSModeConcurrencyHintKey = computed(() =>
   resolveOpenAIWSModeConcurrencyHintKey(openaiAPIKeyResponsesWebSocketV2Mode.value)
+)
+const deleteTargetCount = computed(() =>
+  targetMode.value === 'filtered' ? targetPreviewCount.value : props.accountIds.length
+)
+const bulkDeleteConfirmMessage = computed(() =>
+  t(
+    targetMode.value === 'filtered'
+      ? 'admin.accounts.bulkEdit.deleteFilteredConfirm'
+      : 'admin.accounts.bulkDeleteConfirm',
+    { count: deleteTargetCount.value }
+  )
 )
 
 // Model mapping helpers
@@ -1603,10 +1671,54 @@ const canPreCheck = () =>
 
 const handleClose = () => {
   showMixedChannelWarning.value = false
+  showBulkDeleteConfirm.value = false
   mixedChannelWarningMessage.value = ''
   pendingUpdatesForConfirm.value = null
   mixedChannelConfirmed.value = false
   emit('close')
+}
+
+const openBulkDeleteConfirm = () => {
+  if (deleteTargetCount.value === 0) {
+    appStore.showError(t('admin.accounts.bulkEdit.noSelection'))
+    return
+  }
+  showBulkDeleteConfirm.value = true
+}
+
+const confirmBulkDelete = async () => {
+  if (deleteTargetCount.value === 0) {
+    showBulkDeleteConfirm.value = false
+    return
+  }
+
+  deleting.value = true
+  try {
+    const res = targetMode.value === 'filtered' && props.target?.filters
+      ? await adminAPI.accounts.batchDelete({ filters: props.target.filters })
+      : await adminAPI.accounts.batchDelete(props.accountIds)
+    const success = res.success || 0
+    const failed = res.failed || 0
+
+    if (success > 0 && failed === 0) {
+      appStore.showSuccess(t('admin.accounts.bulkDeleteSuccess', { count: success }))
+    } else if (success > 0) {
+      appStore.showError(t('admin.accounts.bulkDeletePartial', { success, failed }))
+    } else {
+      appStore.showError(t('admin.accounts.bulkDeleteFailed'))
+    }
+
+    if (success > 0) {
+      emit('updated')
+      handleClose()
+    }
+  } catch (error: any) {
+    appStore.showError(error.message || t('admin.accounts.bulkDeleteFailed'))
+    console.error('Error bulk deleting accounts:', error)
+  } finally {
+    deleting.value = false
+    showBulkDeleteConfirm.value = false
+  }
 }
 
 // 预检查：提交前调接口检测，有风险就弹窗阻止，返回 false 表示需要用户确认
@@ -1791,6 +1903,7 @@ watch(
 
       // Reset mixed channel warning state
       showMixedChannelWarning.value = false
+      showBulkDeleteConfirm.value = false
       mixedChannelWarningMessage.value = ''
       pendingUpdatesForConfirm.value = null
       mixedChannelConfirmed.value = false
