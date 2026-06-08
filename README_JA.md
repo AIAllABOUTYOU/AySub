@@ -318,3 +318,7 @@ pnpm --dir frontend build
 License: [GNU Lesser General Public License v3.0](LICENSE) or later.
 
 Copyright: `aiaay.com`.
+
+# 🎉致谢
+
+本项目在 [LINUX DO](https://linux.do/) 社区推广，感谢 LINUX DO 社区对开源项目的支持与认可。 学 AI 上 L 站

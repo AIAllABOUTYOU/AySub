@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,7 @@ func TestHandleCCBufferedFromAnthropic_PreservesMessageStartCacheUsageAndReasoni
 
 	reasoningEffort := "high"
 	resp := &http.Response{
-		Header: http.Header{"x-request-id": []string{"rid_cc_buffered"}},
+		Header: http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_cc_buffered"}},
 		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
 			`event: message_start`,
 			`data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4.5","stop_reason":"","usage":{"input_tokens":12,"cache_read_input_tokens":9,"cache_creation_input_tokens":3}}}`,
@@ -57,7 +58,7 @@ func TestHandleCCBufferedFromAnthropic_PreservesMessageStartCacheUsageAndReasoni
 		}, "\n"))),
 	}
 
-	svc := &GatewayService{}
+	svc := &GatewayService{responseHeaderFilter: compileResponseHeaderFilter(&config.Config{})}
 	result, err := svc.handleCCBufferedFromAnthropic(resp, c, "gpt-5", "claude-sonnet-4.5", &reasoningEffort, time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -67,6 +68,7 @@ func TestHandleCCBufferedFromAnthropic_PreservesMessageStartCacheUsageAndReasoni
 	require.Equal(t, 3, result.Usage.CacheCreationInputTokens)
 	require.NotNil(t, result.ReasoningEffort)
 	require.Equal(t, "high", *result.ReasoningEffort)
+	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
 }
 
 func TestHandleCCStreamingFromAnthropic_PreservesMessageStartCacheUsageAndReasoning(t *testing.T) {

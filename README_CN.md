@@ -18,6 +18,7 @@ AySub 是一个自部署 AI API 网关，覆盖账号调度、OpenAI 兼容 API�
 
 版权归属：`aiaay.com`。
 
+
 ## 当前能力
 
 当前代码库已实现：
@@ -318,3 +319,7 @@ pnpm --dir frontend build
 许可证：[GNU Lesser General Public License v3.0](LICENSE) 或更高版本。
 
 版权归属：`aiaay.com`。
+
+# 🎉致谢
+
+本项目在 [LINUX DO](https://linux.do/) 社区推广，感谢 LINUX DO 社区对开源项目的支持与认可。 学 AI 上 L 站
