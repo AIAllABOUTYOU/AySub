@@ -450,12 +450,53 @@ func flattenCodexImportValues(values []any) []any {
 			}
 			return
 		}
+		if obj, ok := value.(map[string]any); ok && !hasCodexImportToken(obj) {
+			if containerValues := codexImportContainerValues(obj); len(containerValues) > 0 {
+				for _, item := range containerValues {
+					appendValue(item)
+				}
+				return
+			}
+		}
 		out = append(out, value)
 	}
 	for _, value := range values {
 		appendValue(value)
 	}
 	return out
+}
+
+func hasCodexImportToken(obj map[string]any) bool {
+	return firstCodexString(obj,
+		[]string{"tokens", "access_token"},
+		[]string{"tokens", "accessToken"},
+		[]string{"token", "access_token"},
+		[]string{"token", "accessToken"},
+		[]string{"credentials", "access_token"},
+		[]string{"credentials", "accessToken"},
+		[]string{"access_token"},
+		[]string{"accessToken"},
+		[]string{"token"},
+	) != ""
+}
+
+func codexImportContainerValues(obj map[string]any) []any {
+	for _, path := range [][]string{
+		{"accounts"},
+		{"data", "accounts"},
+		{"items"},
+		{"sessions"},
+	} {
+		if value, ok := codexPathValue(obj, path); ok {
+			switch typed := value.(type) {
+			case []any:
+				return typed
+			case map[string]any:
+				return []any{typed}
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, error) {
@@ -475,6 +516,10 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		item.AccessToken = firstCodexString(raw,
 			[]string{"tokens", "access_token"},
 			[]string{"tokens", "accessToken"},
+			[]string{"token", "access_token"},
+			[]string{"token", "accessToken"},
+			[]string{"credentials", "access_token"},
+			[]string{"credentials", "accessToken"},
 			[]string{"access_token"},
 			[]string{"accessToken"},
 			[]string{"token"},
@@ -482,37 +527,72 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		item.RefreshToken = firstCodexString(raw,
 			[]string{"tokens", "refresh_token"},
 			[]string{"tokens", "refreshToken"},
+			[]string{"token", "refresh_token"},
+			[]string{"token", "refreshToken"},
+			[]string{"credentials", "refresh_token"},
+			[]string{"credentials", "refreshToken"},
 			[]string{"refresh_token"},
 			[]string{"refreshToken"},
 		)
 		item.IDToken = firstCodexString(raw,
 			[]string{"tokens", "id_token"},
 			[]string{"tokens", "idToken"},
+			[]string{"token", "id_token"},
+			[]string{"token", "idToken"},
+			[]string{"credentials", "id_token"},
+			[]string{"credentials", "idToken"},
 			[]string{"id_token"},
 			[]string{"idToken"},
 		)
-		item.Email = firstCodexString(raw, []string{"email"}, []string{"user", "email"})
+		item.Email = firstCodexString(raw,
+			[]string{"email"},
+			[]string{"user", "email"},
+			[]string{"credentials", "email"},
+			[]string{"providerSpecificData", "email"},
+			[]string{"meta", "label"},
+		)
 		item.AccountID = firstCodexString(raw,
 			[]string{"chatgpt_account_id"},
 			[]string{"chatgptAccountId"},
 			[]string{"account_id"},
 			[]string{"accountId"},
+			[]string{"tokens", "chatgpt_account_id"},
+			[]string{"tokens", "chatgptAccountId"},
+			[]string{"tokens", "account_id"},
+			[]string{"tokens", "accountId"},
+			[]string{"credentials", "chatgpt_account_id"},
+			[]string{"credentials", "chatgptAccountId"},
+			[]string{"providerSpecificData", "chatgpt_account_id"},
+			[]string{"providerSpecificData", "chatgptAccountId"},
+			[]string{"meta", "chatgpt_account_id"},
+			[]string{"meta", "chatgptAccountId"},
 			[]string{"account", "id"},
 			[]string{"account", "account_id"},
 			[]string{"account", "chatgpt_account_id"},
 		)
+		if item.AccountID == "" && firstCodexString(raw, []string{"provider"}) == "codex" {
+			item.AccountID = firstCodexString(raw, []string{"id"})
+		}
 		item.UserID = firstCodexString(raw,
 			[]string{"chatgpt_user_id"},
 			[]string{"chatgptUserId"},
 			[]string{"user_id"},
 			[]string{"userId"},
 			[]string{"user", "id"},
+			[]string{"credentials", "chatgpt_user_id"},
+			[]string{"credentials", "chatgptUserId"},
+			[]string{"providerSpecificData", "chatgpt_user_id"},
+			[]string{"providerSpecificData", "chatgptUserId"},
 		)
 		item.PlanType = firstCodexString(raw,
 			[]string{"plan_type"},
 			[]string{"planType"},
 			[]string{"account", "plan_type"},
 			[]string{"account", "planType"},
+			[]string{"credentials", "plan_type"},
+			[]string{"credentials", "planType"},
+			[]string{"providerSpecificData", "chatgpt_plan_type"},
+			[]string{"providerSpecificData", "chatgptPlanType"},
 		)
 		item.Organization = firstCodexString(raw,
 			[]string{"organization_id"},
@@ -520,7 +600,7 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 			[]string{"org_id"},
 			[]string{"orgId"},
 		)
-		item.Name = firstCodexString(raw, []string{"name"}, []string{"user", "name"})
+		item.Name = firstCodexString(raw, []string{"name"}, []string{"user", "name"}, []string{"meta", "label"})
 		authProvider := firstCodexString(raw, []string{"auth_provider"}, []string{"authProvider"})
 		if authProvider != "" {
 			item.Extra["auth_provider"] = authProvider
@@ -535,8 +615,11 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		if tokenExpiresAt, ok := firstCodexTime(raw,
 			[]string{"tokens", "expires_at"},
 			[]string{"tokens", "expiresAt"},
+			[]string{"credentials", "expires_at"},
+			[]string{"credentials", "expiresAt"},
 			[]string{"expires_at"},
 			[]string{"expiresAt"},
+			[]string{"expired"},
 		); ok {
 			if tokenExpiresAt.Unix() <= now.Unix()-codexImportClockSkewSeconds {
 				return nil, fmt.Errorf("access_token 已过期: %s", tokenExpiresAt.Format(time.RFC3339))

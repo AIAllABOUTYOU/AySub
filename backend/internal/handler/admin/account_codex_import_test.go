@@ -142,6 +142,98 @@ func TestNormalizeCodexSessionJSONExtractsCredentialsAndIgnoresSessionToken(t *t
 	}
 }
 
+func TestParseCodexSessionImportEntriesSupportsConverterSub2APIAccountsDocument(t *testing.T) {
+	token := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{
+		"email": "sub2api@example.com",
+	})
+	req := CodexSessionImportRequest{
+		Content: fmt.Sprintf(`{
+			"exported_at": "2026-06-08T00:00:00Z",
+			"accounts": [{
+				"name": "Sub2API Account",
+				"platform": "openai",
+				"type": "oauth",
+				"credentials": {
+					"access_token": %q,
+					"chatgpt_account_id": "acct-sub2api",
+					"chatgpt_user_id": "user-sub2api",
+					"plan_type": "plus",
+					"expires_at": "2026-08-05T13:40:42Z"
+				}
+			}]
+		}`, token),
+	}
+
+	entries, err := parseCodexSessionImportEntries(req)
+	if err != nil {
+		t.Fatalf("parseCodexSessionImportEntries error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("len(entries) = %d, want 1", len(entries))
+	}
+
+	item, err := normalizeCodexImportEntry(entries[0])
+	if err != nil {
+		t.Fatalf("normalizeCodexImportEntry error = %v", err)
+	}
+	if item.Name != "Sub2API Account" {
+		t.Fatalf("name = %q, want Sub2API Account", item.Name)
+	}
+	if item.Credentials["chatgpt_account_id"] != "acct-sub2api" {
+		t.Fatalf("chatgpt_account_id = %v, want acct-sub2api", item.Credentials["chatgpt_account_id"])
+	}
+	if item.Credentials["chatgpt_user_id"] != "user-sub2api" {
+		t.Fatalf("chatgpt_user_id = %v, want user-sub2api", item.Credentials["chatgpt_user_id"])
+	}
+}
+
+func TestNormalizeCodexImportSupportsNineRouterAndCodexManagerShapes(t *testing.T) {
+	token := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{})
+
+	nineRouter, err := normalizeCodexImportEntry(codexImportEntry{Index: 1, Value: map[string]any{
+		"provider":     "codex",
+		"authType":     "oauth",
+		"id":           "acct-9router",
+		"accessToken":  token,
+		"refreshToken": "refresh-9router",
+		"providerSpecificData": map[string]any{
+			"chatgptPlanType": "team",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("normalize 9router error = %v", err)
+	}
+	if nineRouter.Credentials["chatgpt_account_id"] != "acct-9router" {
+		t.Fatalf("9router account id = %v, want acct-9router", nineRouter.Credentials["chatgpt_account_id"])
+	}
+	if nineRouter.Credentials["plan_type"] != "team" {
+		t.Fatalf("9router plan type = %v, want team", nineRouter.Credentials["plan_type"])
+	}
+
+	codexManager, err := normalizeCodexImportEntry(codexImportEntry{Index: 2, Value: map[string]any{
+		"tokens": map[string]any{
+			"access_token":        token,
+			"refresh_token":       "refresh-cm",
+			"chatgpt_account_id":  "acct-cm",
+			"chatgpt_accountId":   "ignored",
+			"chatgpt_account_id2": "ignored",
+		},
+		"meta": map[string]any{
+			"label":              "codex-manager@example.com",
+			"chatgpt_account_id": "acct-cm-meta",
+		},
+	}})
+	if err != nil {
+		t.Fatalf("normalize codex manager error = %v", err)
+	}
+	if codexManager.Credentials["email"] != "codex-manager@example.com" {
+		t.Fatalf("codex manager email = %v, want codex-manager@example.com", codexManager.Credentials["email"])
+	}
+	if codexManager.Credentials["chatgpt_account_id"] != "acct-cm" {
+		t.Fatalf("codex manager account id = %v, want acct-cm", codexManager.Credentials["chatgpt_account_id"])
+	}
+}
+
 func TestMergeCodexImportCredentialsClearsStaleRefreshFieldsWhenIncomingHasNoRefreshToken(t *testing.T) {
 	existing := map[string]any{
 		"access_token":       "old-access-token",
