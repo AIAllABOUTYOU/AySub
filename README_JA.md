@@ -18,27 +18,24 @@ AySub は、セルフホスト向けの AI API ゲートウェイです。アカ
 
 著作権表記: `aiaay.com`。
 
-## 現在の範囲
+## 現在の機能
 
 現在のコードベースで実装済み:
 
-- アカウントプール、スティッキーセッション、フェイルオーバー、同時実行制御、レート制限、クォータ確認、使用量課金。
-- OpenAI 互換 `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1/embeddings`、`/v1/images/*`、`/v1/videos`、`/v1/audio/*`、LiveKit、Gemini native routes。
-- API Key 単位のモデル/エンドポイント権限。判定はバックエンドのゲートウェイミドルウェアで強制。
-- ユーザー/管理者向けのリクエストログと使用量レポート。
-- `/models` モデルマーケット、価格計算機、利用可能チャネル、管理側チャネル戦略ビュー。
-- `/playground` 体験センター。ユーザー自身の API Key でチャット、画像生成、動画タスク、音声 speech/transcription/translation を実行。
-- `/status` 公開ステータスページと匿名 read-only `/api/v1/status/public`。
-- `/setup` セットアップウィザード。Docker では `AUTO_SETUP` と `ADMIN_EMAIL` / `ADMIN_PASSWORD` を利用可能。
-- デイリーチェックイン。設定キーは `checkin_enabled` と `checkin_reward_amount`。
-- TOTP リカバリーコード、センシティブ操作の再認証、ユーザー側 API Key 失効。
-- 登録制御: 登録スイッチ、メールドメイン許可リスト、メールドメインブロックリスト、メールエイリアス制限。
-- セキュリティ監査センター: 監査ログ、ポリシールール、ロック対象、ハッシュチェーン整合性チェック。
-- コンテンツモデレーション/リスク管理。モデレーションイベントは監査/ログ経路へ接続。
-- 内蔵決済: プラン、注文、決済インスタンス、callback、返金、決済運用メトリクス。
-- xAI 公式 API Key。Grok Cookie/Console アダプターは chat、responses、messages、images、videos、LiveKit token/RTC、quota、model list に対応。
-- 生成メディアのローカルキャッシュ: `DATA_DIR/files/images`、`DATA_DIR/files/videos`。管理画面で一覧、削除、条件付きクリーンアップ、孤児ファイル削除が可能。
-- 任意の proxy compose profile: `deploy/docker-compose.proxy-profiles.yml` に Privoxy、FlareSolverr、WARP を定義。
+- Anthropic/Claude、OpenAI、Gemini、xAI/Grok、Antigravity、Anthropic Bedrock / Vertex Service Account のマルチプラットフォームアカウントプール。group、priority、load factor、sticky session、failover、concurrency、temporary unscheduling、overload/rate-limit cooldown、quota check、usage billing に対応。
+- API gateway: Claude Messages、OpenAI Chat Completions、Responses、Messages compatible forwarding、Embeddings、Images、Videos、Audio、LiveKit、Gemini native `/v1beta`、Antigravity 専用 `/antigravity/v1` と `/antigravity/v1beta`。
+- API Key 管理: model allowlist、endpoint permission、group binding、status control、user CRUD、admin-side group reassignment。
+- Channel / pricing: channel CRUD、model pricing/mapping、wildcard matching、group multiplier、RPM override、strategy view、user available channels、model marketplace、price calculator。
+- Account operations: OAuth/API Key/Cookie/Service Account/Bedrock account、batch import/export、CRS sync、upstream model sync、account test、refresh、privacy setup、quota/tier refresh、error cleanup、usage stats。
+- User system: email registration/login、verification code、forgot/reset password、JWT refresh/logout、GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding、email completion、session revocation。
+- User workspace: dashboard、API Keys、usage records、request logs、daily check-in、security center、notification email、TOTP and recovery codes、sensitive-operation verification、profile、account bindings、redeem codes、subscriptions、orders、affiliate rebates、custom menu pages。
+- Admin console: dashboard、users、groups、accounts、proxies、announcements、settings、home configuration、channels、channel monitors、scheduled tests、subscriptions、usage cleanup、request logs、redeem codes、promo codes、user attributes、API Key group management。
+- Ops monitoring: realtime concurrency、account availability、realtime traffic、QPS WebSocket、alert rules/events/silences、error logs、request errors、upstream errors、request drilldown、system logs、runtime log config、metric thresholds。
+- Security / risk control: audit logs、incidents、policies、subject locks、hash-chain integrity checks、audit exports、content moderation config/status/logs、user unban、flagged-hash cleanup。
+- Payment / subscription: plans、balance recharge、subscription purchase、orders、refund request/processing、order retry、payment dashboard、provider instances、visible payment methods、callbacks、EasyPay、Alipay、WeChat Pay、Stripe、Airwallex。
+- Media / files: generated image/video local cache under `DATA_DIR/files/images` and `DATA_DIR/files/videos`、admin listing/deletion/filtered cleanup/orphan cleanup、custom Markdown pages and images served from `DATA_DIR/pages`。
+- Data / system maintenance: S3/source profiles、backup jobs、scheduled backups、backup restore、system version check、app update、rollback、restart endpoints。
+- Deployment features: `/setup` wizard、Docker `AUTO_SETUP`、embedded frontend、simple/backend modes、optional Privoxy/FlareSolverr/WARP proxy compose profiles。
 
 README で完了済みとは扱わない項目:
 
@@ -59,30 +56,56 @@ README で完了済みとは扱わない項目:
 | 領域 | ページ |
 | --- | --- |
 | セットアップ | `/setup` |
+| Home | `/home` |
+| Login/Register | `/login`, `/register` |
+| User dashboard | `/dashboard` |
 | API Key | `/keys` |
 | デイリーチェックイン | `/checkin` |
-| ユーザーリクエストログ | `/request-logs` |
-| ユーザーセキュリティ | `/user/security` |
-| モデルマーケット | `/models` |
-| 体験センター | `/playground` |
-| 公開ステータス | `/status` |
-| 管理リクエストログ | `/admin/request-logs` |
-| 管理セキュリティセンター | `/admin/security` |
-| メディアキャッシュ | `/admin/media-cache` |
-| リスク管理 | `/admin/risk-control` |
-| 決済ダッシュボード | `/admin/orders/dashboard` |
+| User usage | `/usage` |
+| User request logs | `/request-logs` |
+| User security center | `/security` |
+| Model marketplace | `/models` |
+| Available channels | `/available-channels` |
+| Channel status | `/monitor` |
+| Experience center | `/playground` (alias `/experience`) |
+| Subscriptions and purchase | `/subscriptions`, `/purchase` |
+| Orders and payment result | `/orders`, `/payment/result`, `/payment/stripe`, `/payment/airwallex` |
+| Redeem codes | `/redeem` |
+| Affiliate | `/affiliate` |
+| Profile | `/profile` |
+| Custom pages | `/custom/:id` |
+| Public status | `/status` |
+| Legal documents | `/legal/:documentId` |
+| Admin dashboard | `/admin/dashboard` |
+| Ops monitoring | `/admin/ops` |
+| Users/groups/accounts | `/admin/users`, `/admin/groups`, `/admin/accounts` |
+| Channels and monitors | `/admin/channels/pricing`, `/admin/channels/monitor` |
+| Subscription admin | `/admin/subscriptions` |
+| Announcements and home config | `/admin/announcements`, `/admin/home-config` |
+| Proxy admin | `/admin/proxies` |
+| Risk control | `/admin/risk-control` |
+| Redeem/promo codes | `/admin/redeem`, `/admin/promo-codes` |
+| Affiliate records | `/admin/affiliates/invites`, `/admin/affiliates/rebates`, `/admin/affiliates/transfers` |
+| Payment admin | `/admin/orders/dashboard`, `/admin/orders`, `/admin/orders/plans` |
+| Admin usage/request logs | `/admin/usage`, `/admin/request-logs` |
+| Security audit | `/admin/security` |
+| Media cache | `/admin/media-cache` |
+| System settings | `/admin/settings` |
 
 ## API
 
+AySub APIs are grouped into gateway, user, admin, payment, and public surfaces. The source of truth is `backend/internal/server/routes/*.go`.
+
 ゲートウェイルートは AySub API Key で認証します:
 
+- `POST /v1/messages`
+- `POST /v1/messages/count_tokens`
+- `GET /v1/models`
+- `GET /v1/usage`
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 - `POST /v1/responses/*`
 - `GET /v1/responses`
-- `POST /v1/messages`
-- `GET /v1/models`
-- `GET /v1/usage`
 - `POST /v1/embeddings`
 - `POST /v1/images/generations`
 - `POST /v1/images/edits`
@@ -92,32 +115,40 @@ README で完了済みとは扱わない項目:
 - `POST /v1/audio/speech`
 - `POST /v1/audio/transcriptions`
 - `POST /v1/audio/translations`
+- `POST /v1/livekit/tokens`
+- `GET /v1/livekit/rtc`
 - `GET /v1/files/image?id=...`
 - `GET /v1/files/video?id=...`
+- `GET /v1beta/models`
+- `GET /v1beta/models/{model}`
+- `POST /v1beta/models/*`
+- `/responses`, `/chat/completions`, and other no-`/v1` compatibility aliases
+- `POST /backend-api/codex/responses`, `GET /backend-api/codex/responses`
+- `GET /antigravity/models`
+- `POST /antigravity/v1/messages`
+- `POST /antigravity/v1/messages/count_tokens`
+- `GET /antigravity/v1/models`
+- `GET /antigravity/v1/usage`
+- `GET /antigravity/v1beta/models`
+- `GET /antigravity/v1beta/models/{model}`
+- `POST /antigravity/v1beta/models/*`
 
-現在の AySub 追加 API:
+User/admin/payment/public API examples:
 
-- `GET /api/v1/user/checkin`
-- `GET /api/v1/user/checkin/status`
-- `POST /api/v1/user/checkin`
-- `GET /api/v1/user/security/events`
-- `POST /api/v1/user/security/verify-sensitive-operation`
-- `POST /api/v1/user/security/api-keys/:id/revoke`
-- `GET /api/v1/admin/security/audit-logs`
-- `GET /api/v1/admin/security/incidents`
-- `GET /api/v1/admin/security/policies`
-- `POST /api/v1/admin/security/policies`
-- `PUT /api/v1/admin/security/policies/:id`
-- `DELETE /api/v1/admin/security/policies/:id`
-- `GET /api/v1/admin/security/locks`
-- `POST /api/v1/admin/security/locks`
-- `POST /api/v1/admin/security/locks/:id/unlock`
-- `GET /api/v1/admin/security/integrity/check`
-- `GET /api/v1/admin/media-cache`
-- `POST /api/v1/admin/media-cache/cleanup`
-- `POST /api/v1/admin/media-cache/orphans/cleanup`
-- `DELETE /api/v1/admin/media-cache/:type/:id`
-- `GET /api/v1/status/public`
+- Auth: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/login/2fa`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password`
+- OAuth: `/api/v1/auth/oauth/{github,google,linuxdo,wechat,oidc,dingtalk}/start` plus callback / complete / bind / create-account flows
+- User: `/api/v1/user/profile`, `/api/v1/user/platform-quotas`, `/api/v1/user/checkin`, `/api/v1/user/security/events`, `/api/v1/user/totp/*`, `/api/v1/user/notify-email/*`
+- API Keys and usage: `/api/v1/keys`, `/api/v1/groups/available`, `/api/v1/usage`, `/api/v1/usage/requests`, `/api/v1/usage/dashboard/*`
+- User channels and playground: `/api/v1/channels/available`, `/api/v1/channel-monitors`, `/api/v1/playground/sessions`
+- Announcements, redeem, subscriptions: `/api/v1/announcements`, `/api/v1/redeem`, `/api/v1/subscriptions/*`
+- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
+- Admin channels: `/api/v1/admin/channels/*`, `/api/v1/admin/channel-monitors/*`, `/api/v1/admin/channel-monitor-templates/*`, `/api/v1/admin/scheduled-test-plans/*`
+- Admin operations: `/api/v1/admin/ops/*`, `/api/v1/admin/ops/requests`, `/api/v1/admin/usage/*`, `/api/v1/admin/media-cache/*`
+- Admin security/risk: `/api/v1/admin/security/*`, `/api/v1/admin/risk-control/*`, `/api/v1/admin/error-passthrough-rules/*`, `/api/v1/admin/tls-fingerprint-profiles/*`
+- Admin monetization: `/api/v1/admin/subscriptions/*`, `/api/v1/admin/payment/*`, `/api/v1/admin/redeem-codes/*`, `/api/v1/admin/promo-codes/*`, `/api/v1/admin/affiliates/*`
+- Data and system: `/api/v1/admin/data-management/*`, `/api/v1/admin/backups/*`, `/api/v1/admin/system/*`
+- Payment: `/api/v1/payment/config`, `/api/v1/payment/plans`, `/api/v1/payment/orders/*`, `/api/v1/payment/public/orders/*`, `/api/v1/payment/webhook/{easypay,alipay,wxpay,stripe,airwallex}`
+- Public: `GET /health`, `GET /setup/status`, `GET /api/v1/settings/public`, `GET /api/v1/status/public`, `GET /api/v1/pages/:slug`, `GET /api/v1/pages/:slug/images/*`
 
 ## Docker
 

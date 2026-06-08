@@ -18,27 +18,24 @@ AySub is an AI API gateway for self-hosted account scheduling, OpenAI-compatible
 
 Copyright: `aiaay.com`.
 
-## Current Scope
+## Current Capabilities
 
 Implemented in the current codebase:
 
-- Account pool scheduling, sticky sessions, failover, concurrency controls, rate limits, quota checks, and usage billing.
-- OpenAI-compatible `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/embeddings`, `/v1/images/*`, `/v1/videos`, `/v1/audio/*`, LiveKit, and Gemini native route handling.
-- API Key model and endpoint permissions enforced in backend gateway middleware.
-- Request log center and usage reports for users and admins.
-- Model marketplace at `/models`, price calculator, available channel view, and admin channel strategy view.
-- Experience center at `/playground` for chat, image generation, video tasks, and audio speech/transcription/translation using the user's own API Key.
-- Public status page at `/status` backed by anonymous `/api/v1/status/public`.
-- Setup wizard at `/setup`, plus Docker `AUTO_SETUP` with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
-- Daily check-in with `checkin_enabled` and `checkin_reward_amount` settings.
-- TOTP with recovery codes, sensitive-operation verification, and API Key revocation from the user security page.
-- Registration controls: registration switch, email suffix whitelist, email domain blacklist, and email alias restriction.
-- Security audit center with audit logs, policy rules, subject locks, and hash-chain integrity check.
-- Content moderation/risk control and moderation events connected to audit/logging paths.
-- Built-in payment system with plans, orders, provider instances, callbacks, refunds, and payment operation metrics.
-- xAI official API Key support and Grok Cookie/Console adapters for chat, responses, messages, images, videos, LiveKit token/RTC, quota, and model listing.
-- Local generated media cache under `DATA_DIR/files/images` and `DATA_DIR/files/videos`, with admin cache listing, deletion, filtered cleanup, and orphan cleanup.
-- Optional proxy compose profile for Privoxy, FlareSolverr, and WARP in `deploy/docker-compose.proxy-profiles.yml`.
+- Multi-platform account pool scheduling for Anthropic/Claude, OpenAI, Gemini, xAI/Grok, Antigravity, and Anthropic Bedrock / Vertex Service Account accounts, with groups, priority, load factor, sticky sessions, failover, concurrency controls, temporary unscheduling, overload/rate-limit cooldowns, quota checks, and usage billing.
+- API gateway support for Claude Messages, OpenAI Chat Completions, Responses, Messages-compatible forwarding, Embeddings, Images, Videos, Audio, LiveKit, Gemini native `/v1beta`, and dedicated Antigravity `/antigravity/v1` plus `/antigravity/v1beta` routes.
+- API Key management with model allowlists, endpoint permissions, group binding, status control, user CRUD, and admin-side group reassignment.
+- Channel and pricing system with channel CRUD, model pricing/mapping, wildcard matching, group multipliers, RPM overrides, strategy views, user available channels, model marketplace, and price calculator.
+- Account operations for OAuth/API Key/Cookie/Service Account/Bedrock account types, batch import/export, CRS sync, upstream model sync, account tests, refresh, privacy setup, quota/tier refresh, error cleanup, and usage stats.
+- User system with email registration/login, verification codes, forgot/reset password, JWT refresh/logout, GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding, email completion, and session revocation.
+- User workspace with dashboard, API Keys, usage records, request logs, daily check-in, security center, notification email, TOTP and recovery codes, sensitive-operation verification, profile, account bindings, redeem codes, subscriptions, orders, affiliate rebates, and custom menu pages.
+- Admin console for dashboard, users, groups, accounts, proxies, announcements, settings, home configuration, channels, channel monitors, scheduled tests, subscriptions, usage cleanup, request logs, redeem codes, promo codes, user attributes, and API Key group management.
+- Ops monitoring with realtime concurrency, account availability, realtime traffic, QPS WebSocket, alert rules/events/silences, error logs, request errors, upstream errors, request drilldown, system logs, runtime log config, and metric thresholds.
+- Security and risk control with audit logs, incidents, policies, subject locks, hash-chain integrity checks, audit exports, content moderation config/status/logs, user unban, and flagged-hash cleanup.
+- Payment and subscription system with plans, balance recharge, subscription purchase, orders, refund request/processing, order retry, payment dashboard, provider instances, visible payment methods, callbacks, and EasyPay, Alipay, WeChat Pay, Stripe, and Airwallex providers.
+- Media and files: generated image/video local cache under `DATA_DIR/files/images` and `DATA_DIR/files/videos`, admin listing/deletion/filtered cleanup/orphan cleanup, and custom Markdown pages plus images served from `DATA_DIR/pages`.
+- Data and system maintenance with S3/source profiles, backup jobs, scheduled backups, backup restore, system version check, app update, rollback, and restart endpoints.
+- Deployment features: `/setup` wizard, Docker `AUTO_SETUP`, embedded frontend, simple/backend modes, and optional Privoxy/FlareSolverr/WARP proxy compose profiles.
 
 Not claimed as complete in README:
 
@@ -59,30 +56,56 @@ Those items are tracked in:
 | Area | Page |
 | --- | --- |
 | Setup | `/setup` |
+| Home | `/home` |
+| Login/Register | `/login`, `/register` |
+| User dashboard | `/dashboard` |
 | API Keys | `/keys` |
 | Daily check-in | `/checkin` |
+| User usage | `/usage` |
 | User request logs | `/request-logs` |
-| User security | `/user/security` |
+| User security center | `/security` |
 | Model marketplace | `/models` |
-| Experience center | `/playground` |
+| Available channels | `/available-channels` |
+| Channel status | `/monitor` |
+| Experience center | `/playground` (alias `/experience`) |
+| Subscriptions and purchase | `/subscriptions`, `/purchase` |
+| Orders and payment result | `/orders`, `/payment/result`, `/payment/stripe`, `/payment/airwallex` |
+| Redeem codes | `/redeem` |
+| Affiliate | `/affiliate` |
+| Profile | `/profile` |
+| Custom pages | `/custom/:id` |
 | Public status | `/status` |
-| Admin request logs | `/admin/request-logs` |
-| Admin security center | `/admin/security` |
-| Admin media cache | `/admin/media-cache` |
-| Admin risk control | `/admin/risk-control` |
-| Admin payment dashboard | `/admin/orders/dashboard` |
+| Legal documents | `/legal/:documentId` |
+| Admin dashboard | `/admin/dashboard` |
+| Ops monitoring | `/admin/ops` |
+| Users/groups/accounts | `/admin/users`, `/admin/groups`, `/admin/accounts` |
+| Channels and monitors | `/admin/channels/pricing`, `/admin/channels/monitor` |
+| Subscription admin | `/admin/subscriptions` |
+| Announcements and home config | `/admin/announcements`, `/admin/home-config` |
+| Proxy admin | `/admin/proxies` |
+| Risk control | `/admin/risk-control` |
+| Redeem/promo codes | `/admin/redeem`, `/admin/promo-codes` |
+| Affiliate records | `/admin/affiliates/invites`, `/admin/affiliates/rebates`, `/admin/affiliates/transfers` |
+| Payment admin | `/admin/orders/dashboard`, `/admin/orders`, `/admin/orders/plans` |
+| Admin usage/request logs | `/admin/usage`, `/admin/request-logs` |
+| Security audit | `/admin/security` |
+| Media cache | `/admin/media-cache` |
+| System settings | `/admin/settings` |
 
-## API Surface
+## API
+
+AySub APIs are grouped into gateway, user, admin, payment, and public surfaces. The source of truth is `backend/internal/server/routes/*.go`.
 
 Gateway routes are authenticated with AySub API Keys:
 
+- `POST /v1/messages`
+- `POST /v1/messages/count_tokens`
+- `GET /v1/models`
+- `GET /v1/usage`
 - `POST /v1/chat/completions`
 - `POST /v1/responses`
 - `POST /v1/responses/*`
 - `GET /v1/responses`
-- `POST /v1/messages`
-- `GET /v1/models`
-- `GET /v1/usage`
 - `POST /v1/embeddings`
 - `POST /v1/images/generations`
 - `POST /v1/images/edits`
@@ -92,32 +115,40 @@ Gateway routes are authenticated with AySub API Keys:
 - `POST /v1/audio/speech`
 - `POST /v1/audio/transcriptions`
 - `POST /v1/audio/translations`
+- `POST /v1/livekit/tokens`
+- `GET /v1/livekit/rtc`
 - `GET /v1/files/image?id=...`
 - `GET /v1/files/video?id=...`
+- `GET /v1beta/models`
+- `GET /v1beta/models/{model}`
+- `POST /v1beta/models/*`
+- `/responses`, `/chat/completions`, and other no-`/v1` compatibility aliases
+- `POST /backend-api/codex/responses`, `GET /backend-api/codex/responses`
+- `GET /antigravity/models`
+- `POST /antigravity/v1/messages`
+- `POST /antigravity/v1/messages/count_tokens`
+- `GET /antigravity/v1/models`
+- `GET /antigravity/v1/usage`
+- `GET /antigravity/v1beta/models`
+- `GET /antigravity/v1beta/models/{model}`
+- `POST /antigravity/v1beta/models/*`
 
-User/admin APIs added by the current AySub work:
+Examples from the user, admin, payment, and public APIs:
 
-- `GET /api/v1/user/checkin`
-- `GET /api/v1/user/checkin/status`
-- `POST /api/v1/user/checkin`
-- `GET /api/v1/user/security/events`
-- `POST /api/v1/user/security/verify-sensitive-operation`
-- `POST /api/v1/user/security/api-keys/:id/revoke`
-- `GET /api/v1/admin/security/audit-logs`
-- `GET /api/v1/admin/security/incidents`
-- `GET /api/v1/admin/security/policies`
-- `POST /api/v1/admin/security/policies`
-- `PUT /api/v1/admin/security/policies/:id`
-- `DELETE /api/v1/admin/security/policies/:id`
-- `GET /api/v1/admin/security/locks`
-- `POST /api/v1/admin/security/locks`
-- `POST /api/v1/admin/security/locks/:id/unlock`
-- `GET /api/v1/admin/security/integrity/check`
-- `GET /api/v1/admin/media-cache`
-- `POST /api/v1/admin/media-cache/cleanup`
-- `POST /api/v1/admin/media-cache/orphans/cleanup`
-- `DELETE /api/v1/admin/media-cache/:type/:id`
-- `GET /api/v1/status/public`
+- Auth: `/api/v1/auth/register`, `/api/v1/auth/login`, `/api/v1/auth/login/2fa`, `/api/v1/auth/refresh`, `/api/v1/auth/logout`, `/api/v1/auth/forgot-password`, `/api/v1/auth/reset-password`
+- OAuth: `/api/v1/auth/oauth/{github,google,linuxdo,wechat,oidc,dingtalk}/start` plus callback / complete / bind / create-account flows
+- User: `/api/v1/user/profile`, `/api/v1/user/platform-quotas`, `/api/v1/user/checkin`, `/api/v1/user/security/events`, `/api/v1/user/totp/*`, `/api/v1/user/notify-email/*`
+- API Keys and usage: `/api/v1/keys`, `/api/v1/groups/available`, `/api/v1/usage`, `/api/v1/usage/requests`, `/api/v1/usage/dashboard/*`
+- User channels and playground: `/api/v1/channels/available`, `/api/v1/channel-monitors`, `/api/v1/playground/sessions`
+- Announcements, redeem, subscriptions: `/api/v1/announcements`, `/api/v1/redeem`, `/api/v1/subscriptions/*`
+- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
+- Admin channels: `/api/v1/admin/channels/*`, `/api/v1/admin/channel-monitors/*`, `/api/v1/admin/channel-monitor-templates/*`, `/api/v1/admin/scheduled-test-plans/*`
+- Admin operations: `/api/v1/admin/ops/*`, `/api/v1/admin/ops/requests`, `/api/v1/admin/usage/*`, `/api/v1/admin/media-cache/*`
+- Admin security/risk: `/api/v1/admin/security/*`, `/api/v1/admin/risk-control/*`, `/api/v1/admin/error-passthrough-rules/*`, `/api/v1/admin/tls-fingerprint-profiles/*`
+- Admin monetization: `/api/v1/admin/subscriptions/*`, `/api/v1/admin/payment/*`, `/api/v1/admin/redeem-codes/*`, `/api/v1/admin/promo-codes/*`, `/api/v1/admin/affiliates/*`
+- Data and system: `/api/v1/admin/data-management/*`, `/api/v1/admin/backups/*`, `/api/v1/admin/system/*`
+- Payment: `/api/v1/payment/config`, `/api/v1/payment/plans`, `/api/v1/payment/orders/*`, `/api/v1/payment/public/orders/*`, `/api/v1/payment/webhook/{easypay,alipay,wxpay,stripe,airwallex}`
+- Public: `GET /health`, `GET /setup/status`, `GET /api/v1/settings/public`, `GET /api/v1/status/public`, `GET /api/v1/pages/:slug`, `GET /api/v1/pages/:slug/images/*`
 
 ## Docker
 
