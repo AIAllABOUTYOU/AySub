@@ -454,6 +454,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
 import userChannelsAPI, { type UserAvailableChannel } from '@/api/channels'
+import { BILLING_MODE_IMAGE } from '@/constants/channel'
 import {
   appendPlaygroundMessage,
   createPlaygroundSession,
@@ -536,22 +537,55 @@ const activeKeys = computed(() => apiKeys.value.filter((key) => key.status === '
 const selectedKey = computed(() => activeKeys.value.find((key) => key.id === selectedKeyId.value) || null)
 
 const availableModels = computed(() => {
-  const rows: Array<{ name: string; platform: string }> = []
+  const rows: Array<{ name: string; platform: string; billingMode?: string | null }> = []
   for (const channel of channels.value) {
     for (const section of channel.platforms) {
       for (const model of section.supported_models) {
-        rows.push({ name: model.name, platform: model.platform || section.platform })
+        rows.push({
+          name: model.name,
+          platform: model.platform || section.platform,
+          billingMode: model.pricing?.billing_mode,
+        })
       }
     }
   }
   return rows
 })
 
+function modelMatchesActiveTab(model: { name: string; billingMode?: string | null }): boolean {
+  const name = model.name.toLowerCase()
+  if (activeTab.value === 'image') {
+    return (
+      model.billingMode === BILLING_MODE_IMAGE ||
+      name.startsWith('gpt-image-') ||
+      name.startsWith('grok-imagine-image')
+    )
+  }
+  if (activeTab.value === 'video') {
+    return name === 'grok-imagine-video' || name.includes('video')
+  }
+  if (activeTab.value === 'audio') {
+    return (
+      name.includes('audio') ||
+      name.includes('tts') ||
+      name.includes('speech') ||
+      name.includes('transcrib') ||
+      name.includes('whisper')
+    )
+  }
+  return (
+    model.billingMode !== BILLING_MODE_IMAGE &&
+    !name.startsWith('gpt-image-') &&
+    !name.startsWith('grok-imagine-image') &&
+    name !== 'grok-imagine-video'
+  )
+}
+
 const filteredModels = computed(() => {
   const platform = selectedKey.value?.group?.platform
   const names = new Set<string>()
   for (const model of availableModels.value) {
-    if (!platform || model.platform === platform) {
+    if ((!platform || model.platform === platform) && modelMatchesActiveTab(model)) {
       names.add(model.name)
     }
   }
@@ -768,6 +802,7 @@ async function generateImage() {
 
   submitting.value = true
   try {
+    clearGeneratedImages()
     generatedImages.value = await createImageGeneration({
       baseUrl: baseUrl.value,
       apiKey: selectedKey.value!.key,
@@ -780,6 +815,13 @@ async function generateImage() {
   } finally {
     submitting.value = false
   }
+}
+
+function clearGeneratedImages() {
+  for (const image of generatedImages.value) {
+    revokeObjectUrl(image.url)
+  }
+  generatedImages.value = []
 }
 
 function revokeObjectUrl(url: string) {
@@ -966,12 +1008,13 @@ async function submitAudio() {
   }
 }
 
-watch([selectedKeyId, filteredModels], syncSelectedModel)
+watch([selectedKeyId, activeTab, filteredModels], syncSelectedModel)
 watch(audioMode, clearAudioPreview)
 
 onMounted(loadData)
 onBeforeUnmount(() => {
   stopVideoPolling()
+  clearGeneratedImages()
   clearVideoPreview()
   clearAudioPreview()
 })

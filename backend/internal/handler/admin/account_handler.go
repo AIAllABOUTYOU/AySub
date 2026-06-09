@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -170,6 +171,8 @@ type AccountInspectionRequest struct {
 	Filters              *BulkUpdateAccountFilters `json:"filters"`
 	ModelID              string                    `json:"model_id"`
 	TargetType           string                    `json:"target_type"`
+	Page                 int                       `json:"page"`
+	PageSize             int                       `json:"page_size"`
 	SampleSize           int                       `json:"sample_size"`
 	Concurrency          int                       `json:"concurrency"`
 	TimeoutMS            int                       `json:"timeout_ms"`
@@ -218,6 +221,12 @@ type AccountInspectionRunResult struct {
 	StartedAt            int64                    `json:"started_at"`
 	FinishedAt           int64                    `json:"finished_at"`
 	DurationMs           int64                    `json:"duration_ms"`
+	Page                 int                      `json:"page"`
+	PageSize             int                      `json:"page_size"`
+	TotalAccounts        int64                    `json:"total_accounts"`
+	TotalPages           int                      `json:"total_pages"`
+	HasMore              bool                     `json:"has_more"`
+	NextPage             int                      `json:"next_page,omitempty"`
 	Concurrency          int                      `json:"concurrency"`
 	TimeoutMS            int                      `json:"timeout_ms"`
 	UsedPercentThreshold float64                  `json:"used_percent_threshold"`
@@ -827,14 +836,68 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 		usedPercentThreshold = 1000
 	}
 
-	accounts, err := h.listAccountsForInspection(c.Request.Context(), &req, targetType)
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 100
+	}
+	if pageSize > 1000 {
+		pageSize = 1000
+	}
+	if len(req.AccountIDs) > 0 && pageSize > 200 {
+		pageSize = 200
+	}
+	queryPageSize := pageSize
+	pageOffset := (page - 1) * queryPageSize
+	if req.SampleSize > 0 {
+		if pageOffset >= req.SampleSize {
+			now := time.Now().UnixMilli()
+			result := AccountInspectionRunResult{
+				TargetType:           targetType,
+				ModelID:              req.ModelID,
+				StartedAt:            now,
+				FinishedAt:           now,
+				Page:                 page,
+				PageSize:             queryPageSize,
+				TotalAccounts:        int64(req.SampleSize),
+				TotalPages:           int(math.Ceil(float64(req.SampleSize) / float64(queryPageSize))),
+				Concurrency:          concurrency,
+				TimeoutMS:            timeoutMS,
+				UsedPercentThreshold: usedPercentThreshold,
+				Summary:              AccountInspectionSummary{TotalAccounts: 0},
+				Items:                []AccountInspectionItem{},
+			}
+			response.Success(c, result)
+			return
+		}
+	}
+
+	accounts, totalAccounts, err := h.listAccountsForInspection(c.Request.Context(), &req, targetType, page, queryPageSize)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 
-	if req.SampleSize > 0 && req.SampleSize < len(accounts) {
-		accounts = accounts[:req.SampleSize]
+	if req.SampleSize > 0 {
+		remaining := req.SampleSize - pageOffset
+		if remaining < len(accounts) {
+			accounts = accounts[:remaining]
+		}
+	}
+	if req.SampleSize > 0 && int64(req.SampleSize) < totalAccounts {
+		totalAccounts = int64(req.SampleSize)
+	}
+	totalPages := 0
+	if queryPageSize > 0 {
+		totalPages = int(math.Ceil(float64(totalAccounts) / float64(queryPageSize)))
+	}
+	hasMore := int64(page*queryPageSize) < totalAccounts
+	nextPage := 0
+	if hasMore {
+		nextPage = page + 1
 	}
 
 	startedAt := time.Now()
@@ -901,6 +964,12 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 		StartedAt:            startedAt.UnixMilli(),
 		FinishedAt:           finishedAt.UnixMilli(),
 		DurationMs:           finishedAt.Sub(startedAt).Milliseconds(),
+		Page:                 page,
+		PageSize:             queryPageSize,
+		TotalAccounts:        totalAccounts,
+		TotalPages:           totalPages,
+		HasMore:              hasMore,
+		NextPage:             nextPage,
 		Concurrency:          concurrency,
 		TimeoutMS:            timeoutMS,
 		UsedPercentThreshold: usedPercentThreshold,
@@ -911,17 +980,26 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *AccountInspectionRequest, targetType string) ([]*service.Account, error) {
+func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *AccountInspectionRequest, targetType string, page int, pageSize int) ([]*service.Account, int64, error) {
 	if req == nil {
 		req = &AccountInspectionRequest{}
 	}
 
 	if len(req.AccountIDs) > 0 {
-		accounts, err := h.adminService.GetAccountsByIDs(ctx, req.AccountIDs)
-		if err != nil {
-			return nil, err
+		total := int64(len(req.AccountIDs))
+		start := (page - 1) * pageSize
+		if start >= len(req.AccountIDs) {
+			return []*service.Account{}, total, nil
 		}
-		return filterAccountsForInspection(accounts, targetType), nil
+		end := start + pageSize
+		if end > len(req.AccountIDs) {
+			end = len(req.AccountIDs)
+		}
+		accounts, err := h.adminService.GetAccountsByIDs(ctx, req.AccountIDs[start:end])
+		if err != nil {
+			return nil, 0, err
+		}
+		return filterAccountsForInspection(accounts, targetType), total, nil
 	}
 
 	filters := req.Filters
@@ -944,7 +1022,7 @@ func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *Acc
 			} else {
 				parsed, err := strconv.ParseInt(filters.Group, 10, 64)
 				if err != nil || parsed < 0 {
-					return nil, infraerrors.BadRequest("INVALID_GROUP_FILTER", "invalid group filter")
+					return nil, 0, infraerrors.BadRequest("INVALID_GROUP_FILTER", "invalid group filter")
 				}
 				groupID = parsed
 			}
@@ -962,15 +1040,15 @@ func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *Acc
 		platform = inspectionTargetPlatform(targetType)
 	}
 
-	accounts, _, err := h.adminService.ListAccounts(ctx, 1, 10000, platform, accountType, status, search, groupID, privacyMode, "name", "asc")
+	accounts, total, err := h.adminService.ListAccounts(ctx, page, pageSize, platform, accountType, status, search, groupID, privacyMode, "name", "asc")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	ptrs := make([]*service.Account, 0, len(accounts))
 	for i := range accounts {
 		ptrs = append(ptrs, &accounts[i])
 	}
-	return filterAccountsForInspection(ptrs, targetType), nil
+	return filterAccountsForInspection(ptrs, targetType), total, nil
 }
 
 func filterAccountsForInspection(accounts []*service.Account, targetType string) []*service.Account {

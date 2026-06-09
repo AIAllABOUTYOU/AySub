@@ -231,6 +231,7 @@ import { adminAPI } from '@/api/admin'
 import type {
   AccountInspectionAction,
   AccountInspectionItem,
+  AccountInspectionSummary,
   AccountInspectionRunResult
 } from '@/api/admin/accounts'
 import { useAppStore } from '@/stores/app'
@@ -240,9 +241,19 @@ type TabKey = 'all' | 'failed' | 'delete' | 'disable' | 'enable' | 'reauth' | 's
 const router = useRouter()
 const appStore = useAppStore()
 
+const inspectionPageSize = 100
+const inspectionActionBatchSize = 500
+const maxVisibleInspectionItems = 5000
+
 const running = ref(false)
 const actionLoading = ref(false)
 const result = ref<AccountInspectionRunResult | null>(null)
+const actionIds = reactive<Record<'enable' | 'disable' | 'delete' | 'reauth', number[]>>({
+  enable: [],
+  disable: [],
+  delete: [],
+  reauth: []
+})
 const activeTab = ref<TabKey>('all')
 const logs = ref<string[]>([])
 
@@ -277,12 +288,12 @@ const statCards = computed(() => [
 
 const tabs = computed(() => [
   { key: 'all' as const, label: '全部', count: items.value.length },
-  { key: 'failed' as const, label: '失败', count: items.value.filter(i => i.status === 'failed').length },
+  { key: 'failed' as const, label: '失败', count: summary.value?.failed ?? 0 },
   { key: 'delete' as const, label: '建议删除', count: idsForAction('delete').length },
   { key: 'disable' as const, label: '建议停用', count: idsForAction('disable').length },
   { key: 'enable' as const, label: '建议启用', count: idsForAction('enable').length },
   { key: 'reauth' as const, label: '需重认', count: idsForAction('reauth').length },
-  { key: 'success' as const, label: '成功', count: items.value.filter(i => i.status === 'success').length }
+  { key: 'success' as const, label: '成功', count: summary.value?.success ?? 0 }
 ])
 
 const filteredItems = computed(() => {
@@ -301,6 +312,99 @@ const filteredItems = computed(() => {
   }
 })
 
+function emptySummary(): AccountInspectionSummary {
+  return {
+    total_accounts: 0,
+    tested: 0,
+    completed: 0,
+    success: 0,
+    failed: 0,
+    skipped: 0,
+    suggest_delete: 0,
+    suggest_disable: 0,
+    suggest_enable: 0,
+    suggest_reauth: 0,
+    keep: 0
+  }
+}
+
+function resetActionIds() {
+  actionIds.enable = []
+  actionIds.disable = []
+  actionIds.delete = []
+  actionIds.reauth = []
+}
+
+function mergeSummary(target: AccountInspectionSummary, source: AccountInspectionSummary) {
+  target.tested += source.tested
+  target.completed += source.completed
+  target.success += source.success
+  target.failed += source.failed
+  target.skipped += source.skipped
+  target.suggest_delete += source.suggest_delete
+  target.suggest_disable += source.suggest_disable
+  target.suggest_enable += source.suggest_enable
+  target.suggest_reauth += source.suggest_reauth
+  target.keep += source.keep
+}
+
+function mergeInspectionResult(target: AccountInspectionRunResult, pageResult: AccountInspectionRunResult) {
+  target.finished_at = pageResult.finished_at
+  target.duration_ms += pageResult.duration_ms
+  target.page = pageResult.page
+  target.page_size = pageResult.page_size
+  target.total_accounts = pageResult.total_accounts
+  target.total_pages = pageResult.total_pages
+  target.has_more = pageResult.has_more
+  target.next_page = pageResult.next_page
+  mergeSummary(target.summary, pageResult.summary)
+  target.summary.total_accounts = pageResult.total_accounts
+
+  const remainingVisible = maxVisibleInspectionItems - target.items.length
+  if (remainingVisible > 0) {
+    target.items.push(...pageResult.items.slice(0, remainingVisible))
+  }
+  for (const item of pageResult.items) {
+    if (item.suggested_action === 'enable') actionIds.enable.push(item.account_id)
+    if (item.suggested_action === 'disable') actionIds.disable.push(item.account_id)
+    if (item.suggested_action === 'delete') actionIds.delete.push(item.account_id)
+    if (item.suggested_action === 'reauth') actionIds.reauth.push(item.account_id)
+  }
+}
+
+function decrementSummaryValue(key: keyof AccountInspectionSummary, amount: number) {
+  if (!result.value || amount <= 0) return
+  result.value.summary[key] = Math.max(0, result.value.summary[key] - amount)
+}
+
+function markInspectionActionApplied(action: 'enable' | 'disable' | 'delete', ids: number[]) {
+  const idSet = new Set(ids)
+  if (result.value && action === 'delete') {
+    result.value.items = result.value.items.filter(item => !(idSet.has(item.account_id) && item.suggested_action === action))
+  }
+  if (result.value && action !== 'delete') {
+    for (const item of result.value.items) {
+      if (!idSet.has(item.account_id) || item.suggested_action !== action) continue
+      item.suggested_action = 'keep'
+      item.suggested_reason = action === 'enable' ? '已按建议启用账号' : '已按建议停用账号'
+      item.schedulable = action === 'enable'
+      item.runtime_available = action === 'enable' && item.current_status === 'active'
+    }
+  }
+
+  if (action === 'enable') decrementSummaryValue('suggest_enable', ids.length)
+  if (action === 'disable') decrementSummaryValue('suggest_disable', ids.length)
+  if (action === 'delete') decrementSummaryValue('suggest_delete', ids.length)
+  if (action !== 'delete' && result.value) {
+    result.value.summary.keep += ids.length
+  }
+  if (action === 'delete') decrementSummaryValue('total_accounts', ids.length)
+  actionIds[action] = actionIds[action].filter(id => !idSet.has(id))
+  if (activeTab.value === action) {
+    activeTab.value = 'all'
+  }
+}
+
 function compactFilters() {
   return Object.fromEntries(
     Object.entries(filters).filter(([, value]) => String(value ?? '').trim() !== '')
@@ -316,19 +420,44 @@ async function runInspection() {
   running.value = true
   activeTab.value = 'all'
   result.value = null
-  logLine(`start target=${form.target_type} concurrency=${form.concurrency} timeout=${form.timeout_ms}`)
+  resetActionIds()
+  const sampleSize = Number(form.sample_size) || 0
+  logLine(`start target=${form.target_type} concurrency=${form.concurrency} timeout=${form.timeout_ms} page_size=${inspectionPageSize}`)
   try {
-    const payload = {
+    const basePayload = {
       target_type: form.target_type,
       model_id: form.model_id || undefined,
       concurrency: Number(form.concurrency) || 4,
       timeout_ms: Number(form.timeout_ms) || 15000,
-      sample_size: Number(form.sample_size) || 0,
+      sample_size: sampleSize,
       used_percent_threshold: Number(form.used_percent_threshold) || 100,
       filters: compactFilters()
     }
-    result.value = await adminAPI.accounts.runInspection(payload)
-    logLine(`done total=${result.value.summary.total_accounts} success=${result.value.summary.success} failed=${result.value.summary.failed}`)
+    let page = 1
+    let hasMore = true
+    while (hasMore) {
+      const pageResult = await adminAPI.accounts.runInspection({
+        ...basePayload,
+        page,
+        page_size: inspectionPageSize
+      })
+      if (!result.value) {
+        result.value = {
+          ...pageResult,
+          duration_ms: 0,
+          summary: emptySummary(),
+          items: []
+        }
+      }
+      mergeInspectionResult(result.value, pageResult)
+      logLine(`page ${pageResult.page}/${pageResult.total_pages || '?'} done tested=${result.value.summary.tested}/${result.value.total_accounts}`)
+      hasMore = pageResult.has_more
+      page = pageResult.next_page || page + 1
+    }
+    if (result.value && result.value.total_accounts > result.value.items.length) {
+      logLine(`visible results capped at ${result.value.items.length}/${result.value.total_accounts}; action ids kept in memory`)
+    }
+    logLine(`done total=${result.value?.summary.total_accounts ?? 0} success=${result.value?.summary.success ?? 0} failed=${result.value?.summary.failed ?? 0}`)
     appStore.showSuccess('巡检完成')
   } catch (error) {
     console.error('Failed to run account inspection:', error)
@@ -340,7 +469,10 @@ async function runInspection() {
 }
 
 function idsForAction(action: AccountInspectionAction) {
-  return items.value.filter(i => i.suggested_action === action).map(i => i.account_id)
+  if (action === 'enable' || action === 'disable' || action === 'delete' || action === 'reauth') {
+    return actionIds[action]
+  }
+  return []
 }
 
 async function applyAction(action: 'enable' | 'disable' | 'delete') {
@@ -352,14 +484,18 @@ async function applyAction(action: 'enable' | 'disable' | 'delete') {
   actionLoading.value = true
   logLine(`apply ${action} ids=${ids.length}`)
   try {
-    if (action === 'delete') {
-      await adminAPI.accounts.batchDelete(ids)
-    } else {
-      await adminAPI.accounts.bulkUpdate(ids, { schedulable: action === 'enable' })
+    for (let i = 0; i < ids.length; i += inspectionActionBatchSize) {
+      const batch = ids.slice(i, i + inspectionActionBatchSize)
+      if (action === 'delete') {
+        await adminAPI.accounts.batchDelete(batch)
+      } else {
+        await adminAPI.accounts.bulkUpdate(batch, { schedulable: action === 'enable' })
+      }
+      logLine(`apply ${action} ${Math.min(i + batch.length, ids.length)}/${ids.length}`)
     }
     appStore.showSuccess(`${label}完成`)
     logLine(`apply ${action} done`)
-    await runInspection()
+    markInspectionActionApplied(action, ids)
   } catch (error) {
     console.error('Failed to apply inspection action:', error)
     logLine(`apply ${action} error ${error instanceof Error ? error.message : String(error)}`)

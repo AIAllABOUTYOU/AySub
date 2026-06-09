@@ -89,6 +89,34 @@ interface ImageGenerationResponse {
   }
 }
 
+function isGatewayLocalImageUrl(url: string): boolean {
+  if (!url.trim()) return false
+  try {
+    const parsed = new URL(url, window.location.origin)
+    return parsed.pathname === '/v1/files/image' || parsed.pathname === '/files/image'
+  } catch {
+    return false
+  }
+}
+
+async function resolveImageResultUrl(baseUrl: string, apiKey: string, url: string, signal?: AbortSignal): Promise<string> {
+  if (!isGatewayLocalImageUrl(url)) {
+    return url
+  }
+  const absoluteUrl = new URL(url, baseUrl).toString()
+  const res = await fetch(absoluteUrl, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    signal,
+  })
+  if (!res.ok) {
+    throw new Error(await readGatewayError(res))
+  }
+  return URL.createObjectURL(await res.blob())
+}
+
 export interface VideoJobRequest {
   baseUrl: string
   apiKey: string
@@ -292,16 +320,18 @@ export async function createImageGeneration(request: ImageGenerationRequest): Pr
     throw new Error(payload.error?.message || `${res.status} ${res.statusText}`)
   }
 
-  const images = (payload.data || [])
-    .map((item): GeneratedImage | null => {
-      const url = item.url || (item.b64_json ? `data:image/png;base64,${item.b64_json}` : '')
+  const imageItems = await Promise.all(
+    (payload.data || []).map(async (item): Promise<GeneratedImage | null> => {
+      const rawUrl = item.url || (item.b64_json ? `data:image/png;base64,${item.b64_json}` : '')
+      const url = rawUrl ? await resolveImageResultUrl(baseUrl, request.apiKey, rawUrl, request.signal) : ''
       if (!url) return null
       return {
         url,
         revisedPrompt: item.revised_prompt,
       }
     })
-    .filter((item): item is GeneratedImage => item !== null)
+  )
+  const images = imageItems.filter((item): item is GeneratedImage => item !== null)
 
   if (images.length === 0) {
     throw new Error('Empty image response from gateway')

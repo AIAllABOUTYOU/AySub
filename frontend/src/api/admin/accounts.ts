@@ -81,6 +81,8 @@ export interface AccountInspectionRunRequest {
   filters?: AccountInspectionFilters
   model_id?: string
   target_type?: 'all' | 'codex' | 'openai' | 'anthropic' | 'gemini' | 'antigravity' | 'xai'
+  page?: number
+  page_size?: number
   sample_size?: number
   concurrency?: number
   timeout_ms?: number
@@ -131,6 +133,12 @@ export interface AccountInspectionRunResult {
   started_at: number
   finished_at: number
   duration_ms: number
+  page: number
+  page_size: number
+  total_accounts: number
+  total_pages: number
+  has_more: boolean
+  next_page?: number
   concurrency: number
   timeout_ms: number
   used_percent_threshold: number
