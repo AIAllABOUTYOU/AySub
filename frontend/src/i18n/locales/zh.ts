@@ -4429,6 +4429,7 @@ export default {
         cfCookies: 'Cloudflare Cookies',
         cfClearance: 'cf_clearance',
         disableSearch: '禁用 Grok 网页/X 搜索',
+        dynamicStatsig: '启用动态 x-statsig-id 兼容头',
         cookieRequired: '请输入 Grok sso Cookie',
         cookiePlaceholder: 'sso=...; sso-rw=...',
         cfCookiesPlaceholder: 'cf_clearance=...',

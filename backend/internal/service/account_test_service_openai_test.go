@@ -48,6 +48,7 @@ type grokCookieHTTPUpstream struct {
 	responses []*http.Response
 	requests  []*http.Request
 	proxies   []string
+	tlsFlags  []bool
 }
 
 func (u *grokCookieHTTPUpstream) Do(req *http.Request, proxyURL string, _ int64, _ int) (*http.Response, error) {
@@ -61,8 +62,9 @@ func (u *grokCookieHTTPUpstream) Do(req *http.Request, proxyURL string, _ int64,
 	return resp, nil
 }
 
-func (u *grokCookieHTTPUpstream) DoWithTLS(_ *http.Request, _ string, _ int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
-	return nil, fmt.Errorf("unexpected DoWithTLS call")
+func (u *grokCookieHTTPUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, concurrency int, profile *tlsfingerprint.Profile) (*http.Response, error) {
+	u.tlsFlags = append(u.tlsFlags, profile != nil)
+	return u.Do(req, proxyURL, accountID, concurrency)
 }
 
 func newJSONResponse(status int, body string) *http.Response {
@@ -104,11 +106,15 @@ data: {"result":{"response":{"finalMetadata":{}}}}
 	err := svc.TestAccountConnection(ctx, account.ID, "grok-4.20-auto", "", "")
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
+	require.Equal(t, []bool{true}, upstream.tlsFlags)
 
 	req := upstream.requests[0]
 	require.Equal(t, "https://grok.com/rest/app-chat/conversations/new", req.URL.String())
 	require.Contains(t, req.Header.Get("Cookie"), "sso=tok")
 	require.Contains(t, req.Header.Get("Cookie"), "sso-rw=tok")
+	require.NotEmpty(t, req.Header.Get("x-statsig-id"))
+	require.NotEmpty(t, req.Header.Get("Sec-Ch-Ua"))
+	require.Equal(t, "u=1, i", req.Header.Get("Priority"))
 	body, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
 	require.Equal(t, "auto", gjson.GetBytes(body, "modeId").String())

@@ -105,6 +105,7 @@ services:
       # GROK_FLARESOLVERR_URL=http://flaresolverr:8191
       - GROK_FLARESOLVERR_URL=${GROK_FLARESOLVERR_URL:-}
       - GROK_FLARESOLVERR_TIMEOUT_SECONDS=${GROK_FLARESOLVERR_TIMEOUT_SECONDS:-60}
+      - GROK_DYNAMIC_STATSIG_ENABLED=${GROK_DYNAMIC_STATSIG_ENABLED:-true}
 
       # =======================================================================
       # Image Generation Stream & Concurrency

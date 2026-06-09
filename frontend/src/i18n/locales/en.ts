@@ -4287,6 +4287,7 @@ export default {
         cfCookies: 'Cloudflare Cookies',
         cfClearance: 'cf_clearance',
         disableSearch: 'Disable Grok web/X search',
+        dynamicStatsig: 'Enable dynamic x-statsig-id compatibility header',
         cookieRequired: 'Please enter Grok sso Cookie',
         cookiePlaceholder: 'sso=...; sso-rw=...',
         cfCookiesPlaceholder: 'cf_clearance=...',

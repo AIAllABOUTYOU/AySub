@@ -28,6 +28,7 @@ type httpUpstreamRecorder struct {
 	lastBody []byte
 	requests []*http.Request
 	bodies   [][]byte
+	tlsFlags []bool
 
 	resp      *http.Response
 	responses []*http.Response
@@ -56,6 +57,7 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 }
 
 func (u *httpUpstreamRecorder) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile) (*http.Response, error) {
+	u.tlsFlags = append(u.tlsFlags, profile != nil)
 	return u.Do(req, proxyURL, accountID, accountConcurrency)
 }
 

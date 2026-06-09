@@ -157,7 +157,7 @@
             </td>
           </tr>
           <tr
-            v-for="virtualRow in virtualItems"
+            v-for="virtualRow in renderedVirtualItems"
             :key="resolveRowKey(sortedData[virtualRow.index], virtualRow.index)"
             :data-row-id="resolveRowKey(sortedData[virtualRow.index], virtualRow.index)"
             :data-index="virtualRow.index"
@@ -357,6 +357,8 @@ interface Props {
    * will emit 'sort' events instead of performing client-side sorting.
    */
   serverSideSort?: boolean
+  /** Render only visible rows on desktop. Disable it when the page uses document-level vertical scrolling. */
+  virtualScroll?: boolean
   /** Estimated row height in px for the virtualizer (default 56) */
   estimateRowHeight?: number
   /** Number of rows to render beyond the visible area (default 5) */
@@ -369,7 +371,8 @@ const props = withDefaults(defineProps<Props>(), {
   stickyActionsColumn: true,
   expandableActions: true,
   defaultSortOrder: 'asc',
-  serverSideSort: false
+  serverSideSort: false,
+  virtualScroll: true
 })
 
 const sortKey = ref<string>('')
@@ -574,13 +577,40 @@ const sortedData = computed(() => {
 
 // --- Virtual scrolling ---
 const rowVirtualizer = useVirtualizer(computed(() => ({
-  count: isDesktopViewport.value ? (sortedData.value?.length ?? 0) : 0,
+  count: isDesktopViewport.value && props.virtualScroll ? (sortedData.value?.length ?? 0) : 0,
   getScrollElement: () => tableWrapperRef.value,
   estimateSize: () => props.estimateRowHeight ?? 56,
   overscan: props.overscan ?? 5,
 })))
 
 const virtualItems = computed(() => rowVirtualizer.value.getVirtualItems())
+const renderedVirtualItems = computed(() => {
+  if (!props.virtualScroll && sortedData.value?.length) {
+    const estimatedSize = props.estimateRowHeight ?? 56
+    return sortedData.value.map((_, index) => ({
+      index,
+      key: index,
+      start: index * estimatedSize,
+      end: (index + 1) * estimatedSize,
+      size: estimatedSize,
+      lane: 0,
+    }))
+  }
+
+  if (virtualItems.value.length > 0 || !isDesktopViewport.value || !sortedData.value?.length) {
+    return virtualItems.value
+  }
+
+  const estimatedSize = props.estimateRowHeight ?? 56
+  return sortedData.value.map((_, index) => ({
+    index,
+    key: index,
+    start: index * estimatedSize,
+    end: (index + 1) * estimatedSize,
+    size: estimatedSize,
+    lane: 0,
+  }))
+})
 
 const virtualPaddingTop = computed(() => {
   const items = virtualItems.value
@@ -598,6 +628,15 @@ const measureElement = (el: any) => {
     rowVirtualizer.value.measureElement(el as Element)
   }
 }
+
+watch(
+  [isDesktopViewport, () => props.data.length],
+  async () => {
+    await nextTick()
+    rowVirtualizer.value.measure()
+  },
+  { flush: 'post' }
+)
 
 const hasActionsColumn = computed(() => {
   return props.columns.some(column => column.key === 'actions')

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +15,17 @@ import (
 const grokDynamicStatsigHeader = "x-statsig-id"
 
 func applyGrokWebCompatibilityHeaders(headers http.Header, account *Account, cfg *config.Config) {
-	if headers == nil || !resolveGrokDynamicStatsigEnabled(account, cfg) {
+	if headers == nil {
 		return
 	}
-	headers.Set(grokDynamicStatsigHeader, buildGrokDynamicStatsigID())
+	ua := strings.TrimSpace(headers.Get("User-Agent"))
+	if ua == "" && account != nil {
+		ua = grokFirstNonEmpty(account.GetCredential("user_agent"), defaultGrokWebUserAgent())
+	}
+	applyGrokWebBrowserHeaders(headers, ua)
+	if resolveGrokDynamicStatsigEnabled(account, cfg) {
+		headers.Set(grokDynamicStatsigHeader, buildGrokDynamicStatsigID())
+	}
 }
 
 func resolveGrokDynamicStatsigEnabled(account *Account, cfg *config.Config) bool {
@@ -32,7 +40,99 @@ func resolveGrokDynamicStatsigEnabled(account *Account, cfg *config.Config) bool
 			return v
 		}
 	}
-	return cfg != nil && cfg.Grok.DynamicStatsigEnabled
+	if cfg != nil {
+		return cfg.Grok.DynamicStatsigEnabled
+	}
+	return true
+}
+
+func applyGrokWebBrowserHeaders(headers http.Header, userAgent string) {
+	headers.Set("Baggage", "sentry-environment=production,sentry-release=d6add6fb0460641fd482d767a335ef72b9b6abb8,sentry-public_key=b311e0f2690c81f25e2c4cf6d4f7ce1c")
+	headers.Set("Priority", "u=1, i")
+
+	hints := grokWebClientHints(userAgent)
+	for key, value := range hints {
+		headers.Set(key, value)
+	}
+}
+
+func grokWebClientHints(userAgent string) map[string]string {
+	ua := strings.ToLower(strings.TrimSpace(userAgent))
+	if ua == "" || strings.Contains(ua, "firefox") || (strings.Contains(ua, "safari") && !strings.Contains(ua, "chrome") && !strings.Contains(ua, "chromium") && !strings.Contains(ua, "edg")) {
+		return nil
+	}
+	if !strings.Contains(ua, "chrome") && !strings.Contains(ua, "chromium") && !strings.Contains(ua, "edg") {
+		return nil
+	}
+
+	version := grokWebMajorVersion(userAgent)
+	if version == "" {
+		return nil
+	}
+	brand := "Google Chrome"
+	if strings.Contains(ua, "edg") {
+		brand = "Microsoft Edge"
+	} else if strings.Contains(ua, "chromium") {
+		brand = "Chromium"
+	}
+
+	platform := grokWebUAPlatform(ua)
+	mobile := "?0"
+	if strings.Contains(ua, "mobile") || platform == "Android" || platform == "iOS" {
+		mobile = "?1"
+	}
+
+	hints := map[string]string{
+		"Sec-Ch-Ua":        `"` + brand + `";v="` + version + `", "Chromium";v="` + version + `", "Not(A:Brand";v="24"`,
+		"Sec-Ch-Ua-Mobile": mobile,
+		"Sec-Ch-Ua-Model":  "",
+	}
+	if platform != "" {
+		hints["Sec-Ch-Ua-Platform"] = `"` + platform + `"`
+	}
+	if arch := grokWebUAArch(ua); arch != "" {
+		hints["Sec-Ch-Ua-Arch"] = arch
+		hints["Sec-Ch-Ua-Bitness"] = "64"
+	}
+	return hints
+}
+
+var grokWebMajorVersionRE = regexp.MustCompile(`(?i)(?:chrome|chromium|crios|edg)/(\d{2,3})`)
+
+func grokWebMajorVersion(userAgent string) string {
+	matches := grokWebMajorVersionRE.FindStringSubmatch(userAgent)
+	if len(matches) >= 2 {
+		return matches[1]
+	}
+	return ""
+}
+
+func grokWebUAPlatform(ua string) string {
+	switch {
+	case strings.Contains(ua, "windows"):
+		return "Windows"
+	case strings.Contains(ua, "mac os x") || strings.Contains(ua, "macintosh"):
+		return "macOS"
+	case strings.Contains(ua, "android"):
+		return "Android"
+	case strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad"):
+		return "iOS"
+	case strings.Contains(ua, "linux"):
+		return "Linux"
+	default:
+		return ""
+	}
+}
+
+func grokWebUAArch(ua string) string {
+	switch {
+	case strings.Contains(ua, "aarch64") || strings.Contains(ua, "arm"):
+		return "arm"
+	case strings.Contains(ua, "x86_64") || strings.Contains(ua, "x64") || strings.Contains(ua, "win64") || strings.Contains(ua, "intel"):
+		return "x86"
+	default:
+		return ""
+	}
 }
 
 func buildGrokDynamicStatsigID() string {

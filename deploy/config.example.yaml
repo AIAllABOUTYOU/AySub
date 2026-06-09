@@ -1107,6 +1107,9 @@ grok:
   # FlareSolverr challenge timeout in seconds.
   # FlareSolverr 解决挑战的超时时间（秒）。
   flaresolverr_timeout_seconds: 60
+  # Add dynamic x-statsig-id compatibility headers for Grok Cookie reverse requests.
+  # 为 Grok Cookie 反代请求添加动态 x-statsig-id 兼容头。默认开启；账号凭据可用 dynamic_statsig_enabled=false 覆盖。
+  dynamic_statsig_enabled: true
 
 # =============================================================================
 # Update Configuration (在线更新配置)

@@ -737,16 +737,16 @@ func (s *AccountTestService) testXAICookieAccountConnection(c *gin.Context, acco
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	gateway := &OpenAIGatewayService{
+		httpUpstream: s.httpUpstream,
+		cfg:          s.cfg,
+	}
+	resp, err := gateway.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Grok request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	gateway := &OpenAIGatewayService{
-		httpUpstream: s.httpUpstream,
-		cfg:          s.cfg,
-	}
 	resp = gateway.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "account_test", func() (*http.Request, error) {
 		return (&OpenAIGatewayService{}).buildGrokWebChatRequest(ctx, account, payload)
 	})

@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <TablePageLayout flow>
       <template #actions>
         <div class="space-y-4">
           <OperationalReportsPanel

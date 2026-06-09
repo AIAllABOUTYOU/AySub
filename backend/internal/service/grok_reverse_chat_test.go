@@ -188,10 +188,14 @@ func TestForwardGrokConsoleChatCompletionsNonStreaming(t *testing.T) {
 	require.Equal(t, 3, result.Usage.OutputTokens)
 
 	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, []bool{true}, upstream.tlsFlags)
 	require.Equal(t, "https://console.x.ai/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer anonymous", upstream.lastReq.Header.Get("Authorization"))
 	require.Contains(t, upstream.lastReq.Header.Get("Cookie"), "sso=tok")
 	require.Contains(t, upstream.lastReq.Header.Get("Cookie"), "sso-rw=tok")
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-statsig-id"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("Sec-Ch-Ua"))
+	require.Equal(t, "u=1, i", upstream.lastReq.Header.Get("Priority"))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input.0.content.0.text").String())
 
@@ -486,6 +490,7 @@ func TestForwardGrokChatCompletionsRefreshesCloudflareClearance(t *testing.T) {
 		cfg: &config.Config{Grok: config.GrokConfig{
 			FlareSolverrURL:            solver.URL,
 			FlareSolverrTimeoutSeconds: 2,
+			DynamicStatsigEnabled:      true,
 		}},
 	}
 
@@ -512,13 +517,79 @@ func TestForwardGrokChatCompletionsRefreshesCloudflareClearance(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, upstream.requests, 2)
+	require.Equal(t, []bool{true, true}, upstream.tlsFlags)
 	require.Equal(t, "request.get", solverPayload.Cmd)
 	require.Equal(t, "https://grok.example", solverPayload.URL)
 	require.Equal(t, "socks5://warp:1080", solverPayload.Proxy.URL)
+	require.NotEmpty(t, upstream.requests[0].Header.Get("x-statsig-id"))
+	require.NotEmpty(t, upstream.requests[0].Header.Get("Sec-Ch-Ua"))
+	require.Equal(t, "u=1, i", upstream.requests[0].Header.Get("Priority"))
+	require.Contains(t, upstream.requests[0].Header.Get("Baggage"), "sentry-environment=production")
 	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "cf_clearance=cf-new")
 	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "other=1")
 	require.Equal(t, "Mozilla/5.0 Solver", upstream.requests[1].Header.Get("User-Agent"))
 	require.Equal(t, "cf-new", account.GetCredential("cf_clearance"))
+	require.Equal(t, "Solved", gjson.Get(rec.Body.String(), "choices.0.message.content").String())
+}
+
+func TestForwardGrokChatCompletionsRetriesAntiBotJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	solver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v1", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok","solution":{"userAgent":"Mozilla/5.0 Solver","cookies":[{"name":"cf_clearance","value":"cf-new","domain":".grok.example"}]}}`)
+	}))
+	defer solver.Close()
+
+	upstreamBody := strings.Join([]string{
+		`data: {"result":{"response":{"token":"Solved","messageTag":"final"}}}`,
+		`data: {"result":{"response":{"isSoftStop":true}}}`,
+		``,
+	}, "\n\n")
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusForbidden,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"code":7,"message":"Request rejected by anti-bot rules.","details":[]}}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"X-Request-Id": []string{"grok-antibot-2"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+		},
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream: upstream,
+		cfg: &config.Config{Grok: config.GrokConfig{
+			FlareSolverrURL:            solver.URL,
+			FlareSolverrTimeoutSeconds: 2,
+			DynamicStatsigEnabled:      true,
+		}},
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{}`))
+
+	account := &Account{
+		ID:       100,
+		Name:     "grok-cookie",
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+		Credentials: map[string]any{
+			"base_url":  "https://grok.example/rest",
+			"sso_token": "tok",
+		},
+		Concurrency: 1,
+	}
+	body := []byte(`{"model":"grok-4.20-fast","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+
+	result, err := svc.ForwardGrokChatCompletions(c.Request.Context(), c, account, body, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requests, 2)
+	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "cf_clearance=cf-new")
 	require.Equal(t, "Solved", gjson.Get(rec.Body.String(), "choices.0.message.content").String())
 }
 

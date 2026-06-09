@@ -18,8 +18,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
@@ -141,7 +143,7 @@ func (s *OpenAIGatewayService) ForwardGrokAnthropicMessages(ctx context.Context,
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -250,7 +252,7 @@ func (s *OpenAIGatewayService) ForwardGrokChatCompletions(ctx context.Context, c
 		writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "HTTP upstream is not configured")
 		return nil, errors.New("http upstream is not configured")
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -365,7 +367,7 @@ func (s *OpenAIGatewayService) ForwardGrokResponses(ctx context.Context, c *gin.
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -470,7 +472,7 @@ func (s *OpenAIGatewayService) ForwardGrokImages(ctx context.Context, c *gin.Con
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -755,6 +757,34 @@ func (s *OpenAIGatewayService) buildGrokWebChatRequest(ctx context.Context, acco
 	return req, nil
 }
 
+func (s *OpenAIGatewayService) doGrokWebRequest(req *http.Request, account *Account, proxyURL string) (*http.Response, error) {
+	if s == nil || s.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	accountID := int64(0)
+	concurrency := 0
+	if account != nil {
+		accountID = account.ID
+		concurrency = account.Concurrency
+	}
+	return s.httpUpstream.DoWithTLS(req, proxyURL, accountID, concurrency, grokWebTLSProfile(account))
+}
+
+func grokWebTLSProfile(account *Account) *tlsfingerprint.Profile {
+	if account == nil || !account.IsXAICookie() {
+		return nil
+	}
+	for _, key := range []string{"disable_tls_fingerprint", "grok_disable_tls_fingerprint"} {
+		if v, ok := accountBoolOverride(account.Credentials, key); ok && v {
+			return nil
+		}
+		if v, ok := accountBoolOverride(account.Extra, key); ok && v {
+			return nil
+		}
+	}
+	return &tlsfingerprint.Profile{Name: "Grok Web Built-in Default (Node.js 24.x)"}
+}
+
 func grokWebChatURL(account *Account) (string, error) {
 	return grokWebEndpointURL(account, grokWebChatPath)
 }
@@ -795,7 +825,7 @@ func (s *OpenAIGatewayService) uploadGrokWebFileAttachments(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+		resp, err := s.doGrokWebRequest(req, account, proxyURL)
 		if err != nil {
 			return nil, fmt.Errorf("grok file upload request failed: %w", err)
 		}
@@ -2263,7 +2293,7 @@ func (s *OpenAIGatewayService) downloadGrokImageBytes(ctx context.Context, accou
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return nil, "", err
 	}
@@ -2893,7 +2923,7 @@ func newGrokResponseMessageID() string {
 }
 
 func newGrokRequestID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return uuid.NewString()
 }
 
 func defaultGrokWebUserAgent() string {

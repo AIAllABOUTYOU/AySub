@@ -365,7 +365,7 @@ func (s *OpenAIGatewayService) FetchGrokLiveKitSession(ctx context.Context, acco
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("grok livekit token request failed: %s", sanitizeUpstreamErrorMessage(err.Error()))
 	}
@@ -522,6 +522,7 @@ func buildGrokLiveKitWSHeaders(account *Account) (http.Header, error) {
 	headers.Set("Origin", grokFirstNonEmpty(account.GetCredential("origin"), grokWebDefaultBaseURL))
 	headers.Set("Referer", grokFirstNonEmpty(account.GetCredential("referer"), grokWebDefaultBaseURL+"/"))
 	headers.Set("User-Agent", grokFirstNonEmpty(account.GetCredential("user_agent"), defaultGrokWebUserAgent()))
+	applyGrokWebCompatibilityHeaders(headers, account, nil)
 	return headers, nil
 }
 
@@ -691,7 +692,7 @@ func (s *OpenAIGatewayService) downloadGrokVideoBytes(ctx context.Context, accou
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return nil, err
 	}
@@ -733,7 +734,7 @@ func (s *OpenAIGatewayService) generateGrokVideo(ctx context.Context, account *A
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("grok video upstream request failed: %s", sanitizeUpstreamErrorMessage(err.Error()))
 	}
@@ -776,7 +777,7 @@ func (s *OpenAIGatewayService) createGrokVideoMediaPost(ctx context.Context, acc
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return "", fmt.Errorf("grok video create-post request failed: %s", sanitizeUpstreamErrorMessage(err.Error()))
 	}
@@ -829,6 +830,7 @@ func (s *OpenAIGatewayService) buildGrokWebJSONRequest(ctx context.Context, acco
 	if req.Header.Get("Cookie") == "" {
 		return nil, errors.New("sso_token or cookie is required for Grok Cookie account")
 	}
+	applyGrokWebCompatibilityHeaders(req.Header, account, s.cfg)
 	return req, nil
 }
 

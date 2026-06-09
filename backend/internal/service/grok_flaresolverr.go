@@ -62,7 +62,7 @@ func (s *OpenAIGatewayService) retryGrokWebAfterCloudflareChallenge(
 	if account == nil || !account.IsXAICookie() || resp == nil {
 		return nil, false, nil
 	}
-	if !httputil.IsCloudflareChallengeResponse(resp.StatusCode, resp.Header, respBody) {
+	if !httputil.IsCloudflareChallengeResponse(resp.StatusCode, resp.Header, respBody) && !isGrokAntiBotResponse(resp.StatusCode, respBody) {
 		return nil, false, nil
 	}
 	if buildRequest == nil {
@@ -80,11 +80,20 @@ func (s *OpenAIGatewayService) retryGrokWebAfterCloudflareChallenge(
 	if s.httpUpstream == nil {
 		return nil, false, errors.New("http upstream is not configured")
 	}
-	retryResp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	retryResp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		return nil, false, err
 	}
 	return retryResp, true, nil
+}
+
+func isGrokAntiBotResponse(statusCode int, body []byte) bool {
+	if statusCode != http.StatusForbidden || len(body) == 0 {
+		return false
+	}
+	text := strings.ToLower(string(body))
+	return strings.Contains(text, "request rejected by anti-bot rules") ||
+		(strings.Contains(text, `"code":7`) && strings.Contains(text, "anti-bot"))
 }
 
 func (s *OpenAIGatewayService) retryGrokWebResponseAfterCloudflareChallenge(

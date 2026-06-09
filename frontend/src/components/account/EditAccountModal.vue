@@ -479,6 +479,15 @@
           />
           <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.disableSearch') }}</span>
         </label>
+        <label class="flex items-center gap-2">
+          <input
+            v-model="editGrokDynamicStatsigEnabled"
+            type="checkbox"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            data-testid="edit-grok-dynamic-statsig"
+          />
+          <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.dynamicStatsig') }}</span>
+        </label>
       </div>
 
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
@@ -2532,6 +2541,7 @@ const editGrokCookieValue = ref('')
 const editGrokCfCookies = ref('')
 const editGrokCfClearance = ref('')
 const editGrokDisableSearch = ref(false)
+const editGrokDynamicStatsigEnabled = ref(false)
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3193,6 +3203,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     const credentials = newAccount.credentials as Record<string, unknown>
     editGrokCookieBaseUrl.value = (credentials.base_url as string) || 'https://grok.com'
     editGrokDisableSearch.value = credentials.disable_search === true
+    editGrokDynamicStatsigEnabled.value = credentials.dynamic_statsig_enabled !== false
     editGrokCookieValue.value = ''
     editGrokCfCookies.value = ''
     editGrokCfClearance.value = ''
@@ -3845,7 +3856,8 @@ const handleSubmit = async () => {
       const newCredentials: Record<string, unknown> = {
         ...currentCredentials,
         base_url: editGrokCookieBaseUrl.value.trim() || 'https://grok.com',
-        disable_search: editGrokDisableSearch.value
+        disable_search: editGrokDisableSearch.value,
+        dynamic_statsig_enabled: editGrokDynamicStatsigEnabled.value
       }
       const hasExistingCookie =
         props.account.credentials_status?.has_cookie ||

@@ -4,6 +4,7 @@
     :data="rows"
     :loading="loading"
     :server-side-sort="true"
+    :virtual-scroll="false"
     :row-key="rowKey"
     default-sort-key="created_at"
     default-sort-order="desc"

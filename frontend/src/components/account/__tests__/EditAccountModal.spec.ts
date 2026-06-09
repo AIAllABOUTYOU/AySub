@@ -572,6 +572,42 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('cf_clearance')
   })
 
+  it('saves Grok dynamic statsig switch from admin form', async () => {
+    const account = buildGrokCookieAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="edit-grok-dynamic-statsig"]').setValue(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toMatchObject({
+      dynamic_statsig_enabled: true
+    })
+  })
+
+  it('keeps Grok dynamic statsig enabled for legacy accounts without the field', async () => {
+    const account = buildGrokCookieAccount()
+    delete account.credentials.dynamic_statsig_enabled
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toMatchObject({
+      dynamic_statsig_enabled: true
+    })
+  })
+
   it('saves new Grok Cookie credentials when admin rotates them', async () => {
     const account = buildGrokCookieAccount()
     updateAccountMock.mockReset()

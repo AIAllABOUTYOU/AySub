@@ -76,9 +76,13 @@ func TestForwardGrokVideosCreatesCompletedJob(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, upstream.requests, 3)
+	require.Equal(t, []bool{true, true, true}, upstream.tlsFlags)
 	require.Equal(t, "https://grok.example/rest/media/post/create", upstream.requests[0].URL.String())
 	require.Equal(t, "https://grok.example/rest/app-chat/conversations/new", upstream.requests[1].URL.String())
 	require.Equal(t, "https://assets.grok.com/generated/video.mp4", upstream.requests[2].URL.String())
+	require.NotEmpty(t, upstream.requests[0].Header.Get("x-statsig-id"))
+	require.NotEmpty(t, upstream.requests[0].Header.Get("Sec-Ch-Ua"))
+	require.Equal(t, "u=1, i", upstream.requests[0].Header.Get("Priority"))
 	require.Equal(t, "MEDIA_POST_TYPE_VIDEO", gjson.GetBytes(upstream.bodies[0], "mediaType").String())
 	require.Equal(t, "cinematic skyline", gjson.GetBytes(upstream.bodies[0], "prompt").String())
 	require.Equal(t, "imagine-video-gen", gjson.GetBytes(upstream.bodies[1], "modelName").String())
@@ -238,7 +242,11 @@ func TestForwardGrokLiveKitTokenReturnsWebSocketURL(t *testing.T) {
 	result, err := svc.ForwardGrokLiveKitToken(context.Background(), c, account, parsed)
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.Equal(t, []bool{true}, upstream.tlsFlags)
 	require.Equal(t, "https://grok.example/rest/livekit/tokens", upstream.lastReq.URL.String())
+	require.NotEmpty(t, upstream.lastReq.Header.Get("x-statsig-id"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("Sec-Ch-Ua"))
+	require.Equal(t, "u=1, i", upstream.lastReq.Header.Get("Priority"))
 	require.Equal(t, "livekit-token-1", result.RequestID)
 
 	sessionPayload := gjson.GetBytes(upstream.lastBody, "sessionPayload").String()
@@ -279,6 +287,7 @@ func TestBuildGrokLiveKitWSHeadersUsesGrokCookie(t *testing.T) {
 	require.Equal(t, "https://grok.com", headers.Get("Origin"))
 	require.Equal(t, "https://grok.com/", headers.Get("Referer"))
 	require.Equal(t, "test-agent", headers.Get("User-Agent"))
+	require.Equal(t, "u=1, i", headers.Get("Priority"))
 }
 
 func TestProxyGrokLiveKitRTCRelaysBidirectionalFrames(t *testing.T) {

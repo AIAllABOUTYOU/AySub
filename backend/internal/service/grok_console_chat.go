@@ -370,7 +370,7 @@ func (s *OpenAIGatewayService) doGrokConsoleRequest(ctx context.Context, c *gin.
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doGrokWebRequest(req, account, proxyURL)
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")

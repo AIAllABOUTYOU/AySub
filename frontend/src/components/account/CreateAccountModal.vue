@@ -1115,6 +1115,10 @@
           <input v-model="grokDisableSearch" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.disableSearch') }}</span>
         </label>
+        <label class="flex items-center gap-2">
+          <input v-model="grokDynamicStatsigEnabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('admin.accounts.xai.dynamicStatsig') }}</span>
+        </label>
       </div>
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
@@ -3481,6 +3485,7 @@ const grokCookieValue = ref('')
 const grokCfCookies = ref('')
 const grokCfClearance = ref('')
 const grokDisableSearch = ref(false)
+const grokDynamicStatsigEnabled = ref(true)
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
@@ -4349,6 +4354,7 @@ const resetForm = () => {
   grokCfCookies.value = ''
   grokCfClearance.value = ''
   grokDisableSearch.value = false
+  grokDynamicStatsigEnabled.value = true
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -4753,7 +4759,8 @@ const handleSubmit = async () => {
     }
     const credentials: Record<string, unknown> = {
       base_url: grokCookieBaseUrl.value.trim() || 'https://grok.com',
-      disable_search: grokDisableSearch.value
+      disable_search: grokDisableSearch.value,
+      dynamic_statsig_enabled: grokDynamicStatsigEnabled.value
     }
     if (cookieValue.includes('sso=')) {
       credentials.cookie = cookieValue

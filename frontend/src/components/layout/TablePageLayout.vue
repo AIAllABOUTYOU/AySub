@@ -1,5 +1,5 @@
 <template>
-  <div class="table-page-layout" :class="{ 'mobile-mode': isMobile }">
+  <div class="table-page-layout" :class="{ 'mobile-mode': isMobile, 'flow-mode': flow }">
     <!-- 固定区域：操作按钮 -->
     <div v-if="$slots.actions" class="layout-section-fixed">
       <slot name="actions" />
@@ -27,6 +27,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
+defineProps<{
+  flow?: boolean
+}>()
+
 const isMobile = ref(false)
 
 const checkMobile = () => {
@@ -48,6 +52,11 @@ onUnmounted(() => {
 .table-page-layout {
   @apply flex flex-col gap-6;
   height: calc(100vh - 64px - 4rem); /* 减去 header + lg:p-8 的上下padding */
+}
+
+.table-page-layout.flow-mode {
+  height: auto;
+  min-height: calc(100vh - 64px - 4rem);
 }
 
 .layout-section-fixed {
@@ -89,6 +98,20 @@ onUnmounted(() => {
 
 .table-scroll-container :deep(td) {
   @apply px-5 py-4 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-dark-800;
+}
+
+/* 内容较高的页面使用文档滚动，避免固定布局把表格区域挤压到不可滚动 */
+.table-page-layout.flow-mode .layout-section-scrollable {
+  @apply flex-none min-h-fit;
+}
+
+.table-page-layout.flow-mode .table-scroll-container {
+  @apply h-auto overflow-visible;
+}
+
+.table-page-layout.flow-mode .table-scroll-container :deep(.table-wrapper) {
+  @apply flex-none overflow-x-auto;
+  overflow-y: visible;
 }
 
 /* 移动端：恢复正常滚动 */

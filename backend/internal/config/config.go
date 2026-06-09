@@ -1614,7 +1614,7 @@ func setDefaults() {
 	// Grok Web reverse proxy helpers.
 	viper.SetDefault("grok.flaresolverr_url", "")
 	viper.SetDefault("grok.flaresolverr_timeout_seconds", 60)
-	viper.SetDefault("grok.dynamic_statsig_enabled", false)
+	viper.SetDefault("grok.dynamic_statsig_enabled", true)
 	viper.SetDefault("linuxdo_connect.token_auth_method", "client_secret_post")
 	viper.SetDefault("linuxdo_connect.use_pkce", false)
 	viper.SetDefault("linuxdo_connect.userinfo_email_path", "")
