@@ -26,7 +26,7 @@ AySub は、セルフホスト向けの AI API ゲートウェイです。アカ
 - API gateway: Claude Messages、OpenAI Chat Completions、Responses、Messages compatible forwarding、Embeddings、Images、Videos、Audio、LiveKit、Gemini native `/v1beta`、Antigravity 専用 `/antigravity/v1` と `/antigravity/v1beta`。
 - API Key 管理: model allowlist、endpoint permission、group binding、status control、user CRUD、admin-side group reassignment。
 - Channel / pricing: channel CRUD、model pricing/mapping、wildcard matching、group multiplier、RPM override、strategy view、user available channels、model marketplace、price calculator。
-- Account operations: OAuth/API Key/Cookie/Service Account/Bedrock account、batch import/export、CRS sync、upstream model sync、account test、account inspection、refresh、privacy setup、quota/tier refresh、error cleanup、usage stats。Account inspection は Codex/OpenAI/all targets、concurrency、timeout、sampling、filter、keep/enable/disable/delete/reauth suggestions に対応。
+- Account operations: OAuth/API Key/Cookie/Service Account/Bedrock account、batch import/export、CRS sync、upstream model sync、account test、account inspection、refresh、privacy setup、quota/tier refresh、error cleanup、usage stats。Account inspection は [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus) を参考にし、Codex/OpenAI/all targets、concurrency、timeout、sampling、filter、keep/enable/disable/delete/reauth suggestions に対応。
 - User system: email registration/login、verification code、forgot/reset password、JWT refresh/logout、GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding、email completion、session revocation。
 - User workspace: dashboard、API Keys、usage records、request logs、daily check-in、security center、notification email、TOTP and recovery codes、sensitive-operation verification、profile、account bindings、redeem codes、subscriptions、orders、affiliate rebates、custom menu pages。
 - Admin console: dashboard、users、groups、accounts、account inspection、proxies、announcements、settings、home configuration、channels、channel monitors、scheduled tests、subscriptions、usage cleanup、request logs、redeem codes、promo codes、user attributes、API Key group management。
@@ -219,7 +219,7 @@ Docker auto setup で `ADMIN_PASSWORD` が空の場合、AySub は管理者パ�
 
 ### 任意の Grok WARP / FlareSolverr スタック
 
-Grok Cookie account で Cloudflare challenge が検出された場合、FlareSolverr で `cf_clearance` を自動更新できます。WARP は Grok request 用の SOCKS5 egress proxy として利用できます。どちらも `deploy/docker-compose.proxy-profiles.yml` に定義されています。詳細は [`deploy/DOCKER.md`](deploy/DOCKER.md) を参照してください。
+Grok Cookie account で Cloudflare challenge が検出された場合、FlareSolverr で `cf_clearance` を自動更新できます。WARP は Grok request 用の SOCKS5 egress proxy として利用できます。この deployment pattern は [Chenyme/grok2api](https://github.com/chenyme/grok2api) 原项目と [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) 二开实践を参考にし、AySub の proxy system に合わせて再実装したものです。どちらも `deploy/docker-compose.proxy-profiles.yml` に定義されています。詳細は [`deploy/DOCKER.md`](deploy/DOCKER.md) を参照してください。
 
 FlareSolverr と WARP を一緒に有効化する例:
 
@@ -326,3 +326,11 @@ Copyright: `aiaay.com`.
 # 🎉致谢
 
 本项目在 [LINUX DO](https://linux.do/) 社区推广，感谢 LINUX DO 社区对开源项目的支持与认可。 学 AI 上 L 站
+
+AySub は [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) 原版をベースに拡張しています。account scheduling、API Key distribution、gateway foundation を提供した原作者に感謝します。
+
+NewAPI-style operations は [QuantumNous/new-api](https://github.com/QuantumNous/new-api) を参考にしています。channels、model pricing、admin operations、payment/subscription flows、user-facing experiences などの方向性に感謝します。
+
+Account inspection は [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus) を参考にしています。Codex/OpenAI account inspection の open-source practice に感謝します。
+
+Grok WARP / FlareSolverr optional stack は [Chenyme/grok2api](https://github.com/chenyme/grok2api) 原项目と [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) 二开实践を参考にしています。原作者と社区贡献に感謝します。

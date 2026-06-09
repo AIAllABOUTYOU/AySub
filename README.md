@@ -27,7 +27,7 @@ Implemented in the current codebase:
 - API gateway support for Claude Messages, OpenAI Chat Completions, Responses, Messages-compatible forwarding, Embeddings, Images, Videos, Audio, LiveKit, Gemini native `/v1beta`, and dedicated Antigravity `/antigravity/v1` plus `/antigravity/v1beta` routes.
 - API Key management with model allowlists, endpoint permissions, group binding, status control, user CRUD, and admin-side group reassignment.
 - Channel and pricing system with channel CRUD, model pricing/mapping, wildcard matching, group multipliers, RPM overrides, strategy views, user available channels, model marketplace, and price calculator.
-- Account operations for OAuth/API Key/Cookie/Service Account/Bedrock account types, batch import/export, CRS sync, upstream model sync, account tests, account inspection, refresh, privacy setup, quota/tier refresh, error cleanup, and usage stats. Account inspection supports Codex/OpenAI/all targets, concurrency, timeouts, sampling, filters, and keep/enable/disable/delete/reauth suggestions.
+- Account operations for OAuth/API Key/Cookie/Service Account/Bedrock account types, batch import/export, CRS sync, upstream model sync, account tests, account inspection, refresh, privacy setup, quota/tier refresh, error cleanup, and usage stats. Account inspection references [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus) and supports Codex/OpenAI/all targets, concurrency, timeouts, sampling, filters, and keep/enable/disable/delete/reauth suggestions.
 - User system with email registration/login, verification codes, forgot/reset password, JWT refresh/logout, GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding, email completion, and session revocation.
 - User workspace with dashboard, API Keys, usage records, request logs, daily check-in, security center, notification email, TOTP and recovery codes, sensitive-operation verification, profile, account bindings, redeem codes, subscriptions, orders, affiliate rebates, and custom menu pages.
 - Admin console for dashboard, users, groups, accounts, account inspection, proxies, announcements, settings, home configuration, channels, channel monitors, scheduled tests, subscriptions, usage cleanup, request logs, redeem codes, promo codes, user attributes, and API Key group management.
@@ -220,7 +220,7 @@ If `ADMIN_PASSWORD` is empty during Docker auto setup, AySub generates one and w
 
 ### Optional Grok WARP / FlareSolverr Stack
 
-For Grok Cookie accounts, FlareSolverr can refresh `cf_clearance` when a Cloudflare challenge is detected, and WARP can provide a SOCKS5 egress proxy for Grok requests. Both services are defined in `deploy/docker-compose.proxy-profiles.yml`; see [`deploy/DOCKER.md`](deploy/DOCKER.md) for the detailed deployment notes.
+For Grok Cookie accounts, FlareSolverr can refresh `cf_clearance` when a Cloudflare challenge is detected, and WARP can provide a SOCKS5 egress proxy for Grok requests. This deployment pattern references the original [Chenyme/grok2api](https://github.com/chenyme/grok2api) project and [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) follow-up work, then adapts it to AySub's proxy system. Both services are defined in `deploy/docker-compose.proxy-profiles.yml`; see [`deploy/DOCKER.md`](deploy/DOCKER.md) for the detailed deployment notes.
 
 Enable FlareSolverr and WARP together:
 
@@ -327,3 +327,11 @@ Copyright: `aiaay.com`.
 # 🎉致谢
 
 本项目在 [LINUX DO](https://linux.do/) 社区推广，感谢 LINUX DO 社区对开源项目的支持与认可。 学 AI 上 L 站
+
+AySub is extended from the original [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api). Thanks to the original author for the account scheduling, API Key distribution, and gateway foundation.
+
+NewAPI-style operations reference [QuantumNous/new-api](https://github.com/QuantumNous/new-api), including channels, model pricing, admin operations, payment/subscription flows, and user-facing experiences.
+
+Account inspection references [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus). Thanks for the open-source Codex/OpenAI account inspection practice.
+
+The optional Grok WARP / FlareSolverr stack references the original [Chenyme/grok2api](https://github.com/chenyme/grok2api) project and [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) follow-up work. Thanks to the original authors and community contributors.

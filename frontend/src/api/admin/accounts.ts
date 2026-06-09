@@ -80,7 +80,7 @@ export interface AccountInspectionRunRequest {
   account_ids?: number[]
   filters?: AccountInspectionFilters
   model_id?: string
-  target_type?: 'codex' | 'openai' | 'all'
+  target_type?: 'all' | 'codex' | 'openai' | 'anthropic' | 'gemini' | 'antigravity' | 'xai'
   sample_size?: number
   concurrency?: number
   timeout_ms?: number

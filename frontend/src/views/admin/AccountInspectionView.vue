@@ -32,6 +32,10 @@
               <option value="all">全部账号</option>
               <option value="codex">Codex 账号</option>
               <option value="openai">OpenAI 账号</option>
+              <option value="anthropic">Anthropic 账号</option>
+              <option value="gemini">Gemini 账号</option>
+              <option value="antigravity">Antigravity 账号</option>
+              <option value="xai">Grok / xAI 账号</option>
             </select>
           </label>
           <label class="space-y-1.5">
@@ -243,7 +247,7 @@ const activeTab = ref<TabKey>('all')
 const logs = ref<string[]>([])
 
 const form = reactive({
-  target_type: 'all' as 'codex' | 'openai' | 'all',
+  target_type: 'all' as 'all' | 'codex' | 'openai' | 'anthropic' | 'gemini' | 'antigravity' | 'xai',
   model_id: '',
   concurrency: 4,
   timeout_ms: 15000,

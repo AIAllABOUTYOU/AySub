@@ -55,6 +55,7 @@ README 不把以下内容写成已完成：
 已实现能力：
 
 - Docker compose proxy profile 提供 FlareSolverr / WARP 辅助栈。
+- 该部署思路参考 [Chenyme/grok2api](https://github.com/chenyme/grok2api) 原项目，并结合 [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) 二开实践按 AySub 代理体系重写。
 - FlareSolverr 可用于刷新 Grok Cookie 账号遇到的 `cf_clearance`。
 - WARP 可作为 Grok Cookie 请求的 SOCKS5 出口代理。
 - AySub 调用 FlareSolverr 时会复用账号绑定的代理，保证 clearance cookie 与实际请求出口一致。

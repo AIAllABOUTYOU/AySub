@@ -106,6 +106,8 @@ docker compose -f docker-compose.standalone.yml logs -f aysub
 
 `deploy/docker-compose.proxy-profiles.yml` provides optional proxy services for Grok Cookie accounts:
 
+This deployment pattern references the original [Chenyme/grok2api](https://github.com/chenyme/grok2api) project and [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) follow-up work, then adapts it to AySub's proxy system.
+
 - `warp`: SOCKS5 egress proxy at `socks5://warp:1080` inside the Compose network.
 - `flaresolverr`: Cloudflare clearance helper at `http://flaresolverr:8191` inside the Compose network.
 - `privoxy`: optional HTTP proxy helper at `http://privoxy:8118`.

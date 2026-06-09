@@ -27,7 +27,7 @@ AySub 是一个自部署 AI API 网关，覆盖账号调度、OpenAI 兼容 API�
 - API 网关：Claude Messages、OpenAI Chat Completions、Responses、Messages 兼容转发、Embeddings、Images、Videos、Audio、LiveKit；Gemini 原生 `/v1beta`；Antigravity 专用 `/antigravity/v1` 与 `/antigravity/v1beta`。
 - API Key 管理：模型白名单、端点权限、分组绑定、状态控制、用户侧创建/更新/删除，管理员侧可调整 Key 分组。
 - 渠道与价格体系：渠道 CRUD、模型定价/映射、通配符匹配、分组倍率、RPM override、策略视图、用户可用渠道、模型广场和价格计算器。
-- 账号运营：OAuth/API Key/Cookie/Service Account/Bedrock 等账号类型，批量导入导出、CRS 同步、上游模型同步、账号测试、账号巡检、刷新、隐私设置、quota/tier 刷新、错误清理和用量统计；账号巡检支持 Codex/OpenAI/全部账号、并发、超时、抽样、筛选和保留/启用/禁用/删除/重授权处理建议。
+- 账号运营：OAuth/API Key/Cookie/Service Account/Bedrock 等账号类型，批量导入导出、CRS 同步、上游模型同步、账号测试、账号巡检、刷新、隐私设置、quota/tier 刷新、错误清理和用量统计；账号巡检参考 [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus)，支持 Codex/OpenAI/全部账号、并发、超时、抽样、筛选和保留/启用/禁用/删除/重授权处理建议。
 - 用户系统：邮箱注册登录、验证码、忘记/重置密码、JWT refresh/logout、GitHub/Google/OIDC/钉钉/微信/LinuxDo 登录和绑定、邮箱补全、会话撤销。
 - 用户工作台：仪表盘、API Key、用量记录、请求日志、每日签到、用户安全中心、通知邮箱、TOTP 与恢复码、敏感操作二次验证、个人资料、账号绑定、兑换码、订阅、订单、邀请返利和自定义菜单页面。
 - 管理后台：仪表盘、用户/分组/账号/账号巡检/代理/公告/设置、主页配置、渠道、渠道监控、定时测试、订阅、用量清理、请求日志、兑换码、优惠码、用户属性、API Key 分组管理。
@@ -220,7 +220,7 @@ Docker 自动初始化时如果 `ADMIN_PASSWORD` 留空，AySub 会生成管理�
 
 ### Grok WARP / FlareSolverr 可选防封栈
 
-Grok Cookie 账号遇到 Cloudflare challenge 时，可启用 FlareSolverr 自动刷新 `cf_clearance`；WARP 可作为 Grok Cookie 请求的 SOCKS5 出口代理。两者都定义在 `deploy/docker-compose.proxy-profiles.yml`，详细部署说明见 [`deploy/DOCKER.md`](deploy/DOCKER.md)。
+Grok Cookie 账号遇到 Cloudflare challenge 时，可启用 FlareSolverr 自动刷新 `cf_clearance`；WARP 可作为 Grok Cookie 请求的 SOCKS5 出口代理。该部署思路参考 [Chenyme/grok2api](https://github.com/chenyme/grok2api) 原项目，并结合 [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) 二开实践按 AySub 代理体系重写。两者都定义在 `deploy/docker-compose.proxy-profiles.yml`，详细部署说明见 [`deploy/DOCKER.md`](deploy/DOCKER.md)。
 
 同时启用 FlareSolverr 和 WARP：
 
@@ -327,3 +327,11 @@ pnpm --dir frontend build
 # 🎉致谢
 
 本项目在 [LINUX DO](https://linux.do/) 社区推广，感谢 LINUX DO 社区对开源项目的支持与认可。 学 AI 上 L 站
+
+AySub 基于 [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) 原版持续扩展，感谢原作者提供的核心账号调度、API Key 分发和网关基础。
+
+NewAPI 风格运营能力参考了 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)，包括渠道、模型价格、运营后台、支付订阅和用户侧体验等方向。
+
+账号巡检功能参考了 [seakee/CPA-Manager-plus](https://github.com/seakee/CPA-Manager-plus)，感谢其在 Codex/OpenAI 账号巡检思路上的开源实践。
+
+Grok WARP / FlareSolverr 可选防封栈参考了 [Chenyme/grok2api](https://github.com/chenyme/grok2api) 原项目和 [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api) 二开实践，感谢原作者与社区贡献。

@@ -958,6 +958,8 @@ func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *Acc
 		if accountType == "" {
 			accountType = service.AccountTypeOAuth
 		}
+	} else if platform == "" {
+		platform = inspectionTargetPlatform(targetType)
 	}
 
 	accounts, _, err := h.adminService.ListAccounts(ctx, 1, 10000, platform, accountType, status, search, groupID, privacyMode, "name", "asc")
@@ -990,6 +992,14 @@ func accountMatchesInspectionTarget(account *service.Account, targetType string)
 		return account.IsCodexCLIOnlyEnabled()
 	case "openai":
 		return account.Platform == service.PlatformOpenAI
+	case "anthropic":
+		return account.Platform == service.PlatformAnthropic
+	case "gemini":
+		return account.Platform == service.PlatformGemini
+	case "antigravity":
+		return account.Platform == service.PlatformAntigravity
+	case "xai":
+		return account.Platform == service.PlatformXAI
 	case "all":
 		return true
 	default:
@@ -998,15 +1008,40 @@ func accountMatchesInspectionTarget(account *service.Account, targetType string)
 }
 
 func normalizeInspectionTargetType(targetType string) string {
-	switch strings.TrimSpace(targetType) {
+	switch strings.ToLower(strings.TrimSpace(targetType)) {
 	case "codex":
 		return "codex"
 	case "openai":
 		return "openai"
+	case "anthropic":
+		return "anthropic"
+	case "gemini":
+		return "gemini"
+	case "antigravity":
+		return "antigravity"
+	case "xai", "grok":
+		return "xai"
 	case "all", "":
 		return "all"
 	default:
 		return "all"
+	}
+}
+
+func inspectionTargetPlatform(targetType string) string {
+	switch targetType {
+	case "openai":
+		return service.PlatformOpenAI
+	case "anthropic":
+		return service.PlatformAnthropic
+	case "gemini":
+		return service.PlatformGemini
+	case "antigravity":
+		return service.PlatformAntigravity
+	case "xai":
+		return service.PlatformXAI
+	default:
+		return ""
 	}
 }
 
