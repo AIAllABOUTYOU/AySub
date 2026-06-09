@@ -124,6 +124,25 @@ func (s *FailoverState) HandleFailoverError(
 	return FailoverContinue
 }
 
+// HandleAccountUnavailable treats a selected account's local capacity failure
+// as a per-request failover signal, so the next selection skips this account.
+func (s *FailoverState) HandleAccountUnavailable(
+	ctx context.Context,
+	gatewayService TempUnscheduler,
+	accountID int64,
+	platform string,
+	statusCode int,
+	message string,
+) FailoverAction {
+	if ctx.Err() != nil {
+		return FailoverCanceled
+	}
+	return s.HandleFailoverError(ctx, gatewayService, accountID, platform, &service.UpstreamFailoverError{
+		StatusCode:   statusCode,
+		ResponseBody: []byte(message),
+	})
+}
+
 // HandleSelectionExhausted 处理选号失败（所有候选账号都在排除列表中）时的退避重试决策。
 // 针对 Antigravity 单账号分组的 503 (MODEL_CAPACITY_EXHAUSTED) 场景：
 // 清除排除列表、等待退避后重新选号。

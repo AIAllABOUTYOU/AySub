@@ -208,8 +208,16 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
 				markOpsRoutingCapacityLimited(c)
-				h.chatCompletionsErrorResponse(c, http.StatusServiceUnavailable, "api_error", "No available accounts")
-				return
+				action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusServiceUnavailable, "No available accounts")
+				switch action {
+				case FailoverContinue:
+					continue
+				case FailoverExhausted:
+					h.handleCCFailoverExhausted(c, fs.LastFailoverErr, streamStarted)
+					return
+				case FailoverCanceled:
+					return
+				}
 			}
 			accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
 				c,
@@ -221,8 +229,17 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			)
 			if err != nil {
 				reqLog.Warn("gateway.cc.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				h.handleConcurrencyError(c, err, "account", streamStarted)
-				return
+				status, _, message := concurrencyErrorResponse(err, "account")
+				action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, status, message)
+				switch action {
+				case FailoverContinue:
+					continue
+				case FailoverExhausted:
+					h.handleCCFailoverExhausted(c, fs.LastFailoverErr, streamStarted)
+					return
+				case FailoverCanceled:
+					return
+				}
 			}
 		}
 		accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)

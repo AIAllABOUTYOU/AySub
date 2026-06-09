@@ -423,8 +423,16 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
 				markOpsRoutingCapacityLimited(c)
-				googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts")
-				return
+				action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusServiceUnavailable, "No available Gemini accounts")
+				switch action {
+				case FailoverContinue:
+					continue
+				case FailoverExhausted:
+					h.handleGeminiFailoverExhausted(c, fs.LastFailoverErr)
+					return
+				case FailoverCanceled:
+					return
+				}
 			}
 			accountWaitCounted := false
 			canWait, err := geminiConcurrency.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
@@ -435,17 +443,26 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 					zap.Int64("account_id", account.ID),
 					zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
 				)
-				googleError(c, http.StatusTooManyRequests, "Too many pending requests, please retry later")
-				return
+				action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusTooManyRequests, "Too many pending requests, please retry later")
+				switch action {
+				case FailoverContinue:
+					continue
+				case FailoverExhausted:
+					h.handleGeminiFailoverExhausted(c, fs.LastFailoverErr)
+					return
+				case FailoverCanceled:
+					return
+				}
 			}
 			if err == nil && canWait {
 				accountWaitCounted = true
 			}
-			defer func() {
+			releaseWait := func() {
 				if accountWaitCounted {
 					geminiConcurrency.DecrementAccountWaitCount(c.Request.Context(), account.ID)
+					accountWaitCounted = false
 				}
-			}()
+			}
 
 			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotWithWaitTimeout(
 				c,
@@ -457,13 +474,20 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			)
 			if err != nil {
 				reqLog.Warn("gemini.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				googleError(c, http.StatusTooManyRequests, err.Error())
-				return
+				releaseWait()
+				status, _, message := concurrencyErrorResponse(err, "account")
+				action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, status, message)
+				switch action {
+				case FailoverContinue:
+					continue
+				case FailoverExhausted:
+					h.handleGeminiFailoverExhausted(c, fs.LastFailoverErr)
+					return
+				case FailoverCanceled:
+					return
+				}
 			}
-			if accountWaitCounted {
-				geminiConcurrency.DecrementAccountWaitCount(c.Request.Context(), account.ID)
-				accountWaitCounted = false
-			}
+			releaseWait()
 			if err := h.gatewayService.BindStickySession(c.Request.Context(), apiKey.GroupID, sessionKey, account.ID); err != nil {
 				reqLog.Warn("gemini.bind_sticky_session_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			}

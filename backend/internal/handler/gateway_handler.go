@@ -391,8 +391,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.String("model", reqModel),
 						zap.String("platform", platform),
 					)
-					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
-					return
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusServiceUnavailable, "No available accounts")
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, service.PlatformGemini, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				accountWaitCounted := false
 				canWait, err := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
@@ -403,8 +411,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.Int64("account_id", account.ID),
 						zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
 					)
-					h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "Too many pending requests, please retry later", streamStarted)
-					return
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusTooManyRequests, "Too many pending requests, please retry later")
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, service.PlatformGemini, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				if err == nil && canWait {
 					accountWaitCounted = true
@@ -427,8 +443,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				if err != nil {
 					reqLog.Warn("gateway.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 					releaseWait()
-					h.handleConcurrencyError(c, err, "account", streamStarted)
-					return
+					status, _, message := concurrencyErrorResponse(err, "account")
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, status, message)
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, service.PlatformGemini, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				// Slot acquired: no longer waiting in queue.
 				releaseWait()
@@ -664,8 +689,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.String("model", reqModel),
 						zap.String("platform", platform),
 					)
-					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", streamStarted)
-					return
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusServiceUnavailable, "No available accounts")
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, account.Platform, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				accountWaitCounted := false
 				canWait, err := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selection.WaitPlan.MaxWaiting)
@@ -676,8 +709,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.Int64("account_id", account.ID),
 						zap.Int("max_waiting", selection.WaitPlan.MaxWaiting),
 					)
-					h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", "Too many pending requests, please retry later", streamStarted)
-					return
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, http.StatusTooManyRequests, "Too many pending requests, please retry later")
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, account.Platform, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				if err == nil && canWait {
 					accountWaitCounted = true
@@ -700,8 +741,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				if err != nil {
 					reqLog.Warn("gateway.account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 					releaseWait()
-					h.handleConcurrencyError(c, err, "account", streamStarted)
-					return
+					status, _, message := concurrencyErrorResponse(err, "account")
+					action := fs.HandleAccountUnavailable(c.Request.Context(), h.gatewayService, account.ID, account.Platform, status, message)
+					switch action {
+					case FailoverContinue:
+						continue
+					case FailoverExhausted:
+						h.handleFailoverExhausted(c, fs.LastFailoverErr, account.Platform, streamStarted)
+						return
+					case FailoverCanceled:
+						return
+					}
 				}
 				// Slot acquired: no longer waiting in queue.
 				releaseWait()
