@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	httppool "github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	"golang.org/x/sync/errgroup"
 )
@@ -116,7 +117,7 @@ func (s *AccountUsageService) fetchGrokUsage(ctx context.Context, account *Accou
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	quotas, err := fetchGrokRateLimits(ctx, account, proxyURL)
+	quotas, err := fetchGrokRateLimits(ctx, account, proxyURL, s.cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +128,7 @@ func (s *AccountUsageService) fetchGrokUsage(ctx context.Context, account *Accou
 	}, nil
 }
 
-func fetchGrokRateLimits(ctx context.Context, account *Account, proxyURL string) (map[string]*GrokModelQuota, error) {
+func fetchGrokRateLimits(ctx context.Context, account *Account, proxyURL string, cfg *config.Config) (map[string]*GrokModelQuota, error) {
 	client, err := httppool.GetClient(httppool.Options{
 		ProxyURL:              proxyURL,
 		Timeout:               25 * time.Second,
@@ -147,7 +148,7 @@ func fetchGrokRateLimits(ctx context.Context, account *Account, proxyURL string)
 	for _, mode := range grokQuotaModes {
 		mode := mode
 		g.Go(func() error {
-			quota, err := fetchGrokRateLimitMode(gctx, client, account, mode)
+			quota, err := fetchGrokRateLimitMode(gctx, client, account, mode, cfg)
 			if err != nil {
 				if isInvalidGrokCredentialsError(err) {
 					return err
@@ -180,12 +181,12 @@ func fetchGrokRateLimits(ctx context.Context, account *Account, proxyURL string)
 	return quotas, nil
 }
 
-func fetchGrokRateLimitMode(ctx context.Context, client *http.Client, account *Account, mode grokQuotaMode) (*GrokModelQuota, error) {
+func fetchGrokRateLimitMode(ctx context.Context, client *http.Client, account *Account, mode grokQuotaMode, cfg *config.Config) (*GrokModelQuota, error) {
 	body, err := buildGrokRateLimitsPayload(mode.Key)
 	if err != nil {
 		return nil, err
 	}
-	req, err := buildGrokWebRateLimitsRequest(ctx, account, body)
+	req, err := buildGrokWebRateLimitsRequest(ctx, account, body, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +222,7 @@ func buildGrokRateLimitsPayload(modelName string) ([]byte, error) {
 	return json.Marshal(map[string]string{"modelName": modelName})
 }
 
-func buildGrokWebRateLimitsRequest(ctx context.Context, account *Account, body []byte) (*http.Request, error) {
+func buildGrokWebRateLimitsRequest(ctx context.Context, account *Account, body []byte, cfg *config.Config) (*http.Request, error) {
 	targetURL, err := grokWebEndpointURL(account, grokWebRateLimitsPath)
 	if err != nil {
 		return nil, err
@@ -244,6 +245,7 @@ func buildGrokWebRateLimitsRequest(ctx context.Context, account *Account, body [
 	if req.Header.Get("Cookie") == "" {
 		return nil, errors.New("sso_token or cookie is required for Grok Cookie account")
 	}
+	applyGrokWebCompatibilityHeaders(req.Header, account, cfg)
 	return req, nil
 }
 
@@ -403,8 +405,32 @@ func grokQuotaExtraUpdates(usage *UsageInfo) map[string]any {
 	if usage.UpdatedAt != nil {
 		updatedAt = usage.UpdatedAt.UTC()
 	}
-	return map[string]any{
+	updates := map[string]any{
 		"grok_quota":            quota,
 		"grok_quota_updated_at": updatedAt.Format(time.RFC3339),
 	}
+	if pool := inferGrokQuotaPool(usage.GrokQuota); pool != "" {
+		updates["grok_quota_pool"] = pool
+		updates["grok_quota_pool_inferred_at"] = updatedAt.Format(time.RFC3339)
+	}
+	return updates
+}
+
+func inferGrokQuotaPool(quotas map[string]*GrokModelQuota) string {
+	for _, key := range []string{"heavy", "grok-420-computer-use-sa", "expert"} {
+		q := quotas[key]
+		if q == nil {
+			continue
+		}
+		switch {
+		case q.TotalQueries >= 150:
+			return "heavy"
+		case q.TotalQueries >= 50:
+			return "super"
+		}
+	}
+	if q := quotas["auto"]; q != nil && q.TotalQueries == 20 {
+		return "basic"
+	}
+	return ""
 }

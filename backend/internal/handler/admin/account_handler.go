@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
@@ -162,6 +163,58 @@ type BulkUpdateAccountFilters struct {
 type BatchDeleteAccountsRequest struct {
 	AccountIDs []int64                   `json:"account_ids"`
 	Filters    *BulkUpdateAccountFilters `json:"filters"`
+}
+
+type AccountInspectionRequest struct {
+	AccountIDs  []int64                   `json:"account_ids"`
+	Filters     *BulkUpdateAccountFilters `json:"filters"`
+	ModelID     string                    `json:"model_id"`
+	TargetType  string                    `json:"target_type"`
+	SampleSize  int                       `json:"sample_size"`
+	Concurrency int                       `json:"concurrency"`
+	TimeoutMS   int                       `json:"timeout_ms"`
+}
+
+type AccountInspectionItem struct {
+	AccountID        int64  `json:"account_id"`
+	AccountName      string `json:"account_name"`
+	Platform         string `json:"platform"`
+	Type             string `json:"type"`
+	CurrentStatus    string `json:"current_status"`
+	Schedulable      bool   `json:"schedulable"`
+	RuntimeAvailable bool   `json:"runtime_available"`
+	HTTPStatus       int    `json:"http_status,omitempty"`
+	Status           string `json:"status"`
+	LatencyMs        int64  `json:"latency_ms"`
+	ErrorMessage     string `json:"error_message,omitempty"`
+	SuggestedAction  string `json:"suggested_action"`
+	SuggestedReason  string `json:"suggested_reason"`
+}
+
+type AccountInspectionSummary struct {
+	TotalAccounts  int `json:"total_accounts"`
+	Tested         int `json:"tested"`
+	Completed      int `json:"completed"`
+	Success        int `json:"success"`
+	Failed         int `json:"failed"`
+	Skipped        int `json:"skipped"`
+	SuggestDelete  int `json:"suggest_delete"`
+	SuggestDisable int `json:"suggest_disable"`
+	SuggestEnable  int `json:"suggest_enable"`
+	SuggestReauth  int `json:"suggest_reauth"`
+	Keep           int `json:"keep"`
+}
+
+type AccountInspectionRunResult struct {
+	TargetType  string                   `json:"target_type"`
+	ModelID     string                   `json:"model_id"`
+	StartedAt   int64                    `json:"started_at"`
+	FinishedAt  int64                    `json:"finished_at"`
+	DurationMs  int64                    `json:"duration_ms"`
+	Concurrency int                      `json:"concurrency"`
+	TimeoutMS   int                      `json:"timeout_ms"`
+	Summary     AccountInspectionSummary `json:"summary"`
+	Items       []AccountInspectionItem  `json:"items"`
 }
 
 // CheckMixedChannelRequest represents check mixed channel risk request
@@ -721,6 +774,312 @@ func (h *AccountHandler) BatchDelete(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// RunInspection runs a one-shot account inspection and returns per-account suggestions.
+// POST /api/v1/admin/accounts/inspection/run
+func (h *AccountHandler) RunInspection(c *gin.Context) {
+	var req AccountInspectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service unavailable")
+		return
+	}
+
+	targetType := strings.TrimSpace(req.TargetType)
+	if targetType == "" {
+		targetType = "codex"
+	}
+
+	concurrency := req.Concurrency
+	if concurrency <= 0 {
+		concurrency = 4
+	}
+	if concurrency > 20 {
+		concurrency = 20
+	}
+
+	timeoutMS := req.TimeoutMS
+	if timeoutMS <= 0 {
+		timeoutMS = 15000
+	}
+	if timeoutMS < 3000 {
+		timeoutMS = 3000
+	}
+	if timeoutMS > 120000 {
+		timeoutMS = 120000
+	}
+
+	accounts, err := h.listAccountsForInspection(c.Request.Context(), &req, targetType)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	if req.SampleSize > 0 && req.SampleSize < len(accounts) {
+		accounts = accounts[:req.SampleSize]
+	}
+
+	startedAt := time.Now()
+	items := make([]AccountInspectionItem, len(accounts))
+	g, groupCtx := errgroup.WithContext(c.Request.Context())
+	g.SetLimit(concurrency)
+
+	for i := range accounts {
+		idx := i
+		account := accounts[i]
+		items[idx] = newAccountInspectionItem(account)
+
+		if !accountMatchesInspectionTarget(account, targetType) {
+			items[idx].Status = "skipped"
+			items[idx].SuggestedAction = "keep"
+			items[idx].SuggestedReason = "账号不属于当前巡检目标"
+			continue
+		}
+
+		g.Go(func() error {
+			testCtx, cancel := context.WithTimeout(groupCtx, time.Duration(timeoutMS)*time.Millisecond)
+			defer cancel()
+
+			result, testErr := h.accountTestService.RunTestBackground(testCtx, account.ID, req.ModelID)
+			item := newAccountInspectionItem(account)
+			if result != nil {
+				item.Status = result.Status
+				item.LatencyMs = result.LatencyMs
+				item.ErrorMessage = strings.TrimSpace(result.ErrorMessage)
+			}
+			if testErr != nil && item.ErrorMessage == "" {
+				item.ErrorMessage = testErr.Error()
+			}
+			if errors.Is(testCtx.Err(), context.DeadlineExceeded) && item.ErrorMessage == "" {
+				item.ErrorMessage = "inspection timeout"
+			}
+			if item.Status == "" {
+				if item.ErrorMessage == "" {
+					item.Status = "success"
+				} else {
+					item.Status = "failed"
+				}
+			}
+			item.HTTPStatus = extractInspectionHTTPStatus(item.ErrorMessage)
+			item.SuggestedAction, item.SuggestedReason = suggestAccountInspectionAction(account, item.Status, item.ErrorMessage)
+			items[idx] = item
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	finishedAt := time.Now()
+	result := AccountInspectionRunResult{
+		TargetType:  targetType,
+		ModelID:     req.ModelID,
+		StartedAt:   startedAt.UnixMilli(),
+		FinishedAt:  finishedAt.UnixMilli(),
+		DurationMs:  finishedAt.Sub(startedAt).Milliseconds(),
+		Concurrency: concurrency,
+		TimeoutMS:   timeoutMS,
+		Summary:     summarizeAccountInspection(items),
+		Items:       items,
+	}
+
+	response.Success(c, result)
+}
+
+func (h *AccountHandler) listAccountsForInspection(ctx context.Context, req *AccountInspectionRequest, targetType string) ([]*service.Account, error) {
+	if req == nil {
+		req = &AccountInspectionRequest{}
+	}
+
+	if len(req.AccountIDs) > 0 {
+		accounts, err := h.adminService.GetAccountsByIDs(ctx, req.AccountIDs)
+		if err != nil {
+			return nil, err
+		}
+		return filterAccountsForInspection(accounts, targetType), nil
+	}
+
+	filters := req.Filters
+	platform := ""
+	accountType := ""
+	status := ""
+	search := ""
+	privacyMode := ""
+	groupID := int64(0)
+
+	if filters != nil {
+		platform = strings.TrimSpace(filters.Platform)
+		accountType = strings.TrimSpace(filters.Type)
+		status = strings.TrimSpace(filters.Status)
+		search = strings.TrimSpace(filters.Search)
+		privacyMode = strings.TrimSpace(filters.PrivacyMode)
+		if filters.Group != "" {
+			if filters.Group == accountListGroupUngroupedQueryValue {
+				groupID = service.AccountListGroupUngrouped
+			} else {
+				parsed, err := strconv.ParseInt(filters.Group, 10, 64)
+				if err != nil || parsed < 0 {
+					return nil, infraerrors.BadRequest("INVALID_GROUP_FILTER", "invalid group filter")
+				}
+				groupID = parsed
+			}
+		}
+	}
+
+	if targetType == "codex" {
+		if platform == "" {
+			platform = service.PlatformOpenAI
+		}
+		if accountType == "" {
+			accountType = service.AccountTypeOAuth
+		}
+	}
+
+	accounts, _, err := h.adminService.ListAccounts(ctx, 1, 10000, platform, accountType, status, search, groupID, privacyMode, "name", "asc")
+	if err != nil {
+		return nil, err
+	}
+	ptrs := make([]*service.Account, 0, len(accounts))
+	for i := range accounts {
+		ptrs = append(ptrs, &accounts[i])
+	}
+	return filterAccountsForInspection(ptrs, targetType), nil
+}
+
+func filterAccountsForInspection(accounts []*service.Account, targetType string) []*service.Account {
+	filtered := make([]*service.Account, 0, len(accounts))
+	for _, account := range accounts {
+		if accountMatchesInspectionTarget(account, targetType) {
+			filtered = append(filtered, account)
+		}
+	}
+	return filtered
+}
+
+func accountMatchesInspectionTarget(account *service.Account, targetType string) bool {
+	if account == nil {
+		return false
+	}
+	switch targetType {
+	case "codex":
+		return account.IsCodexCLIOnlyEnabled()
+	case "openai":
+		return account.Platform == service.PlatformOpenAI
+	case "all":
+		return true
+	default:
+		return account.IsCodexCLIOnlyEnabled()
+	}
+}
+
+func newAccountInspectionItem(account *service.Account) AccountInspectionItem {
+	item := AccountInspectionItem{
+		Status:          "pending",
+		SuggestedAction: "keep",
+		SuggestedReason: "等待巡检",
+	}
+	if account == nil {
+		item.Status = "skipped"
+		item.SuggestedReason = "账号不存在"
+		return item
+	}
+	item.AccountID = account.ID
+	item.AccountName = account.Name
+	item.Platform = account.Platform
+	item.Type = account.Type
+	item.CurrentStatus = account.Status
+	item.Schedulable = account.Schedulable
+	item.RuntimeAvailable = account.IsSchedulable()
+	return item
+}
+
+func summarizeAccountInspection(items []AccountInspectionItem) AccountInspectionSummary {
+	summary := AccountInspectionSummary{TotalAccounts: len(items)}
+	for _, item := range items {
+		switch item.Status {
+		case "success":
+			summary.Success++
+			summary.Tested++
+			summary.Completed++
+		case "failed":
+			summary.Failed++
+			summary.Tested++
+			summary.Completed++
+		case "skipped":
+			summary.Skipped++
+		default:
+			if item.Status != "" && item.Status != "pending" {
+				summary.Completed++
+			}
+		}
+
+		switch item.SuggestedAction {
+		case "delete":
+			summary.SuggestDelete++
+		case "disable":
+			summary.SuggestDisable++
+		case "enable":
+			summary.SuggestEnable++
+		case "reauth":
+			summary.SuggestReauth++
+		default:
+			summary.Keep++
+		}
+	}
+	return summary
+}
+
+func suggestAccountInspectionAction(account *service.Account, status, errMsg string) (string, string) {
+	errText := strings.ToLower(strings.TrimSpace(errMsg))
+	if account == nil {
+		return "delete", "账号记录不存在"
+	}
+	if status == "success" {
+		if !account.IsSchedulable() {
+			return "enable", "测试成功，但当前账号未处于可调度状态"
+		}
+		return "keep", "测试成功"
+	}
+
+	if containsAny(errText, "401", "unauthorized", "invalid token", "expired token", "refresh token", "authentication", "no access token") {
+		return "reauth", "认证失效或缺少有效 token"
+	}
+	if containsAny(errText, "403", "forbidden", "suspended", "blocked", "deactivated", "account disabled") {
+		return "disable", "上游拒绝访问，建议先停用后人工确认"
+	}
+	if containsAny(errText, "account not found", "not found", "missing credentials", "invalid credentials structure", "no api key available", "unsupported account type") {
+		return "delete", "账号凭据缺失或结构无效"
+	}
+	if containsAny(errText, "timeout", "deadline exceeded", "connection refused", "connection reset", "network", "request failed") {
+		return "keep", "网络或上游临时错误，建议复测后再处理"
+	}
+	return "keep", "未命中自动处理规则，建议人工复核"
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractInspectionHTTPStatus(errMsg string) int {
+	text := strings.ToLower(errMsg)
+	for _, code := range []int{400, 401, 403, 404, 408, 409, 429, 500, 502, 503, 504} {
+		if strings.Contains(text, strconv.Itoa(code)) {
+			return code
+		}
+	}
+	return 0
 }
 
 // TestAccountRequest represents the request body for testing an account

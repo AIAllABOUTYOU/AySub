@@ -16,6 +16,16 @@
             @refresh="handleManualRefresh"
             @create="showCreate = true"
           >
+            <template #afterCreate>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                @click="router.push('/admin/accounts/inspection')"
+              >
+                <Icon name="beaker" size="sm" />
+                <span>账号巡检</span>
+              </button>
+            </template>
             <template #after>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
@@ -415,6 +425,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
@@ -454,6 +465,7 @@ import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, XaiSSOBasicToken } from '@/types'
 
 const { t } = useI18n()
+const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 

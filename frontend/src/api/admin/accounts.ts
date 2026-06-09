@@ -67,6 +67,69 @@ export interface AccountListWithEtagResult {
   data: PaginatedResponse<Account> | null
 }
 
+export interface AccountInspectionFilters {
+  platform?: string
+  type?: string
+  status?: string
+  group?: string
+  search?: string
+  privacy_mode?: string
+}
+
+export interface AccountInspectionRunRequest {
+  account_ids?: number[]
+  filters?: AccountInspectionFilters
+  model_id?: string
+  target_type?: 'codex' | 'openai' | 'all'
+  sample_size?: number
+  concurrency?: number
+  timeout_ms?: number
+}
+
+export type AccountInspectionAction = 'keep' | 'enable' | 'disable' | 'delete' | 'reauth'
+
+export interface AccountInspectionItem {
+  account_id: number
+  account_name: string
+  platform: string
+  type: string
+  current_status: string
+  schedulable: boolean
+  runtime_available: boolean
+  http_status?: number
+  status: 'pending' | 'success' | 'failed' | 'skipped'
+  latency_ms: number
+  error_message?: string
+  suggested_action: AccountInspectionAction
+  suggested_reason: string
+}
+
+export interface AccountInspectionSummary {
+  total_accounts: number
+  tested: number
+  completed: number
+  success: number
+  failed: number
+  skipped: number
+  suggest_delete: number
+  suggest_disable: number
+  suggest_enable: number
+  suggest_reauth: number
+  keep: number
+}
+
+export interface AccountInspectionRunResult {
+  target_type: string
+  model_id: string
+  started_at: number
+  finished_at: number
+  duration_ms: number
+  concurrency: number
+  timeout_ms: number
+  summary: AccountInspectionSummary
+  items: AccountInspectionItem[]
+}
+
 export async function listWithEtag(
   page: number = 1,
   pageSize: number = 20,
@@ -116,6 +179,15 @@ export async function listWithEtag(
     etag: etagHeader,
     data: response.data
   }
+}
+
+export async function runInspection(
+  payload: AccountInspectionRunRequest
+): Promise<AccountInspectionRunResult> {
+  const { data } = await apiClient.post<AccountInspectionRunResult>('/admin/accounts/inspection/run', payload, {
+    timeout: 180000
+  })
+  return data
 }
 
 /**
@@ -755,6 +827,7 @@ export async function setPrivacy(id: number): Promise<Account> {
 export const accountsAPI = {
   list,
   listWithEtag,
+  runInspection,
   getById,
   create,
   update,

@@ -406,6 +406,7 @@ func (s *OpenAIGatewayService) buildGrokConsoleRequest(ctx context.Context, acco
 	if req.Header.Get("Cookie") == "" {
 		return nil, errors.New("sso_token or cookie is required for Grok Console account")
 	}
+	applyGrokWebCompatibilityHeaders(req.Header, account, s.cfg)
 	return req, nil
 }
 

@@ -171,6 +171,9 @@ docs/*
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/NEWAPI_FEATURE_ROADMAP_CN.md
+!docs/SECURITY_AUDIT_ROADMAP_CN.md
+!docs/GROK2API_PARITY_CN.md
 .serena/
 .codex/
 frontend/coverage/

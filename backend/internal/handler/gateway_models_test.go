@@ -112,6 +112,7 @@ func TestGatewayModels_XAIGroupFallsBackToGrokModels(t *testing.T) {
 	var got gatewayModelsResponseForTest
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Contains(t, modelIDsForTest(got.Data), "grok-4.20-auto")
+	require.Contains(t, modelIDsForTest(got.Data), "grok-4.3-fast")
 	require.Contains(t, modelIDsForTest(got.Data), "grok-4.3-console")
 	require.Contains(t, modelIDsForTest(got.Data), "grok-build-console")
 	require.Contains(t, modelIDsForTest(got.Data), "grok-imagine-image")

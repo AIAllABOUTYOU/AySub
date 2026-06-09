@@ -27,15 +27,16 @@ Implemented in the current codebase:
 - API gateway support for Claude Messages, OpenAI Chat Completions, Responses, Messages-compatible forwarding, Embeddings, Images, Videos, Audio, LiveKit, Gemini native `/v1beta`, and dedicated Antigravity `/antigravity/v1` plus `/antigravity/v1beta` routes.
 - API Key management with model allowlists, endpoint permissions, group binding, status control, user CRUD, and admin-side group reassignment.
 - Channel and pricing system with channel CRUD, model pricing/mapping, wildcard matching, group multipliers, RPM overrides, strategy views, user available channels, model marketplace, and price calculator.
-- Account operations for OAuth/API Key/Cookie/Service Account/Bedrock account types, batch import/export, CRS sync, upstream model sync, account tests, refresh, privacy setup, quota/tier refresh, error cleanup, and usage stats.
+- Account operations for OAuth/API Key/Cookie/Service Account/Bedrock account types, batch import/export, CRS sync, upstream model sync, account tests, account inspection, refresh, privacy setup, quota/tier refresh, error cleanup, and usage stats. Account inspection supports Codex/OpenAI/all targets, concurrency, timeouts, sampling, filters, and keep/enable/disable/delete/reauth suggestions.
 - User system with email registration/login, verification codes, forgot/reset password, JWT refresh/logout, GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding, email completion, and session revocation.
 - User workspace with dashboard, API Keys, usage records, request logs, daily check-in, security center, notification email, TOTP and recovery codes, sensitive-operation verification, profile, account bindings, redeem codes, subscriptions, orders, affiliate rebates, and custom menu pages.
-- Admin console for dashboard, users, groups, accounts, proxies, announcements, settings, home configuration, channels, channel monitors, scheduled tests, subscriptions, usage cleanup, request logs, redeem codes, promo codes, user attributes, and API Key group management.
+- Admin console for dashboard, users, groups, accounts, account inspection, proxies, announcements, settings, home configuration, channels, channel monitors, scheduled tests, subscriptions, usage cleanup, request logs, redeem codes, promo codes, user attributes, and API Key group management.
 - Ops monitoring with realtime concurrency, account availability, realtime traffic, QPS WebSocket, alert rules/events/silences, error logs, request errors, upstream errors, request drilldown, system logs, runtime log config, and metric thresholds.
 - Security and risk control with audit logs, incidents, policies, subject locks, hash-chain integrity checks, audit exports, content moderation config/status/logs, user unban, and flagged-hash cleanup.
 - Payment and subscription system with plans, balance recharge, subscription purchase, orders, refund request/processing, order retry, payment dashboard, provider instances, visible payment methods, callbacks, and EasyPay, Alipay, WeChat Pay, Stripe, and Airwallex providers.
 - Media and files: generated image/video local cache under `DATA_DIR/files/images` and `DATA_DIR/files/videos`, admin listing/deletion/filtered cleanup/orphan cleanup, and custom Markdown pages plus images served from `DATA_DIR/pages`.
 - Data and system maintenance with S3/source profiles, backup jobs, scheduled backups, backup restore, system version check, app update, rollback, and restart endpoints.
+- Grok/xAI compatibility: optional dynamic `x-statsig-id` compatibility headers for Grok Cookie requests, configurable globally or per account.
 - Deployment features: `/setup` wizard, Docker `AUTO_SETUP`, embedded frontend, simple/backend modes, and optional Privoxy/FlareSolverr/WARP proxy compose profiles.
 
 Not claimed as complete in README:
@@ -61,6 +62,7 @@ Those items are tracked in:
 | Login/Register | `/login`, `/register` |
 | User dashboard | `/dashboard` |
 | API Keys | `/keys` |
+| API Key usage lookup | `/key-usage` |
 | Daily check-in | `/checkin` |
 | User usage | `/usage` |
 | User request logs | `/request-logs` |
@@ -80,6 +82,7 @@ Those items are tracked in:
 | Admin dashboard | `/admin/dashboard` |
 | Ops monitoring | `/admin/ops` |
 | Users/groups/accounts | `/admin/users`, `/admin/groups`, `/admin/accounts` |
+| Account inspection | `/admin/accounts/inspection` |
 | Channels and monitors | `/admin/channels/pricing`, `/admin/channels/monitor` |
 | Subscription admin | `/admin/subscriptions` |
 | Announcements and home config | `/admin/announcements`, `/admin/home-config` |
@@ -142,7 +145,7 @@ Examples from the user, admin, payment, and public APIs:
 - API Keys and usage: `/api/v1/keys`, `/api/v1/groups/available`, `/api/v1/usage`, `/api/v1/usage/requests`, `/api/v1/usage/dashboard/*`
 - User channels and playground: `/api/v1/channels/available`, `/api/v1/channel-monitors`, `/api/v1/playground/sessions`
 - Announcements, redeem, subscriptions: `/api/v1/announcements`, `/api/v1/redeem`, `/api/v1/subscriptions/*`
-- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
+- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/accounts/inspection/run`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
 - Admin channels: `/api/v1/admin/channels/*`, `/api/v1/admin/channel-monitors/*`, `/api/v1/admin/channel-monitor-templates/*`, `/api/v1/admin/scheduled-test-plans/*`
 - Admin operations: `/api/v1/admin/ops/*`, `/api/v1/admin/ops/requests`, `/api/v1/admin/usage/*`, `/api/v1/admin/media-cache/*`
 - Admin security/risk: `/api/v1/admin/security/*`, `/api/v1/admin/risk-control/*`, `/api/v1/admin/error-passthrough-rules/*`, `/api/v1/admin/tls-fingerprint-profiles/*`
@@ -301,6 +304,7 @@ go generate ./cmd/server
 - `security.url_allowlist` and related environment variables control upstream URL validation.
 - `billing.circuit_breaker` controls fail-closed behavior when billing writes fail.
 - `turnstile.required` can force Turnstile in release mode.
+- `grok.dynamic_statsig_enabled` enables a dynamic `x-statsig-id` compatibility header for Grok Cookie accounts. Account credentials or extra fields can override the global value with `dynamic_statsig_enabled` / `grok_dynamic_statsig_enabled`.
 
 ## Verification
 

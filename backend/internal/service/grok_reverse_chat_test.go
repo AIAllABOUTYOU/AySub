@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -38,6 +39,51 @@ func TestBuildGrokWebCookieHeader(t *testing.T) {
 	require.Contains(t, got, "foo=bar")
 	require.Contains(t, got, "cf_clearance=new")
 	require.NotContains(t, got, "cf_clearance=old")
+}
+
+func TestGrokDynamicStatsigCompatibilityHeaders(t *testing.T) {
+	account := &Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+		Credentials: map[string]any{
+			"sso_token": "tok",
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: &config.Config{Grok: config.GrokConfig{DynamicStatsigEnabled: true}}}
+
+	req, err := svc.buildGrokWebChatRequest(context.Background(), account, []byte(`{"message":"hi"}`))
+	require.NoError(t, err)
+	decoded, err := base64.StdEncoding.DecodeString(req.Header.Get(grokDynamicStatsigHeader))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(decoded), "x1:TypeError:"), string(decoded))
+
+	account.Extra = map[string]any{"dynamic_statsig_enabled": false}
+	req, err = svc.buildGrokWebChatRequest(context.Background(), account, []byte(`{"message":"hi"}`))
+	require.NoError(t, err)
+	require.Empty(t, req.Header.Get(grokDynamicStatsigHeader))
+}
+
+func TestGrokDynamicStatsigAccountOverrideForRateLimits(t *testing.T) {
+	account := &Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeCookie,
+		Credentials: map[string]any{
+			"base_url":                "https://grok.example",
+			"sso_token":               "tok",
+			"dynamic_statsig_enabled": true,
+		},
+	}
+	req, err := buildGrokWebRateLimitsRequest(context.Background(), account, []byte(`{"modelName":"fast"}`), nil)
+	require.NoError(t, err)
+
+	decoded, err := base64.StdEncoding.DecodeString(req.Header.Get(grokDynamicStatsigHeader))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(decoded), "x1:TypeError:"), string(decoded))
+}
+
+func TestResolveGrokWebModeIDPrefersFastForGrok43Fast(t *testing.T) {
+	require.Equal(t, "fast", resolveGrokWebModeID(nil, "grok-4.3-fast"))
+	require.Equal(t, "grok-420-computer-use-sa", resolveGrokWebModeID(nil, "grok-4.3-high"))
 }
 
 func TestBuildGrokWebChatPayload(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -626,7 +627,7 @@ func (s *OpenAIGatewayService) collectGrokImagineImages(ctx context.Context, acc
 	if wantCount <= 0 {
 		wantCount = 1
 	}
-	headers, err := buildGrokImagineWSHeaders(account)
+	headers, err := buildGrokImagineWSHeaders(account, s.cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -750,6 +751,7 @@ func (s *OpenAIGatewayService) buildGrokWebChatRequest(ctx context.Context, acco
 	if req.Header.Get("Cookie") == "" {
 		return nil, errors.New("sso_token or cookie is required for Grok Cookie account")
 	}
+	applyGrokWebCompatibilityHeaders(req.Header, account, s.cfg)
 	return req, nil
 }
 
@@ -852,6 +854,7 @@ func (s *OpenAIGatewayService) buildGrokWebUploadRequest(ctx context.Context, ac
 	if req.Header.Get("Cookie") == "" {
 		return nil, errors.New("sso_token or cookie is required for Grok Cookie account")
 	}
+	applyGrokWebCompatibilityHeaders(req.Header, account, s.cfg)
 	return req, nil
 }
 
@@ -2327,7 +2330,7 @@ func grokImagesOutputSizes(parsed *OpenAIImagesRequest, count int) []string {
 	return out
 }
 
-func buildGrokImagineWSHeaders(account *Account) (http.Header, error) {
+func buildGrokImagineWSHeaders(account *Account, cfg *config.Config) (http.Header, error) {
 	if account == nil {
 		return nil, errors.New("account is required")
 	}
@@ -2341,6 +2344,7 @@ func buildGrokImagineWSHeaders(account *Account) (http.Header, error) {
 	headers.Set("Origin", grokFirstNonEmpty(account.GetCredential("origin"), grokWebDefaultBaseURL))
 	headers.Set("Referer", grokFirstNonEmpty(account.GetCredential("referer"), "https://grok.com/imagine"))
 	headers.Set("User-Agent", grokFirstNonEmpty(account.GetCredential("user_agent"), defaultGrokWebUserAgent()))
+	applyGrokWebCompatibilityHeaders(headers, account, cfg)
 	return headers, nil
 }
 
@@ -2441,19 +2445,21 @@ func buildGrokWebCookieHeader(account *Account) string {
 }
 
 func resolveGrokWebModeID(account *Account, model string) string {
-	if override := strings.TrimSpace(account.GetCredential("mode_id")); override != "" {
-		return override
+	if account != nil {
+		if override := strings.TrimSpace(account.GetCredential("mode_id")); override != "" {
+			return override
+		}
 	}
 	m := strings.ToLower(strings.TrimSpace(model))
 	switch {
-	case strings.Contains(m, "4.3") || strings.Contains(m, "grok-4-3"):
-		return "grok-420-computer-use-sa"
 	case strings.Contains(m, "heavy") || strings.Contains(m, "multi-agent"):
 		return "heavy"
 	case strings.Contains(m, "expert") || strings.Contains(m, "reasoning"):
 		return "expert"
 	case strings.Contains(m, "fast") || strings.Contains(m, "non-reasoning") || strings.Contains(m, "lite"):
 		return "fast"
+	case strings.Contains(m, "4.3") || strings.Contains(m, "grok-4-3"):
+		return "grok-420-computer-use-sa"
 	default:
 		return "auto"
 	}

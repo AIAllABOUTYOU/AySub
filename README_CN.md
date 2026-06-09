@@ -27,15 +27,16 @@ AySub 是一个自部署 AI API 网关，覆盖账号调度、OpenAI 兼容 API�
 - API 网关：Claude Messages、OpenAI Chat Completions、Responses、Messages 兼容转发、Embeddings、Images、Videos、Audio、LiveKit；Gemini 原生 `/v1beta`；Antigravity 专用 `/antigravity/v1` 与 `/antigravity/v1beta`。
 - API Key 管理：模型白名单、端点权限、分组绑定、状态控制、用户侧创建/更新/删除，管理员侧可调整 Key 分组。
 - 渠道与价格体系：渠道 CRUD、模型定价/映射、通配符匹配、分组倍率、RPM override、策略视图、用户可用渠道、模型广场和价格计算器。
-- 账号运营：OAuth/API Key/Cookie/Service Account/Bedrock 等账号类型，批量导入导出、CRS 同步、上游模型同步、账号测试、刷新、隐私设置、quota/tier 刷新、错误清理和用量统计。
+- 账号运营：OAuth/API Key/Cookie/Service Account/Bedrock 等账号类型，批量导入导出、CRS 同步、上游模型同步、账号测试、账号巡检、刷新、隐私设置、quota/tier 刷新、错误清理和用量统计；账号巡检支持 Codex/OpenAI/全部账号、并发、超时、抽样、筛选和保留/启用/禁用/删除/重授权处理建议。
 - 用户系统：邮箱注册登录、验证码、忘记/重置密码、JWT refresh/logout、GitHub/Google/OIDC/钉钉/微信/LinuxDo 登录和绑定、邮箱补全、会话撤销。
 - 用户工作台：仪表盘、API Key、用量记录、请求日志、每日签到、用户安全中心、通知邮箱、TOTP 与恢复码、敏感操作二次验证、个人资料、账号绑定、兑换码、订阅、订单、邀请返利和自定义菜单页面。
-- 管理后台：仪表盘、用户/分组/账号/代理/公告/设置、主页配置、渠道、渠道监控、定时测试、订阅、用量清理、请求日志、兑换码、优惠码、用户属性、API Key 分组管理。
+- 管理后台：仪表盘、用户/分组/账号/账号巡检/代理/公告/设置、主页配置、渠道、渠道监控、定时测试、订阅、用量清理、请求日志、兑换码、优惠码、用户属性、API Key 分组管理。
 - 运维监控：实时并发、账号可用性、实时流量、QPS WebSocket、告警规则/事件/静默、错误日志、请求错误、上游错误、请求明细、系统日志、运行时日志配置和指标阈值。
 - 安全与风控：安全审计日志、事件、策略、封控对象、哈希链完整性校验、审计导出；内容审核配置、状态、日志、用户解封和 flagged hash 清理。
 - 支付与订阅：套餐、订单、余额充值、订阅购买、退款申请/处理、订单重试、支付看板、支付实例、可见支付方式、回调；支持 EasyPay、支付宝、微信支付、Stripe、Airwallex。
 - 媒体与文件：生成图片/视频本地缓存，`DATA_DIR/files/images`、`DATA_DIR/files/videos` 可在后台列表、单删、按筛选清理和孤儿文件清理；自定义 Markdown 页面和页面图片从 `DATA_DIR/pages` 提供。
 - 数据与系统维护：S3/数据源配置、备份任务、定时备份、备份恢复、系统版本检查、应用更新、回滚和重启接口。
+- Grok/xAI 兼容：Grok Cookie 请求支持可选动态 `x-statsig-id` 兼容头，可全局或账号级启用。
 - 部署能力：`/setup` 初始化向导、Docker `AUTO_SETUP`、嵌入式前端、simple/backend mode、可选 Privoxy/FlareSolverr/WARP 代理 compose profile。
 
 README 不把以下内容写成已完成：
@@ -61,6 +62,7 @@ README 不把以下内容写成已完成：
 | 登录/注册 | `/login`、`/register` |
 | 用户仪表盘 | `/dashboard` |
 | API Key | `/keys` |
+| API Key 用量查询 | `/key-usage` |
 | 每日签到 | `/checkin` |
 | 用户用量 | `/usage` |
 | 用户请求日志 | `/request-logs` |
@@ -80,6 +82,7 @@ README 不把以下内容写成已完成：
 | 管理仪表盘 | `/admin/dashboard` |
 | 运维监控 | `/admin/ops` |
 | 用户/分组/账号 | `/admin/users`、`/admin/groups`、`/admin/accounts` |
+| 账号巡检 | `/admin/accounts/inspection` |
 | 渠道与监控 | `/admin/channels/pricing`、`/admin/channels/monitor` |
 | 订阅管理 | `/admin/subscriptions` |
 | 公告与自定义首页 | `/admin/announcements`、`/admin/home-config` |
@@ -142,7 +145,7 @@ AySub 主要接口按用途分为网关、用户、管理、支付和公开接�
 - API Key 与用量：`/api/v1/keys`、`/api/v1/groups/available`、`/api/v1/usage`、`/api/v1/usage/requests`、`/api/v1/usage/dashboard/*`
 - 用户渠道与体验中心：`/api/v1/channels/available`、`/api/v1/channel-monitors`、`/api/v1/playground/sessions`
 - 公告、兑换、订阅：`/api/v1/announcements`、`/api/v1/redeem`、`/api/v1/subscriptions/*`
-- 管理核心：`/api/v1/admin/dashboard/*`、`/api/v1/admin/users/*`、`/api/v1/admin/groups/*`、`/api/v1/admin/accounts/*`、`/api/v1/admin/proxies/*`、`/api/v1/admin/settings/*`
+- 管理核心：`/api/v1/admin/dashboard/*`、`/api/v1/admin/users/*`、`/api/v1/admin/groups/*`、`/api/v1/admin/accounts/*`、`/api/v1/admin/accounts/inspection/run`、`/api/v1/admin/proxies/*`、`/api/v1/admin/settings/*`
 - 管理渠道：`/api/v1/admin/channels/*`、`/api/v1/admin/channel-monitors/*`、`/api/v1/admin/channel-monitor-templates/*`、`/api/v1/admin/scheduled-test-plans/*`
 - 管理运营：`/api/v1/admin/ops/*`、`/api/v1/admin/ops/requests`、`/api/v1/admin/usage/*`、`/api/v1/admin/media-cache/*`
 - 管理安全/风控：`/api/v1/admin/security/*`、`/api/v1/admin/risk-control/*`、`/api/v1/admin/error-passthrough-rules/*`、`/api/v1/admin/tls-fingerprint-profiles/*`
@@ -301,6 +304,7 @@ go generate ./cmd/server
 - `security.url_allowlist` 及对应环境变量控制上游 URL 校验。
 - `billing.circuit_breaker` 控制计费写入异常时是否 fail closed。
 - `turnstile.required` 可在 release 模式强制启用 Turnstile。
+- `grok.dynamic_statsig_enabled` 可为 Grok Cookie 账号启用动态 `x-statsig-id` 兼容头；账号凭据或 extra 中的 `dynamic_statsig_enabled` / `grok_dynamic_statsig_enabled` 可覆盖全局配置。
 
 ## 验证记录
 

@@ -26,15 +26,16 @@ AySub は、セルフホスト向けの AI API ゲートウェイです。アカ
 - API gateway: Claude Messages、OpenAI Chat Completions、Responses、Messages compatible forwarding、Embeddings、Images、Videos、Audio、LiveKit、Gemini native `/v1beta`、Antigravity 専用 `/antigravity/v1` と `/antigravity/v1beta`。
 - API Key 管理: model allowlist、endpoint permission、group binding、status control、user CRUD、admin-side group reassignment。
 - Channel / pricing: channel CRUD、model pricing/mapping、wildcard matching、group multiplier、RPM override、strategy view、user available channels、model marketplace、price calculator。
-- Account operations: OAuth/API Key/Cookie/Service Account/Bedrock account、batch import/export、CRS sync、upstream model sync、account test、refresh、privacy setup、quota/tier refresh、error cleanup、usage stats。
+- Account operations: OAuth/API Key/Cookie/Service Account/Bedrock account、batch import/export、CRS sync、upstream model sync、account test、account inspection、refresh、privacy setup、quota/tier refresh、error cleanup、usage stats。Account inspection は Codex/OpenAI/all targets、concurrency、timeout、sampling、filter、keep/enable/disable/delete/reauth suggestions に対応。
 - User system: email registration/login、verification code、forgot/reset password、JWT refresh/logout、GitHub/Google/OIDC/DingTalk/WeChat/LinuxDo login and binding、email completion、session revocation。
 - User workspace: dashboard、API Keys、usage records、request logs、daily check-in、security center、notification email、TOTP and recovery codes、sensitive-operation verification、profile、account bindings、redeem codes、subscriptions、orders、affiliate rebates、custom menu pages。
-- Admin console: dashboard、users、groups、accounts、proxies、announcements、settings、home configuration、channels、channel monitors、scheduled tests、subscriptions、usage cleanup、request logs、redeem codes、promo codes、user attributes、API Key group management。
+- Admin console: dashboard、users、groups、accounts、account inspection、proxies、announcements、settings、home configuration、channels、channel monitors、scheduled tests、subscriptions、usage cleanup、request logs、redeem codes、promo codes、user attributes、API Key group management。
 - Ops monitoring: realtime concurrency、account availability、realtime traffic、QPS WebSocket、alert rules/events/silences、error logs、request errors、upstream errors、request drilldown、system logs、runtime log config、metric thresholds。
 - Security / risk control: audit logs、incidents、policies、subject locks、hash-chain integrity checks、audit exports、content moderation config/status/logs、user unban、flagged-hash cleanup。
 - Payment / subscription: plans、balance recharge、subscription purchase、orders、refund request/processing、order retry、payment dashboard、provider instances、visible payment methods、callbacks、EasyPay、Alipay、WeChat Pay、Stripe、Airwallex。
 - Media / files: generated image/video local cache under `DATA_DIR/files/images` and `DATA_DIR/files/videos`、admin listing/deletion/filtered cleanup/orphan cleanup、custom Markdown pages and images served from `DATA_DIR/pages`。
 - Data / system maintenance: S3/source profiles、backup jobs、scheduled backups、backup restore、system version check、app update、rollback、restart endpoints。
+- Grok/xAI compatibility: Grok Cookie request 用の optional dynamic `x-statsig-id` compatibility header を global または account 単位で有効化できます。
 - Deployment features: `/setup` wizard、Docker `AUTO_SETUP`、embedded frontend、simple/backend modes、optional Privoxy/FlareSolverr/WARP proxy compose profiles。
 
 README で完了済みとは扱わない項目:
@@ -60,6 +61,7 @@ README で完了済みとは扱わない項目:
 | Login/Register | `/login`, `/register` |
 | User dashboard | `/dashboard` |
 | API Key | `/keys` |
+| API Key usage lookup | `/key-usage` |
 | デイリーチェックイン | `/checkin` |
 | User usage | `/usage` |
 | User request logs | `/request-logs` |
@@ -79,6 +81,7 @@ README で完了済みとは扱わない項目:
 | Admin dashboard | `/admin/dashboard` |
 | Ops monitoring | `/admin/ops` |
 | Users/groups/accounts | `/admin/users`, `/admin/groups`, `/admin/accounts` |
+| Account inspection | `/admin/accounts/inspection` |
 | Channels and monitors | `/admin/channels/pricing`, `/admin/channels/monitor` |
 | Subscription admin | `/admin/subscriptions` |
 | Announcements and home config | `/admin/announcements`, `/admin/home-config` |
@@ -141,7 +144,7 @@ User/admin/payment/public API examples:
 - API Keys and usage: `/api/v1/keys`, `/api/v1/groups/available`, `/api/v1/usage`, `/api/v1/usage/requests`, `/api/v1/usage/dashboard/*`
 - User channels and playground: `/api/v1/channels/available`, `/api/v1/channel-monitors`, `/api/v1/playground/sessions`
 - Announcements, redeem, subscriptions: `/api/v1/announcements`, `/api/v1/redeem`, `/api/v1/subscriptions/*`
-- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
+- Admin core: `/api/v1/admin/dashboard/*`, `/api/v1/admin/users/*`, `/api/v1/admin/groups/*`, `/api/v1/admin/accounts/*`, `/api/v1/admin/accounts/inspection/run`, `/api/v1/admin/proxies/*`, `/api/v1/admin/settings/*`
 - Admin channels: `/api/v1/admin/channels/*`, `/api/v1/admin/channel-monitors/*`, `/api/v1/admin/channel-monitor-templates/*`, `/api/v1/admin/scheduled-test-plans/*`
 - Admin operations: `/api/v1/admin/ops/*`, `/api/v1/admin/ops/requests`, `/api/v1/admin/usage/*`, `/api/v1/admin/media-cache/*`
 - Admin security/risk: `/api/v1/admin/security/*`, `/api/v1/admin/risk-control/*`, `/api/v1/admin/error-passthrough-rules/*`, `/api/v1/admin/tls-fingerprint-profiles/*`
@@ -300,6 +303,7 @@ go generate ./cmd/server
 - `security.url_allowlist` と関連環境変数は上流 URL 検証を制御します。
 - `billing.circuit_breaker` は課金書き込み失敗時の fail closed を制御します。
 - `turnstile.required` は release mode で Turnstile を強制できます。
+- `grok.dynamic_statsig_enabled` は Grok Cookie account の dynamic `x-statsig-id` compatibility header を有効化します。account credentials または extra の `dynamic_statsig_enabled` / `grok_dynamic_statsig_enabled` で global 設定を上書きできます。
 
 ## 検証
 

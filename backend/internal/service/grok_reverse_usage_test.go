@@ -28,7 +28,7 @@ func TestBuildGrokWebRateLimitsRequest(t *testing.T) {
 	payload, err := buildGrokRateLimitsPayload("fast")
 	require.NoError(t, err)
 
-	req, err := buildGrokWebRateLimitsRequest(context.Background(), account, payload)
+	req, err := buildGrokWebRateLimitsRequest(context.Background(), account, payload, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, "https://grok.example/rest/rate-limits", req.URL.String())
@@ -95,6 +95,10 @@ func TestAccountUsageServiceGetGrokUsageFetchesQuotasAndPersists(t *testing.T) {
 			resp["remainingQueries"] = 5
 			resp["totalQueries"] = 20
 		}
+		if mode == "heavy" {
+			resp["remainingQueries"] = 100
+			resp["totalQueries"] = 150
+		}
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
@@ -141,9 +145,25 @@ func TestAccountUsageServiceGetGrokUsageFetchesQuotasAndPersists(t *testing.T) {
 		quota, ok := updates["grok_quota"].(map[string]any)
 		require.True(t, ok)
 		require.Contains(t, quota, "fast")
+		require.Equal(t, "heavy", updates["grok_quota_pool"])
 	case <-time.After(2 * time.Second):
 		t.Fatal("等待 Grok quota 快照写入 extra 超时")
 	}
+}
+
+func TestInferGrokQuotaPool(t *testing.T) {
+	require.Equal(t, "heavy", inferGrokQuotaPool(map[string]*GrokModelQuota{
+		"heavy": {TotalQueries: 150},
+	}))
+	require.Equal(t, "super", inferGrokQuotaPool(map[string]*GrokModelQuota{
+		"expert": {TotalQueries: 50},
+	}))
+	require.Equal(t, "basic", inferGrokQuotaPool(map[string]*GrokModelQuota{
+		"auto": {TotalQueries: 20},
+	}))
+	require.Empty(t, inferGrokQuotaPool(map[string]*GrokModelQuota{
+		"fast": {TotalQueries: 20},
+	}))
 }
 
 func TestAccountUsageServiceGetGrokUsageInvalidCredentialsDegrades(t *testing.T) {
