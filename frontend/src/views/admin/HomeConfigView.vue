@@ -370,6 +370,7 @@ import type { SystemSettings } from '@/api/admin/settings'
 import type { HomeConfig, HomeCustomSectionItem, HomeFeatureItem, HomeInfoItem, HomeModelItem, HomeNavItem, HomePricingItem, HomeStatItem } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { stripDefaultHomeTextStrings } from '@/utils/homeConfigDefaults'
 
 type EditableHomeConfig = Required<Pick<HomeConfig,
   'nav_items' | 'stats' | 'terminal_lines' | 'features' | 'models' | 'pricing_items' | 'info_items' | 'custom_sections'
@@ -561,14 +562,31 @@ function normalizeHomeConfig(raw: HomeConfig | null | undefined): EditableHomeCo
   return {
     ...base,
     ...source,
-    nav_items: Array.isArray(source.nav_items) ? normalizeList<HomeNavItem>(source.nav_items, () => ({ label: '', url: '#top', visible: true })) : base.nav_items,
-    stats: Array.isArray(source.stats) ? normalizeList<HomeStatItem>(source.stats, () => ({ value: '', label: '', visible: true })) : base.stats,
-    terminal_lines: Array.isArray(source.terminal_lines) ? source.terminal_lines : base.terminal_lines,
-    features: Array.isArray(source.features) ? normalizeList<HomeFeatureItem>(source.features, () => ({ title: '', description: '', icon: 'server', tag: '', visible: true })) : base.features,
-    models: Array.isArray(source.models) ? normalizeList<HomeModelItem>(source.models, () => ({ name: '', provider: '', description: '', price: '', status: '', visible: true })) : base.models,
-    pricing_items: Array.isArray(source.pricing_items) ? normalizeList<HomePricingItem>(source.pricing_items, () => ({ name: '', price: '', unit: '', description: '', features: [], cta_label: '', cta_url: '', highlighted: false, visible: true })) : base.pricing_items,
-    info_items: Array.isArray(source.info_items) ? normalizeList<HomeInfoItem>(source.info_items, () => ({ label: '', value: '', description: '', visible: true })) : base.info_items,
-    custom_sections: Array.isArray(source.custom_sections) ? normalizeCustomSections(source.custom_sections) : base.custom_sections
+    hero_badge: resolveAdminText(base.hero_badge, source.hero_badge),
+    hero_title: resolveAdminText(base.hero_title, source.hero_title),
+    hero_highlight: resolveAdminText(base.hero_highlight, source.hero_highlight),
+    hero_description: resolveAdminText(base.hero_description, source.hero_description),
+    primary_cta_label: resolveAdminText(base.primary_cta_label, source.primary_cta_label),
+    primary_cta_url: resolveAdminText(base.primary_cta_url, source.primary_cta_url),
+    secondary_cta_label: resolveAdminText(base.secondary_cta_label, source.secondary_cta_label),
+    secondary_cta_url: resolveAdminText(base.secondary_cta_url, source.secondary_cta_url),
+    terminal_title: resolveAdminText(base.terminal_title, source.terminal_title),
+    features_title: resolveAdminText(base.features_title, source.features_title),
+    features_description: resolveAdminText(base.features_description, source.features_description),
+    models_title: resolveAdminText(base.models_title, source.models_title),
+    models_description: resolveAdminText(base.models_description, source.models_description),
+    pricing_title: resolveAdminText(base.pricing_title, source.pricing_title),
+    pricing_description: resolveAdminText(base.pricing_description, source.pricing_description),
+    info_title: resolveAdminText(base.info_title, source.info_title),
+    info_description: resolveAdminText(base.info_description, source.info_description),
+    nav_items: Array.isArray(source.nav_items) ? normalizeNavItems(source.nav_items, base.nav_items) : base.nav_items,
+    stats: Array.isArray(source.stats) ? normalizeStats(source.stats, base.stats) : base.stats,
+    terminal_lines: Array.isArray(source.terminal_lines) ? normalizeStringList(source.terminal_lines, base.terminal_lines) : base.terminal_lines,
+    features: Array.isArray(source.features) ? normalizeFeatures(source.features, base.features) : base.features,
+    models: Array.isArray(source.models) ? normalizeModels(source.models, base.models) : base.models,
+    pricing_items: Array.isArray(source.pricing_items) ? normalizePricingItems(source.pricing_items, base.pricing_items) : base.pricing_items,
+    info_items: Array.isArray(source.info_items) ? normalizeInfoItems(source.info_items, base.info_items) : base.info_items,
+    custom_sections: Array.isArray(source.custom_sections) ? normalizeCustomSections(source.custom_sections, base.custom_sections) : base.custom_sections
   }
 }
 
@@ -684,23 +702,99 @@ function normalizeList<T extends { visible?: boolean }>(items: T[] | undefined, 
   return items.map((item) => ({ ...fallback(), ...item, visible: item.visible !== false }))
 }
 
-function normalizeCustomSections(items: HomeCustomSectionItem[] | undefined): HomeCustomSectionItem[] {
+function resolveAdminText(defaultValue: string | undefined, value: string | undefined): string {
+  return value && value.trim().length > 0 ? value : defaultValue || ''
+}
+
+function normalizeStringList(items: string[] | undefined, defaults: string[]): string[] {
+  if (!Array.isArray(items)) return defaults
+  return items.map((item, index) => resolveAdminText(defaults[index], item))
+}
+
+function normalizeNavItems(items: HomeNavItem[] | undefined, defaults: HomeNavItem[]): HomeNavItem[] {
+  return normalizeList<HomeNavItem>(items, () => ({ label: '', url: '#top', visible: true }))
+    .map((item, index) => ({
+      ...item,
+      label: resolveAdminText(defaults[index]?.label, item.label),
+      url: resolveAdminText(defaults[index]?.url, item.url)
+    }))
+}
+
+function normalizeStats(items: HomeStatItem[] | undefined, defaults: HomeStatItem[]): HomeStatItem[] {
+  return normalizeList<HomeStatItem>(items, () => ({ value: '', label: '', visible: true }))
+    .map((item, index) => ({
+      ...item,
+      value: resolveAdminText(defaults[index]?.value, item.value),
+      label: resolveAdminText(defaults[index]?.label, item.label)
+    }))
+}
+
+function normalizeFeatures(items: HomeFeatureItem[] | undefined, defaults: HomeFeatureItem[]): HomeFeatureItem[] {
+  return normalizeList<HomeFeatureItem>(items, () => ({ title: '', description: '', icon: 'server', tag: '', visible: true }))
+    .map((item, index) => ({
+      ...item,
+      title: resolveAdminText(defaults[index]?.title, item.title),
+      description: resolveAdminText(defaults[index]?.description, item.description),
+      tag: resolveAdminText(defaults[index]?.tag, item.tag)
+    }))
+}
+
+function normalizeModels(items: HomeModelItem[] | undefined, defaults: HomeModelItem[]): HomeModelItem[] {
+  return normalizeList<HomeModelItem>(items, () => ({ name: '', provider: '', description: '', price: '', status: '', visible: true }))
+    .map((item, index) => ({
+      ...item,
+      name: resolveAdminText(defaults[index]?.name, item.name),
+      provider: resolveAdminText(defaults[index]?.provider, item.provider),
+      description: resolveAdminText(defaults[index]?.description, item.description),
+      price: resolveAdminText(defaults[index]?.price, item.price),
+      status: resolveAdminText(defaults[index]?.status, item.status)
+    }))
+}
+
+function normalizePricingItems(items: HomePricingItem[] | undefined, defaults: HomePricingItem[]): HomePricingItem[] {
+  return normalizeList<HomePricingItem>(items, () => ({ name: '', price: '', unit: '', description: '', features: [], cta_label: '', cta_url: '', highlighted: false, visible: true }))
+    .map((item, index) => ({
+      ...item,
+      name: resolveAdminText(defaults[index]?.name, item.name),
+      price: resolveAdminText(defaults[index]?.price, item.price),
+      unit: resolveAdminText(defaults[index]?.unit, item.unit),
+      description: resolveAdminText(defaults[index]?.description, item.description),
+      features: normalizeStringList(item.features, defaults[index]?.features || []),
+      cta_label: resolveAdminText(defaults[index]?.cta_label, item.cta_label),
+      cta_url: resolveAdminText(defaults[index]?.cta_url, item.cta_url)
+    }))
+}
+
+function normalizeInfoItems(items: HomeInfoItem[] | undefined, defaults: HomeInfoItem[]): HomeInfoItem[] {
+  return normalizeList<HomeInfoItem>(items, () => ({ label: '', value: '', description: '', visible: true }))
+    .map((item, index) => ({
+      ...item,
+      label: resolveAdminText(defaults[index]?.label, item.label),
+      value: resolveAdminText(defaults[index]?.value, item.value),
+      description: resolveAdminText(defaults[index]?.description, item.description)
+    }))
+}
+
+function normalizeCustomSections(items: HomeCustomSectionItem[] | undefined, defaults: HomeCustomSectionItem[] = []): HomeCustomSectionItem[] {
   if (!Array.isArray(items)) return []
-  return items.map((section) => ({
-    ...section,
-    eyebrow: section.eyebrow || '',
-    title: section.title || '',
-    description: section.description || '',
-    layout: section.layout || 'cards',
-    cta_label: section.cta_label || '',
-    cta_url: section.cta_url || '',
-    visible: section.visible !== false,
-    items: normalizeList<HomeInfoItem>(section.items, () => ({ label: '', value: '', description: '', visible: true }))
-  }))
+  return items.map((section, index) => {
+    const fallback = defaults[index]
+    return {
+      ...section,
+      eyebrow: resolveAdminText(fallback?.eyebrow, section.eyebrow),
+      title: resolveAdminText(fallback?.title, section.title),
+      description: resolveAdminText(fallback?.description, section.description),
+      layout: section.layout || 'cards',
+      cta_label: section.cta_label || '',
+      cta_url: section.cta_url || '',
+      visible: section.visible !== false,
+      items: normalizeInfoItems(section.items, fallback?.items || [])
+    }
+  })
 }
 
 function toHomeConfigPayload(): HomeConfig {
-  return JSON.parse(JSON.stringify(config)) as HomeConfig
+  return stripDefaultHomeTextStrings(JSON.parse(JSON.stringify(config)) as HomeConfig)
 }
 
 function addNavItem() {

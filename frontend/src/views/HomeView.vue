@@ -349,6 +349,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { isDefaultHomeText } from '@/utils/homeConfigDefaults'
 import type {
   HomeConfig,
   HomeCustomSectionItem,
@@ -375,7 +376,7 @@ interface ResolvedHomeConfig extends Required<Omit<HomeConfig,
   custom_sections: HomeCustomSectionItem[]
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -400,8 +401,11 @@ const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
 const currentYear = computed(() => new Date().getFullYear())
 
-const defaultHomeConfig = computed<ResolvedHomeConfig>(() => ({
-  nav_items: [
+const defaultHomeConfig = computed<ResolvedHomeConfig>(() => {
+  locale.value
+
+  return {
+    nav_items: [
     { label: t('home.nav.home'), url: '#top', visible: true },
     { label: t('home.nav.features'), url: '#features', visible: true },
     { label: t('home.nav.models'), url: '#models', visible: true },
@@ -491,7 +495,8 @@ const defaultHomeConfig = computed<ResolvedHomeConfig>(() => ({
     { label: t('home.infoSection.contact'), value: appStore.contactInfo || t('home.infoSection.contactValue'), description: t('home.infoSection.contactDesc'), visible: true }
   ],
   custom_sections: []
-}))
+  }
+})
 
 const resolvedHome = computed<ResolvedHomeConfig>(() => mergeHomeConfig(defaultHomeConfig.value, homeConfig.value))
 const visibleNavItems = computed(() => visibleItems(resolvedHome.value.nav_items))
@@ -508,26 +513,122 @@ function mergeHomeConfig(base: ResolvedHomeConfig, custom: HomeConfig | null | u
   const source = custom || {}
   return {
     ...base,
-    ...nonEmptyStrings(source),
-    nav_items: Array.isArray(source.nav_items) ? source.nav_items : base.nav_items,
-    stats: Array.isArray(source.stats) ? source.stats : base.stats,
-    terminal_lines: Array.isArray(source.terminal_lines) ? source.terminal_lines : base.terminal_lines,
-    features: Array.isArray(source.features) ? source.features : base.features,
-    models: Array.isArray(source.models) ? source.models : base.models,
-    pricing_items: Array.isArray(source.pricing_items) ? source.pricing_items : base.pricing_items,
-    info_items: Array.isArray(source.info_items) ? source.info_items : base.info_items,
+    ...customStrings(base, source),
+    nav_items: mergeNavItems(base.nav_items, source.nav_items),
+    stats: mergeStats(base.stats, source.stats),
+    terminal_lines: mergeStringList(base.terminal_lines, source.terminal_lines),
+    features: mergeFeatures(base.features, source.features),
+    models: mergeModels(base.models, source.models),
+    pricing_items: mergePricingItems(base.pricing_items, source.pricing_items),
+    info_items: mergeInfoItems(base.info_items, source.info_items),
     custom_sections: Array.isArray(source.custom_sections) ? source.custom_sections : base.custom_sections
   }
 }
 
-function nonEmptyStrings(config: HomeConfig): Partial<ResolvedHomeConfig> {
+function customStrings(base: ResolvedHomeConfig, config: HomeConfig): Partial<ResolvedHomeConfig> {
   const result: Record<string, string> = {}
   for (const [key, value] of Object.entries(config)) {
     if (typeof value === 'string' && value.trim().length > 0) {
-      result[key] = value
+      const baseValue = base[key as keyof ResolvedHomeConfig]
+      result[key] = resolveText(typeof baseValue === 'string' ? baseValue : '', value)
     }
   }
   return result as Partial<ResolvedHomeConfig>
+}
+
+function mergeNavItems(base: HomeNavItem[], source?: HomeNavItem[]): HomeNavItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      label: resolveText(fallback?.label || item.label, item.label)
+    }
+  })
+}
+
+function mergeStats(base: HomeStatItem[], source?: HomeStatItem[]): HomeStatItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      label: resolveText(fallback?.label || item.label, item.label)
+    }
+  })
+}
+
+function mergeStringList(base: string[], source?: string[]): string[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => resolveText(base[index] || item, item))
+}
+
+function mergeFeatures(base: HomeFeatureItem[], source?: HomeFeatureItem[]): HomeFeatureItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      title: resolveText(fallback?.title || item.title, item.title),
+      description: resolveText(fallback?.description || item.description, item.description),
+      tag: item.tag ? resolveText(fallback?.tag || item.tag, item.tag) : item.tag
+    }
+  })
+}
+
+function mergeModels(base: HomeModelItem[], source?: HomeModelItem[]): HomeModelItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      name: item.name || fallback?.name || '',
+      provider: item.provider || fallback?.provider || '',
+      description: resolveText(fallback?.description || item.description || '', item.description),
+      price: resolveText(fallback?.price || item.price || '', item.price),
+      status: resolveText(fallback?.status || item.status || '', item.status)
+    }
+  })
+}
+
+function mergePricingItems(base: HomePricingItem[], source?: HomePricingItem[]): HomePricingItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      name: resolveText(fallback?.name || item.name, item.name),
+      price: resolveText(fallback?.price || item.price, item.price),
+      unit: resolveText(fallback?.unit || item.unit || '', item.unit),
+      description: resolveText(fallback?.description || item.description || '', item.description),
+      cta_label: resolveText(fallback?.cta_label || item.cta_label || '', item.cta_label),
+      features: mergeStringList(fallback?.features || [], item.features)
+    }
+  })
+}
+
+function mergeInfoItems(base: HomeInfoItem[], source?: HomeInfoItem[]): HomeInfoItem[] {
+  if (!Array.isArray(source)) return base
+  return source.map((item, index) => {
+    const fallback = base[index]
+    return {
+      ...fallback,
+      ...item,
+      label: resolveText(fallback?.label || item.label, item.label),
+      value: resolveText(fallback?.value || item.value, item.value),
+      description: resolveText(fallback?.description || item.description || '', item.description)
+    }
+  })
+}
+
+function resolveText(base: string, value?: string): string {
+  if (!value || value.trim().length === 0) return base
+  return isDefaultHomeText(value) ? base : value
 }
 
 function visibleItems<T extends { visible?: boolean }>(items: T[]): T[] {

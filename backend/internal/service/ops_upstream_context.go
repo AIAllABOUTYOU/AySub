@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
@@ -91,6 +92,44 @@ func setOpsUpstreamError(c *gin.Context, upstreamStatusCode int, upstreamMessage
 	}
 	if detail := strings.TrimSpace(upstreamDetail); detail != "" {
 		c.Set(OpsUpstreamErrorDetailKey, detail)
+	}
+}
+
+func newUpstreamRequestFailoverError(c *gin.Context, account *Account, upstreamReq *http.Request, err error, passthrough bool) *UpstreamFailoverError {
+	message := "upstream request failed"
+	if err != nil {
+		message = sanitizeUpstreamErrorMessage(err.Error())
+	}
+	setOpsUpstreamError(c, 0, message, "")
+
+	ev := OpsUpstreamErrorEvent{
+		UpstreamStatusCode: 0,
+		Passthrough:        passthrough,
+		Kind:               "request_error",
+		Message:            message,
+	}
+	if account != nil {
+		ev.Platform = account.Platform
+		ev.AccountID = account.ID
+		ev.AccountName = account.Name
+	}
+	if upstreamReq != nil && upstreamReq.URL != nil {
+		ev.UpstreamURL = safeUpstreamURL(upstreamReq.URL.String())
+	}
+	appendOpsUpstreamError(c, ev)
+
+	body, marshalErr := json.Marshal(map[string]any{
+		"error": map[string]string{
+			"type":    "upstream_error",
+			"message": "Upstream request failed",
+		},
+	})
+	if marshalErr != nil {
+		body = []byte(`{"error":{"type":"upstream_error","message":"Upstream request failed"}}`)
+	}
+	return &UpstreamFailoverError{
+		StatusCode:   http.StatusBadGateway,
+		ResponseBody: body,
 	}
 }
 
