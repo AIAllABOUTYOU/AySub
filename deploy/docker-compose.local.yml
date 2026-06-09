@@ -27,6 +27,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        VERSION: ${AYSUB_VERSION:-}
+        COMMIT: ${AYSUB_COMMIT:-docker}
     image: ${AYSUB_IMAGE:-aysub:latest}
     container_name: aysub
     restart: unless-stopped

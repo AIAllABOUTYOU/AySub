@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -31,8 +34,12 @@ import (
 var sseDataPrefix = regexp.MustCompile(`^data:\s*`)
 
 const (
-	testClaudeAPIURL   = "https://api.anthropic.com/v1/messages?beta=true"
-	chatgptCodexAPIURL = "https://chatgpt.com/backend-api/codex/responses"
+	testClaudeAPIURL           = "https://api.anthropic.com/v1/messages?beta=true"
+	chatgptCodexAPIURL         = "https://chatgpt.com/backend-api/codex/responses"
+	chatgptUsageAPIURL         = "https://chatgpt.com/backend-api/wham/usage"
+	codexFiveHourWindowSeconds = 18_000
+	codexWeekWindowSeconds     = 604_800
+	codexMonthWindowSeconds    = 2_592_000
 )
 
 // TestEvent represents a SSE event for account testing
@@ -47,6 +54,59 @@ type TestEvent struct {
 	Data     any    `json:"data,omitempty"`
 	Success  bool   `json:"success,omitempty"`
 	Error    string `json:"error,omitempty"`
+}
+
+// CodexUsageProbeResult contains the quota probe signal returned by ChatGPT's
+// Codex usage endpoint.
+type CodexUsageProbeResult struct {
+	StatusCode          int
+	UsedPercent         *float64
+	FiveHourUsedPercent *float64
+	QuotaWindow         string
+	IsQuota             bool
+	BodyText            string
+}
+
+type codexUsageRateLimit struct {
+	Allowed         *bool
+	LimitReached    bool
+	PrimaryWindow   *codexUsageWindow
+	SecondaryWindow *codexUsageWindow
+}
+
+type codexUsageWindow struct {
+	UsedPercent        *float64
+	LimitWindowSeconds *float64
+}
+
+type codexUsageClassifiedWindows struct {
+	FiveHour    *codexUsageWindow
+	Weekly      *codexUsageWindow
+	Monthly     *codexUsageWindow
+	GenericLong *codexUsageWindow
+}
+
+func (w codexUsageClassifiedWindows) longWindow() *codexUsageWindow {
+	if w.Weekly != nil {
+		return w.Weekly
+	}
+	if w.Monthly != nil {
+		return w.Monthly
+	}
+	return w.GenericLong
+}
+
+func (w codexUsageClassifiedWindows) longWindowLabel(window *codexUsageWindow) string {
+	switch window {
+	case w.Weekly:
+		return "周额度"
+	case w.Monthly:
+		return "月额度"
+	case w.GenericLong:
+		return "长期额度"
+	default:
+		return "长期额度"
+	}
 }
 
 const (
@@ -1837,6 +1897,321 @@ func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID in
 		StartedAt:    startedAt,
 		FinishedAt:   finishedAt,
 	}, nil
+}
+
+// ProbeCodexUsage probes ChatGPT's Codex usage endpoint for an OpenAI OAuth
+// account. It reuses the configured upstream proxy and TLS fingerprint profile.
+func (s *AccountTestService) ProbeCodexUsage(ctx context.Context, accountID int64) (*CodexUsageProbeResult, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, errors.New("account repository is not configured")
+	}
+	if s.httpUpstream == nil {
+		return nil, errors.New("HTTP upstream is not configured")
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, errors.New("account not found")
+	}
+	if !account.IsOpenAIOAuth() {
+		return nil, errors.New("Codex usage probe requires an OpenAI OAuth account")
+	}
+	accessToken := strings.TrimSpace(account.GetOpenAIAccessToken())
+	if accessToken == "" {
+		return &CodexUsageProbeResult{
+			StatusCode: http.StatusUnauthorized,
+			BodyText:   "No access token available",
+		}, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, chatgptUsageAPIURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	req.Host = "chatgpt.com"
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", resolveCodexUsageUserAgent(account))
+	if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
+		req.Header.Set("chatgpt-account-id", chatgptAccountID)
+	}
+
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.resolveTLSProfile(account))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	bodyText := strings.TrimSpace(string(body))
+	result := &CodexUsageProbeResult{
+		StatusCode: resp.StatusCode,
+		BodyText:   truncateCodexUsageBodyText(bodyText),
+	}
+
+	var payload map[string]any
+	if len(body) > 0 {
+		_ = json.Unmarshal(body, &payload)
+	}
+	rateLimit := parseCodexUsageRateLimit(readCodexUsageMap(payload, "rate_limit", "rateLimit"))
+	classified := classifyCodexUsageWindows(rateLimit)
+	if classified.FiveHour != nil && classified.FiveHour.UsedPercent != nil {
+		result.FiveHourUsedPercent = classified.FiveHour.UsedPercent
+	}
+	if longWindow := classified.longWindow(); longWindow != nil && longWindow.UsedPercent != nil {
+		result.UsedPercent = longWindow.UsedPercent
+		result.QuotaWindow = classified.longWindowLabel(longWindow)
+	} else if usedPercent := deriveCodexUsageUsedPercent(rateLimit); usedPercent != nil {
+		result.UsedPercent = usedPercent
+		result.QuotaWindow = "额度"
+	}
+	result.IsQuota = isCodexUsageQuotaSignal(resp.StatusCode, result.BodyText, rateLimit, result.UsedPercent)
+	return result, nil
+}
+
+func (s *AccountTestService) resolveTLSProfile(account *Account) *tlsfingerprint.Profile {
+	if s == nil || s.tlsFPProfileService == nil {
+		return nil
+	}
+	return s.tlsFPProfileService.ResolveTLSProfile(account)
+}
+
+func resolveCodexUsageUserAgent(account *Account) string {
+	if account != nil {
+		if userAgent := strings.TrimSpace(account.GetOpenAIUserAgent()); userAgent != "" && openai.IsCodexCLIRequest(userAgent) {
+			return userAgent
+		}
+	}
+	return codexCLIUserAgent
+}
+
+func truncateCodexUsageBodyText(text string) string {
+	const maxBodyText = 2048
+	if len(text) <= maxBodyText {
+		return text
+	}
+	return text[:maxBodyText]
+}
+
+func parseCodexUsageRateLimit(raw map[string]any) *codexUsageRateLimit {
+	if raw == nil {
+		return nil
+	}
+	limit := &codexUsageRateLimit{
+		PrimaryWindow:   parseCodexUsageWindow(readCodexUsageMap(raw, "primary_window", "primaryWindow")),
+		SecondaryWindow: parseCodexUsageWindow(readCodexUsageMap(raw, "secondary_window", "secondaryWindow")),
+	}
+	if value, ok := readCodexUsageBoolPtr(raw, "allowed"); ok {
+		limit.Allowed = value
+	}
+	limit.LimitReached = readCodexUsageBool(raw, "limit_reached", "limitReached")
+	return limit
+}
+
+func parseCodexUsageWindow(raw map[string]any) *codexUsageWindow {
+	if raw == nil {
+		return nil
+	}
+	window := &codexUsageWindow{}
+	if value, ok := readCodexUsageNumberPtr(raw, "used_percent", "usedPercent", "usage_percent", "usagePercent"); ok {
+		window.UsedPercent = value
+	} else if used, usedOK := readCodexUsageNumber(raw, "used", "usage", "current"); usedOK {
+		if limit, limitOK := readCodexUsageNumber(raw, "limit", "quota", "maximum"); limitOK && limit > 0 {
+			window.UsedPercent = ptrCodexUsageFloat((used / limit) * 100)
+		}
+	}
+	if value, ok := readCodexUsageNumberPtr(raw, "limit_window_seconds", "limitWindowSeconds", "window_seconds", "windowSeconds"); ok {
+		window.LimitWindowSeconds = value
+	}
+	return window
+}
+
+func classifyCodexUsageWindows(limit *codexUsageRateLimit) codexUsageClassifiedWindows {
+	if limit == nil {
+		return codexUsageClassifiedWindows{}
+	}
+	raw := []*codexUsageWindow{limit.PrimaryWindow, limit.SecondaryWindow}
+	var fiveHour *codexUsageWindow
+	var weekly *codexUsageWindow
+	var monthly *codexUsageWindow
+	var genericLong *codexUsageWindow
+	for _, window := range raw {
+		if window == nil || window.LimitWindowSeconds == nil {
+			continue
+		}
+		seconds := int(math.Round(*window.LimitWindowSeconds))
+		switch {
+		case seconds == codexFiveHourWindowSeconds && fiveHour == nil:
+			fiveHour = window
+		case seconds == codexWeekWindowSeconds && weekly == nil:
+			weekly = window
+		case seconds == codexMonthWindowSeconds && monthly == nil:
+			monthly = window
+		case seconds > codexFiveHourWindowSeconds && genericLong == nil:
+			genericLong = window
+		}
+	}
+	if fiveHour == nil && limit.PrimaryWindow != weekly && limit.PrimaryWindow != monthly && limit.PrimaryWindow != genericLong && !hasExplicitCodexUsageWindowSeconds(limit.PrimaryWindow) {
+		fiveHour = limit.PrimaryWindow
+	}
+	if weekly == nil && limit.SecondaryWindow != fiveHour && !hasExplicitCodexUsageWindowSeconds(limit.SecondaryWindow) {
+		weekly = limit.SecondaryWindow
+	}
+	return codexUsageClassifiedWindows{FiveHour: fiveHour, Weekly: weekly, Monthly: monthly, GenericLong: genericLong}
+}
+
+func hasExplicitCodexUsageWindowSeconds(window *codexUsageWindow) bool {
+	return window != nil && window.LimitWindowSeconds != nil
+}
+
+func deriveCodexUsageUsedPercent(limit *codexUsageRateLimit) *float64 {
+	if limit == nil {
+		return nil
+	}
+	var best *float64
+	for _, window := range []*codexUsageWindow{limit.PrimaryWindow, limit.SecondaryWindow} {
+		if window == nil || window.UsedPercent == nil {
+			continue
+		}
+		if best == nil || *window.UsedPercent > *best {
+			best = window.UsedPercent
+		}
+	}
+	return best
+}
+
+func isCodexUsageQuotaSignal(statusCode int, bodyText string, rateLimit *codexUsageRateLimit, usedPercent *float64) bool {
+	if statusCode == http.StatusPaymentRequired {
+		return true
+	}
+	if rateLimit != nil {
+		if rateLimit.LimitReached {
+			return true
+		}
+		if rateLimit.Allowed != nil && !*rateLimit.Allowed {
+			return true
+		}
+	}
+	if usedPercent != nil && *usedPercent >= 100 {
+		return true
+	}
+	normalized := strings.ToLower(bodyText)
+	return codexUsageContainsAny(normalized,
+		"quota exhausted",
+		"limit reached",
+		"rate limit reached",
+		"payment_required",
+		"payment required",
+		"usage limit",
+	)
+}
+
+func codexUsageContainsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func readCodexUsageMap(raw map[string]any, keys ...string) map[string]any {
+	if raw == nil {
+		return nil
+	}
+	for _, key := range keys {
+		value, ok := raw[key]
+		if !ok || value == nil {
+			continue
+		}
+		if typed, ok := value.(map[string]any); ok {
+			return typed
+		}
+	}
+	return nil
+}
+
+func readCodexUsageBool(raw map[string]any, keys ...string) bool {
+	value, ok := readCodexUsageBoolPtr(raw, keys...)
+	return ok && value != nil && *value
+}
+
+func readCodexUsageBoolPtr(raw map[string]any, keys ...string) (*bool, bool) {
+	if raw == nil {
+		return nil, false
+	}
+	for _, key := range keys {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case bool:
+			return &typed, true
+		case string:
+			normalized := strings.ToLower(strings.TrimSpace(typed))
+			if normalized == "true" {
+				value := true
+				return &value, true
+			}
+			if normalized == "false" {
+				value := false
+				return &value, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func readCodexUsageNumberPtr(raw map[string]any, keys ...string) (*float64, bool) {
+	value, ok := readCodexUsageNumber(raw, keys...)
+	if !ok {
+		return nil, false
+	}
+	return &value, true
+}
+
+func readCodexUsageNumber(raw map[string]any, keys ...string) (float64, bool) {
+	if raw == nil {
+		return 0, false
+	}
+	for _, key := range keys {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case float64:
+			return typed, true
+		case float32:
+			return float64(typed), true
+		case int:
+			return float64(typed), true
+		case int64:
+			return float64(typed), true
+		case json.Number:
+			if parsed, err := typed.Float64(); err == nil {
+				return parsed, true
+			}
+		case string:
+			if parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64); err == nil {
+				return parsed, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func ptrCodexUsageFloat(value float64) *float64 {
+	return &value
 }
 
 // parseTestSSEOutput extracts response text and error message from captured SSE output.

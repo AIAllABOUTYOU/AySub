@@ -166,29 +166,36 @@ type BatchDeleteAccountsRequest struct {
 }
 
 type AccountInspectionRequest struct {
-	AccountIDs  []int64                   `json:"account_ids"`
-	Filters     *BulkUpdateAccountFilters `json:"filters"`
-	ModelID     string                    `json:"model_id"`
-	TargetType  string                    `json:"target_type"`
-	SampleSize  int                       `json:"sample_size"`
-	Concurrency int                       `json:"concurrency"`
-	TimeoutMS   int                       `json:"timeout_ms"`
+	AccountIDs           []int64                   `json:"account_ids"`
+	Filters              *BulkUpdateAccountFilters `json:"filters"`
+	ModelID              string                    `json:"model_id"`
+	TargetType           string                    `json:"target_type"`
+	SampleSize           int                       `json:"sample_size"`
+	Concurrency          int                       `json:"concurrency"`
+	TimeoutMS            int                       `json:"timeout_ms"`
+	UsedPercentThreshold float64                   `json:"used_percent_threshold"`
 }
 
 type AccountInspectionItem struct {
-	AccountID        int64  `json:"account_id"`
-	AccountName      string `json:"account_name"`
-	Platform         string `json:"platform"`
-	Type             string `json:"type"`
-	CurrentStatus    string `json:"current_status"`
-	Schedulable      bool   `json:"schedulable"`
-	RuntimeAvailable bool   `json:"runtime_available"`
-	HTTPStatus       int    `json:"http_status,omitempty"`
-	Status           string `json:"status"`
-	LatencyMs        int64  `json:"latency_ms"`
-	ErrorMessage     string `json:"error_message,omitempty"`
-	SuggestedAction  string `json:"suggested_action"`
-	SuggestedReason  string `json:"suggested_reason"`
+	AccountID           int64    `json:"account_id"`
+	AccountName         string   `json:"account_name"`
+	Platform            string   `json:"platform"`
+	Type                string   `json:"type"`
+	CurrentStatus       string   `json:"current_status"`
+	Schedulable         bool     `json:"schedulable"`
+	RuntimeAvailable    bool     `json:"runtime_available"`
+	HTTPStatus          int      `json:"http_status,omitempty"`
+	Status              string   `json:"status"`
+	LatencyMs           int64    `json:"latency_ms"`
+	ErrorMessage        string   `json:"error_message,omitempty"`
+	UsedPercent         *float64 `json:"used_percent,omitempty"`
+	FiveHourUsedPercent *float64 `json:"five_hour_used_percent,omitempty"`
+	QuotaWindow         string   `json:"quota_window,omitempty"`
+	IsQuota             bool     `json:"is_quota"`
+	UsageProbeStatus    string   `json:"usage_probe_status,omitempty"`
+	UsageProbeError     string   `json:"usage_probe_error,omitempty"`
+	SuggestedAction     string   `json:"suggested_action"`
+	SuggestedReason     string   `json:"suggested_reason"`
 }
 
 type AccountInspectionSummary struct {
@@ -206,15 +213,16 @@ type AccountInspectionSummary struct {
 }
 
 type AccountInspectionRunResult struct {
-	TargetType  string                   `json:"target_type"`
-	ModelID     string                   `json:"model_id"`
-	StartedAt   int64                    `json:"started_at"`
-	FinishedAt  int64                    `json:"finished_at"`
-	DurationMs  int64                    `json:"duration_ms"`
-	Concurrency int                      `json:"concurrency"`
-	TimeoutMS   int                      `json:"timeout_ms"`
-	Summary     AccountInspectionSummary `json:"summary"`
-	Items       []AccountInspectionItem  `json:"items"`
+	TargetType           string                   `json:"target_type"`
+	ModelID              string                   `json:"model_id"`
+	StartedAt            int64                    `json:"started_at"`
+	FinishedAt           int64                    `json:"finished_at"`
+	DurationMs           int64                    `json:"duration_ms"`
+	Concurrency          int                      `json:"concurrency"`
+	TimeoutMS            int                      `json:"timeout_ms"`
+	UsedPercentThreshold float64                  `json:"used_percent_threshold"`
+	Summary              AccountInspectionSummary `json:"summary"`
+	Items                []AccountInspectionItem  `json:"items"`
 }
 
 // CheckMixedChannelRequest represents check mixed channel risk request
@@ -790,10 +798,7 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 		return
 	}
 
-	targetType := strings.TrimSpace(req.TargetType)
-	if targetType == "" {
-		targetType = "codex"
-	}
+	targetType := normalizeInspectionTargetType(req.TargetType)
 
 	concurrency := req.Concurrency
 	if concurrency <= 0 {
@@ -812,6 +817,14 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 	}
 	if timeoutMS > 120000 {
 		timeoutMS = 120000
+	}
+
+	usedPercentThreshold := req.UsedPercentThreshold
+	if usedPercentThreshold <= 0 {
+		usedPercentThreshold = 100
+	}
+	if usedPercentThreshold > 1000 {
+		usedPercentThreshold = 1000
 	}
 
 	accounts, err := h.listAccountsForInspection(c.Request.Context(), &req, targetType)
@@ -866,7 +879,11 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 				}
 			}
 			item.HTTPStatus = extractInspectionHTTPStatus(item.ErrorMessage)
-			item.SuggestedAction, item.SuggestedReason = suggestAccountInspectionAction(account, item.Status, item.ErrorMessage)
+			if shouldProbeCodexUsage(account, targetType) {
+				usageProbe, usageErr := h.accountTestService.ProbeCodexUsage(testCtx, account.ID)
+				applyCodexUsageProbeResult(&item, usageProbe, usageErr)
+			}
+			item.SuggestedAction, item.SuggestedReason = suggestAccountInspectionAction(account, item.Status, item.ErrorMessage, item.UsedPercent, item.FiveHourUsedPercent, item.QuotaWindow, item.IsQuota, item.HTTPStatus, item.UsageProbeError, usedPercentThreshold)
 			items[idx] = item
 			return nil
 		})
@@ -879,15 +896,16 @@ func (h *AccountHandler) RunInspection(c *gin.Context) {
 
 	finishedAt := time.Now()
 	result := AccountInspectionRunResult{
-		TargetType:  targetType,
-		ModelID:     req.ModelID,
-		StartedAt:   startedAt.UnixMilli(),
-		FinishedAt:  finishedAt.UnixMilli(),
-		DurationMs:  finishedAt.Sub(startedAt).Milliseconds(),
-		Concurrency: concurrency,
-		TimeoutMS:   timeoutMS,
-		Summary:     summarizeAccountInspection(items),
-		Items:       items,
+		TargetType:           targetType,
+		ModelID:              req.ModelID,
+		StartedAt:            startedAt.UnixMilli(),
+		FinishedAt:           finishedAt.UnixMilli(),
+		DurationMs:           finishedAt.Sub(startedAt).Milliseconds(),
+		Concurrency:          concurrency,
+		TimeoutMS:            timeoutMS,
+		UsedPercentThreshold: usedPercentThreshold,
+		Summary:              summarizeAccountInspection(items),
+		Items:                items,
 	}
 
 	response.Success(c, result)
@@ -975,7 +993,20 @@ func accountMatchesInspectionTarget(account *service.Account, targetType string)
 	case "all":
 		return true
 	default:
-		return account.IsCodexCLIOnlyEnabled()
+		return true
+	}
+}
+
+func normalizeInspectionTargetType(targetType string) string {
+	switch strings.TrimSpace(targetType) {
+	case "codex":
+		return "codex"
+	case "openai":
+		return "openai"
+	case "all", "":
+		return "all"
+	default:
+		return "all"
 	}
 }
 
@@ -998,6 +1029,51 @@ func newAccountInspectionItem(account *service.Account) AccountInspectionItem {
 	item.Schedulable = account.Schedulable
 	item.RuntimeAvailable = account.IsSchedulable()
 	return item
+}
+
+func shouldProbeCodexUsage(account *service.Account, targetType string) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return false
+	}
+	switch targetType {
+	case "codex":
+		return account.IsCodexCLIOnlyEnabled()
+	case "openai", "all":
+		return true
+	default:
+		return account.IsCodexCLIOnlyEnabled()
+	}
+}
+
+func applyCodexUsageProbeResult(item *AccountInspectionItem, probe *service.CodexUsageProbeResult, probeErr error) {
+	if item == nil {
+		return
+	}
+	if probeErr != nil {
+		item.UsageProbeStatus = "failed"
+		item.UsageProbeError = strings.TrimSpace(probeErr.Error())
+		return
+	}
+	if probe == nil {
+		return
+	}
+	item.UsageProbeStatus = "success"
+	item.UsedPercent = probe.UsedPercent
+	item.FiveHourUsedPercent = probe.FiveHourUsedPercent
+	item.QuotaWindow = strings.TrimSpace(probe.QuotaWindow)
+	item.IsQuota = probe.IsQuota
+	if probe.StatusCode > 0 {
+		item.HTTPStatus = probe.StatusCode
+	}
+	if probe.StatusCode >= 400 {
+		item.UsageProbeStatus = "failed"
+		bodyText := strings.TrimSpace(probe.BodyText)
+		if bodyText == "" {
+			bodyText = http.StatusText(probe.StatusCode)
+		}
+		item.UsageProbeError = fmt.Sprintf("usage probe returned %d: %s", probe.StatusCode, bodyText)
+		item.Status = "failed"
+	}
 }
 
 func summarizeAccountInspection(items []AccountInspectionItem) AccountInspectionSummary {
@@ -1036,11 +1112,66 @@ func summarizeAccountInspection(items []AccountInspectionItem) AccountInspection
 	return summary
 }
 
-func suggestAccountInspectionAction(account *service.Account, status, errMsg string) (string, string) {
-	errText := strings.ToLower(strings.TrimSpace(errMsg))
+func suggestAccountInspectionAction(
+	account *service.Account,
+	status string,
+	errMsg string,
+	usedPercent *float64,
+	fiveHourUsedPercent *float64,
+	quotaWindow string,
+	isQuota bool,
+	httpStatus int,
+	usageProbeError string,
+	threshold float64,
+) (string, string) {
+	errText := strings.ToLower(strings.TrimSpace(strings.Join([]string{errMsg, usageProbeError}, " ")))
+	if threshold <= 0 {
+		threshold = 100
+	}
 	if account == nil {
 		return "delete", "账号记录不存在"
 	}
+
+	if httpStatus == http.StatusUnauthorized || containsAny(errText, "401", "unauthorized", "invalid token", "expired token", "refresh token", "authentication", "no access token") {
+		if containsAny(errText, "token has been invalidated", "token is invalidated", "authentication token has been invalidated") {
+			return "delete", "认证令牌已明确失效，建议删除账号"
+		}
+		return "reauth", "认证失效或缺少有效 token，建议重新登录"
+	}
+
+	longWindowLabel := strings.TrimSpace(quotaWindow)
+	if longWindowLabel == "" {
+		longWindowLabel = "长期额度"
+	}
+	longWindowOverThreshold := usedPercent != nil && *usedPercent >= threshold
+	fiveHourOverThreshold := fiveHourUsedPercent != nil && *fiveHourUsedPercent >= threshold
+	if usedPercent != nil {
+		if longWindowOverThreshold {
+			if !account.IsSchedulable() {
+				return "keep", fmt.Sprintf("%s已达 %.1f%%，账号当前已不可调度", longWindowLabel, *usedPercent)
+			}
+			return "disable", fmt.Sprintf("%s已达 %.1f%%，建议停用账号", longWindowLabel, *usedPercent)
+		}
+		if !account.IsSchedulable() {
+			if fiveHourOverThreshold {
+				return "enable", fmt.Sprintf("5 小时额度已达 %.1f%%，但%s仍可用，建议启用账号", *fiveHourUsedPercent, longWindowLabel)
+			}
+			return "enable", fmt.Sprintf("%s仍可用，建议启用账号", longWindowLabel)
+		}
+		if fiveHourOverThreshold {
+			return "keep", fmt.Sprintf("5 小时额度已达 %.1f%%，但%s仍可用，暂不禁用", *fiveHourUsedPercent, longWindowLabel)
+		}
+		if isQuota {
+			return "keep", fmt.Sprintf("额度接口返回限额信号，但%s未达阈值，建议人工复核", longWindowLabel)
+		}
+	}
+	if isQuota {
+		if !account.IsSchedulable() {
+			return "keep", "额度接口返回限额信号，账号当前已不可调度"
+		}
+		return "disable", "额度接口返回限额信号，建议停用账号"
+	}
+
 	if status == "success" {
 		if !account.IsSchedulable() {
 			return "enable", "测试成功，但当前账号未处于可调度状态"
@@ -1048,9 +1179,6 @@ func suggestAccountInspectionAction(account *service.Account, status, errMsg str
 		return "keep", "测试成功"
 	}
 
-	if containsAny(errText, "401", "unauthorized", "invalid token", "expired token", "refresh token", "authentication", "no access token") {
-		return "reauth", "认证失效或缺少有效 token"
-	}
 	if containsAny(errText, "403", "forbidden", "suspended", "blocked", "deactivated", "account disabled") {
 		return "disable", "上游拒绝访问，建议先停用后人工确认"
 	}

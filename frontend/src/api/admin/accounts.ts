@@ -84,6 +84,7 @@ export interface AccountInspectionRunRequest {
   sample_size?: number
   concurrency?: number
   timeout_ms?: number
+  used_percent_threshold?: number
 }
 
 export type AccountInspectionAction = 'keep' | 'enable' | 'disable' | 'delete' | 'reauth'
@@ -100,6 +101,12 @@ export interface AccountInspectionItem {
   status: 'pending' | 'success' | 'failed' | 'skipped'
   latency_ms: number
   error_message?: string
+  used_percent?: number
+  five_hour_used_percent?: number
+  quota_window?: string
+  is_quota: boolean
+  usage_probe_status?: 'success' | 'failed'
+  usage_probe_error?: string
   suggested_action: AccountInspectionAction
   suggested_reason: string
 }
@@ -126,6 +133,7 @@ export interface AccountInspectionRunResult {
   duration_ms: number
   concurrency: number
   timeout_ms: number
+  used_percent_threshold: number
   summary: AccountInspectionSummary
   items: AccountInspectionItem[]
 }

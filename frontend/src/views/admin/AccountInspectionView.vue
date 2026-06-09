@@ -11,7 +11,7 @@
             <span>/</span>
             <span>账号巡检</span>
           </div>
-          <h1 class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">Codex 账号巡检</h1>
+          <h1 class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">账号巡检</h1>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" class="btn btn-secondary" :disabled="running" @click="router.push('/admin/accounts')">
@@ -29,9 +29,9 @@
           <label class="space-y-1.5">
             <span class="input-label">目标</span>
             <select v-model="form.target_type" class="input">
+              <option value="all">全部账号</option>
               <option value="codex">Codex 账号</option>
               <option value="openai">OpenAI 账号</option>
-              <option value="all">全部账号</option>
             </select>
           </label>
           <label class="space-y-1.5">
@@ -52,6 +52,10 @@
           </label>
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <label class="space-y-1.5">
+            <span class="input-label">额度阈值 %</span>
+            <input v-model.number="form.used_percent_threshold" type="number" min="1" max="1000" step="1" class="input" />
+          </label>
           <label class="space-y-1.5">
             <span class="input-label">平台</span>
             <select v-model="filters.platform" class="input">
@@ -136,6 +140,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">账号</th>
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">当前状态</th>
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">巡检</th>
+                <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">额度</th>
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">耗时</th>
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">建议</th>
                 <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">原因</th>
@@ -143,7 +148,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
               <tr v-if="filteredItems.length === 0">
-                <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                <td colspan="7" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                   {{ running ? '正在生成结果' : '暂无巡检结果' }}
                 </td>
               </tr>
@@ -166,6 +171,16 @@
                   </span>
                   <span v-if="item.http_status" class="ml-2 text-xs text-gray-500 dark:text-gray-400">HTTP {{ item.http_status }}</span>
                 </td>
+                <td class="px-4 py-3">
+                  <div class="text-sm text-gray-700 dark:text-gray-300">
+                    {{ quotaLabel(item) }}
+                  </div>
+                  <div v-if="item.five_hour_used_percent !== undefined || item.usage_probe_status" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span v-if="item.five_hour_used_percent !== undefined">5h {{ formatPercent(item.five_hour_used_percent) }}</span>
+                    <span v-if="item.five_hour_used_percent !== undefined && item.usage_probe_status"> · </span>
+                    <span v-if="item.usage_probe_status">{{ usageProbeLabel(item.usage_probe_status) }}</span>
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.latency_ms ? `${item.latency_ms} ms` : '-' }}</td>
                 <td class="px-4 py-3">
                   <span class="rounded-md px-2 py-1 text-xs font-medium" :class="actionBadgeClass(item.suggested_action)">
@@ -178,6 +193,9 @@
                   </div>
                   <div v-if="item.error_message" class="mt-1 max-w-[420px] truncate text-xs text-red-600 dark:text-red-300">
                     {{ item.error_message }}
+                  </div>
+                  <div v-if="item.usage_probe_error" class="mt-1 max-w-[420px] truncate text-xs text-amber-600 dark:text-amber-300">
+                    {{ item.usage_probe_error }}
                   </div>
                 </td>
               </tr>
@@ -225,11 +243,12 @@ const activeTab = ref<TabKey>('all')
 const logs = ref<string[]>([])
 
 const form = reactive({
-  target_type: 'codex' as 'codex' | 'openai' | 'all',
+  target_type: 'all' as 'codex' | 'openai' | 'all',
   model_id: '',
   concurrency: 4,
   timeout_ms: 15000,
-  sample_size: 0
+  sample_size: 0,
+  used_percent_threshold: 100
 })
 
 const filters = reactive({
@@ -301,6 +320,7 @@ async function runInspection() {
       concurrency: Number(form.concurrency) || 4,
       timeout_ms: Number(form.timeout_ms) || 15000,
       sample_size: Number(form.sample_size) || 0,
+      used_percent_threshold: Number(form.used_percent_threshold) || 100,
       filters: compactFilters()
     }
     result.value = await adminAPI.accounts.runInspection(payload)
@@ -358,6 +378,23 @@ function actionLabel(action: AccountInspectionAction) {
   if (action === 'delete') return '删除'
   if (action === 'reauth') return '重认'
   return '保留'
+}
+
+function formatPercent(value?: number) {
+  if (value === undefined || Number.isNaN(value)) return '-'
+  return `${value.toFixed(value >= 10 ? 1 : 2)}%`
+}
+
+function quotaLabel(item: AccountInspectionItem) {
+  if (item.used_percent === undefined) {
+    return item.usage_probe_status ? '未返回长期额度' : '-'
+  }
+  return `${item.quota_window || '长期额度'} ${formatPercent(item.used_percent)}`
+}
+
+function usageProbeLabel(status: NonNullable<AccountInspectionItem['usage_probe_status']>) {
+  if (status === 'success') return '额度已探测'
+  return '额度探测失败'
 }
 
 function statusBadgeClass(status: string) {
