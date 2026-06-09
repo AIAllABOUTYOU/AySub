@@ -12,7 +12,7 @@
   </div>
 
   <!-- Default Configurable Home Page -->
-  <div v-else class="home-shell min-h-screen overflow-hidden text-slate-100">
+  <div v-else class="home-shell min-h-screen overflow-hidden text-slate-100" :class="isDark ? 'home-dark' : 'home-light'">
     <div class="home-grid" aria-hidden="true"></div>
 
     <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl">
@@ -131,7 +131,7 @@
           </div>
           <div class="space-y-3 p-5 font-mono text-xs leading-6 text-slate-300 sm:text-sm">
             <div v-for="(line, index) in terminalLines" :key="`${line}-${index}`" class="home-terminal-line">
-              <span class="mr-2 select-none" :class="index % 3 === 0 ? 'text-emerald-300' : 'text-cyan-300'">$</span>{{ line }}
+              <span class="mr-2 select-none" :class="index % 3 === 0 ? 'text-emerald-300' : 'text-cyan-300'"></span>{{ line }}
             </div>
             <div class="home-cursor mt-2 inline-block h-4 w-2 bg-cyan-300/80 align-text-bottom"></div>
           </div>
@@ -594,13 +594,11 @@ function toggleTheme() {
 
 function initTheme() {
   const savedTheme = localStorage.getItem('theme')
-  if (
+  const shouldUseDark =
     savedTheme === 'dark' ||
     (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  ) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
+  isDark.value = shouldUseDark
+  document.documentElement.classList.toggle('dark', shouldUseDark)
 }
 
 onMounted(() => {
@@ -615,6 +613,7 @@ onMounted(() => {
 <style scoped>
 .home-shell {
   position: relative;
+  color: rgb(226 232 240);
   background:
     radial-gradient(circle at 15% 6%, rgba(6, 182, 212, 0.18), transparent 34rem),
     radial-gradient(circle at 82% 30%, rgba(14, 165, 233, 0.1), transparent 30rem),
@@ -691,6 +690,139 @@ onMounted(() => {
   background:
     radial-gradient(circle at 25% 35%, rgba(255, 255, 255, 0.16), transparent 35%),
     linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(14, 165, 233, 0.8), rgba(56, 189, 248, 0.75));
+}
+
+.home-light {
+  color: rgb(51 65 85);
+  background:
+    radial-gradient(circle at 14% 5%, rgba(8, 145, 178, 0.12), transparent 31rem),
+    radial-gradient(circle at 86% 28%, rgba(56, 189, 248, 0.1), transparent 30rem),
+    linear-gradient(180deg, #f8fafc, #eef6fb 46rem, #ffffff);
+}
+
+.home-light .home-grid {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.065) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.065) 1px, transparent 1px);
+  opacity: 0.65;
+}
+
+.home-light header {
+  border-bottom-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.home-light h1,
+.home-light h2,
+.home-light h3,
+.home-light .text-white {
+  color: rgb(15 23 42);
+}
+
+.home-light .text-slate-500 {
+  color: rgb(100 116 139);
+}
+
+.home-light .text-slate-400 {
+  color: rgb(71 85 105);
+}
+
+.home-light .text-slate-300,
+.home-light .text-slate-200 {
+  color: rgb(51 65 85);
+}
+
+.home-light .text-cyan-200 {
+  color: rgb(8 145 178);
+}
+
+.home-light .text-cyan-100,
+.home-light .text-emerald-100,
+.home-light .text-amber-100 {
+  color: rgb(14 116 144);
+}
+
+.home-light .text-cyan-50\/75 {
+  color: rgba(236, 254, 255, 0.9);
+}
+
+.home-light .text-slate-950 {
+  color: rgb(8 47 73);
+}
+
+.home-light .border-white\/10,
+.home-light .border-white\/12,
+.home-light .border-white\/14 {
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+.home-light .border-cyan-300\/20,
+.home-light .border-cyan-300\/25,
+.home-light .border-cyan-300\/30,
+.home-light .border-cyan-300\/35,
+.home-light .border-cyan-300\/40 {
+  border-color: rgba(8, 145, 178, 0.22);
+}
+
+.home-light .bg-white\/8,
+.home-light .bg-white\/\[0\.025\],
+.home-light .bg-white\/\[0\.03\],
+.home-light .bg-white\/\[0\.035\],
+.home-light .bg-white\/\[0\.04\],
+.home-light .bg-white\/\[0\.045\] {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.home-light .bg-cyan-300\/10 {
+  background-color: rgba(8, 145, 178, 0.08);
+}
+
+.home-light .bg-emerald-300\/10 {
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+.home-light .bg-amber-200\/10 {
+  background-color: rgba(217, 119, 6, 0.1);
+}
+
+.home-light .home-icon-button {
+  color: rgb(71 85 105);
+}
+
+.home-light .home-icon-button:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: rgb(15 23 42);
+}
+
+.home-light .home-shine {
+  background: linear-gradient(90deg, #0f172a 0%, #0f172a 35%, #0891b2 50%, #0284c7 62%, #0f172a 100%);
+  background-clip: text;
+  background-size: 200% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+}
+
+.home-light .home-card {
+  box-shadow: 0 16px 45px rgba(15, 23, 42, 0.08);
+}
+
+.home-light .home-terminal {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(14, 116, 144, 0.16);
+}
+
+.home-light .home-terminal .border-white\/10 {
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.home-light .home-terminal-line,
+.home-light .home-terminal .text-slate-300 {
+  color: rgb(51 65 85);
+}
+
+.home-light footer {
+  border-top-color: rgba(15, 23, 42, 0.08);
 }
 
 @keyframes home-shine {

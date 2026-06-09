@@ -19,23 +19,46 @@
       <div>
         <label class="input-label">{{ t('admin.accounts.dataImportFile') }}</label>
         <div
-          class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800"
+          class="flex flex-col gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800 sm:flex-row sm:items-center sm:justify-between"
         >
           <div class="min-w-0">
             <div class="truncate text-sm text-gray-700 dark:text-dark-200">
-              {{ fileName || t('admin.accounts.dataImportSelectFile') }}
+              {{ sourceSummary || t('admin.accounts.dataImportSelectFile') }}
             </div>
-            <div class="text-xs text-gray-500 dark:text-dark-400">JSON (.json)</div>
+            <div class="text-xs text-gray-500 dark:text-dark-400">JSON / ZIP (.json, .zip)</div>
           </div>
-          <button type="button" class="btn btn-secondary shrink-0" @click="openFilePicker">
-            {{ t('common.chooseFile') }}
-          </button>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <button type="button" class="btn btn-secondary" :disabled="loadingFiles" @click="openFilePicker">
+              {{ t('admin.accounts.dataImportChooseFiles') }}
+            </button>
+            <button type="button" class="btn btn-secondary" :disabled="loadingFiles" @click="openDirectoryPicker">
+              {{ t('admin.accounts.dataImportChooseFolder') }}
+            </button>
+          </div>
+        </div>
+        <div v-if="fileContents.length || skippedFiles.length" class="mt-2 space-y-1 text-xs text-gray-500 dark:text-dark-400">
+          <div v-if="fileContents.length">
+            {{ t('admin.accounts.dataImportSelectedSources', { count: fileContents.length }) }}
+          </div>
+          <div v-if="skippedFiles.length" class="text-amber-700 dark:text-amber-300">
+            {{ t('admin.accounts.dataImportSkippedSources', { count: skippedFiles.length }) }}
+          </div>
         </div>
         <input
           ref="fileInput"
           type="file"
           class="hidden"
-          accept="application/json,.json"
+          accept="application/json,.json,.zip,application/zip"
+          multiple
+          @change="handleFileChange"
+        />
+        <input
+          ref="directoryInput"
+          type="file"
+          class="hidden"
+          accept="application/json,.json,.zip,application/zip"
+          webkitdirectory
+          multiple
           @change="handleFileChange"
         />
       </div>
@@ -75,7 +98,7 @@
           class="btn btn-primary"
           type="submit"
           form="import-data-form"
-          :disabled="importing"
+          :disabled="importing || loadingFiles"
         >
           {{ importing ? t('admin.accounts.dataImporting') : t('admin.accounts.dataImportButton') }}
         </button>
@@ -90,7 +113,8 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import type { AdminDataImportResult } from '@/types'
+import { readImportTextFiles, type ImportTextFile, type ImportTextSkippedFile } from '@/utils/importTextFiles'
+import type { AdminDataImportResult, AdminDataPayload } from '@/types'
 
 interface Props {
   show: boolean
@@ -108,11 +132,21 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const importing = ref(false)
-const file = ref<File | null>(null)
+const loadingFiles = ref(false)
+const fileContents = ref<ImportTextFile[]>([])
+const skippedFiles = ref<ImportTextSkippedFile[]>([])
 const result = ref<AdminDataImportResult | null>(null)
 
 const fileInput = ref<HTMLInputElement | null>(null)
-const fileName = computed(() => file.value?.name || '')
+const directoryInput = ref<HTMLInputElement | null>(null)
+const sourceSummary = computed(() => {
+  if (loadingFiles.value) return t('admin.accounts.dataImportReadingFiles')
+  if (!fileContents.value.length) return ''
+  return t('admin.accounts.dataImportSourceSummary', {
+    count: fileContents.value.length,
+    first: fileContents.value[0]?.name || '-'
+  })
+})
 
 const errorItems = computed(() => result.value?.errors || [])
 
@@ -120,10 +154,14 @@ watch(
   () => props.show,
   (open) => {
     if (open) {
-      file.value = null
+      fileContents.value = []
+      skippedFiles.value = []
       result.value = null
       if (fileInput.value) {
         fileInput.value.value = ''
+      }
+      if (directoryInput.value) {
+        directoryInput.value.value = ''
       }
     }
   }
@@ -133,44 +171,57 @@ const openFilePicker = () => {
   fileInput.value?.click()
 }
 
-const handleFileChange = (event: Event) => {
+const openDirectoryPicker = () => {
+  directoryInput.value?.click()
+}
+
+const handleFileChange = async (event: Event) => {
   const target = event.target as HTMLInputElement
-  file.value = target.files?.[0] || null
+  const files = Array.from(target.files || [])
+  target.value = ''
+  if (!files.length) return
+
+  loadingFiles.value = true
+  result.value = null
+  try {
+    const { loaded, skipped } = await readImportTextFiles(files, {
+      extensions: ['.json'],
+      messages: {
+        unsupportedFile: t('admin.accounts.dataImportUnsupportedFile'),
+        invalidZip: t('admin.accounts.dataImportInvalidZip'),
+        zipReadFailed: t('admin.accounts.dataImportZipReadFailed'),
+        zipUnsupportedBrowser: t('admin.accounts.dataImportZipUnsupportedBrowser'),
+        unsupportedZipMethod: (method) => t('admin.accounts.dataImportUnsupportedZipMethod', { method })
+      }
+    })
+    fileContents.value = loaded
+    skippedFiles.value = skipped
+    if (loaded.length) {
+      appStore.showSuccess(t('admin.accounts.dataImportFilesLoaded', { count: loaded.length }))
+    } else if (skipped.length) {
+      appStore.showError(t('admin.accounts.dataImportNoSupportedFiles'))
+    }
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.dataImportFailed'))
+  } finally {
+    loadingFiles.value = false
+  }
 }
 
 const handleClose = () => {
-  if (importing.value) return
+  if (importing.value || loadingFiles.value) return
   emit('close')
 }
 
-const readFileAsText = async (sourceFile: File): Promise<string> => {
-  if (typeof sourceFile.text === 'function') {
-    return sourceFile.text()
-  }
-
-  if (typeof sourceFile.arrayBuffer === 'function') {
-    const buffer = await sourceFile.arrayBuffer()
-    return new TextDecoder().decode(buffer)
-  }
-
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
-    reader.readAsText(sourceFile)
-  })
-}
-
 const handleImport = async () => {
-  if (!file.value) {
+  if (!fileContents.value.length) {
     appStore.showError(t('admin.accounts.dataImportSelectFile'))
     return
   }
 
   importing.value = true
   try {
-    const text = await readFileAsText(file.value)
-    const dataPayload = JSON.parse(text)
+    const dataPayload = mergeAdminDataPayloads(fileContents.value.map((item) => parseAdminDataPayload(item.content)))
 
     const res = await adminAPI.accounts.importData({
       data: dataPayload,
@@ -200,6 +251,25 @@ const handleImport = async () => {
     }
   } finally {
     importing.value = false
+  }
+}
+
+const parseAdminDataPayload = (text: string): AdminDataPayload => {
+  const parsed = JSON.parse(text)
+  const payload = parsed?.data && Array.isArray(parsed.data.accounts) ? parsed.data : parsed
+  if (!payload || !Array.isArray(payload.accounts) || !Array.isArray(payload.proxies)) {
+    throw new Error(t('admin.accounts.dataImportParseFailed'))
+  }
+  return payload as AdminDataPayload
+}
+
+const mergeAdminDataPayloads = (payloads: AdminDataPayload[]): AdminDataPayload => {
+  return {
+    type: payloads.find((payload) => payload.type)?.type,
+    version: payloads.find((payload) => typeof payload.version === 'number')?.version,
+    exported_at: payloads.find((payload) => payload.exported_at)?.exported_at || new Date().toISOString(),
+    proxies: payloads.flatMap((payload) => payload.proxies || []),
+    accounts: payloads.flatMap((payload) => payload.accounts || [])
   }
 }
 </script>

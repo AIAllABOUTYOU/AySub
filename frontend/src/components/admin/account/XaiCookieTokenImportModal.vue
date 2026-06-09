@@ -16,22 +16,45 @@
 
       <div>
         <label class="input-label">{{ t('admin.accounts.xaiCookieTokenImportFile') }}</label>
-        <div class="flex items-center justify-between gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800">
+        <div class="flex flex-col gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800 sm:flex-row sm:items-center sm:justify-between">
           <div class="min-w-0">
             <div class="truncate text-sm text-gray-700 dark:text-dark-200">
-              {{ fileName || t('admin.accounts.xaiCookieTokenImportSelectFile') }}
+              {{ sourceSummary || t('admin.accounts.xaiCookieTokenImportSelectFile') }}
             </div>
-            <div class="text-xs text-gray-500 dark:text-dark-400">TXT / JSON (.txt, .json)</div>
+            <div class="text-xs text-gray-500 dark:text-dark-400">TXT / JSON / ZIP (.txt, .json, .zip)</div>
           </div>
-          <button type="button" class="btn btn-secondary shrink-0" @click="openFilePicker">
-            {{ t('common.chooseFile') }}
-          </button>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <button type="button" class="btn btn-secondary" :disabled="loadingFiles" @click="openFilePicker">
+              {{ t('admin.accounts.xaiCookieTokenImportChooseFiles') }}
+            </button>
+            <button type="button" class="btn btn-secondary" :disabled="loadingFiles" @click="openDirectoryPicker">
+              {{ t('admin.accounts.xaiCookieTokenImportChooseFolder') }}
+            </button>
+          </div>
+        </div>
+        <div v-if="fileContents.length || skippedFiles.length" class="mt-2 space-y-1 text-xs text-gray-500 dark:text-dark-400">
+          <div v-if="fileContents.length">
+            {{ t('admin.accounts.xaiCookieTokenImportSelectedSources', { count: fileContents.length }) }}
+          </div>
+          <div v-if="skippedFiles.length" class="text-amber-700 dark:text-amber-300">
+            {{ t('admin.accounts.xaiCookieTokenImportSkippedSources', { count: skippedFiles.length }) }}
+          </div>
         </div>
         <input
           ref="fileInput"
           type="file"
           class="hidden"
-          accept=".txt,.json,text/plain,application/json"
+          accept=".txt,.json,.zip,text/plain,application/json,application/zip"
+          multiple
+          @change="handleFileChange"
+        />
+        <input
+          ref="directoryInput"
+          type="file"
+          class="hidden"
+          accept=".txt,.json,.zip,text/plain,application/json,application/zip"
+          webkitdirectory
+          multiple
           @change="handleFileChange"
         />
       </div>
@@ -77,7 +100,7 @@
           class="btn btn-primary"
           type="submit"
           form="xai-cookie-token-import-form"
-          :disabled="importing"
+          :disabled="importing || loadingFiles"
         >
           {{ importing ? t('admin.accounts.xaiCookieTokenImporting') : t('admin.accounts.xaiCookieTokenImportButton') }}
         </button>
@@ -92,6 +115,7 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
+import { readImportTextFiles, type ImportTextFile, type ImportTextSkippedFile } from '@/utils/importTextFiles'
 import type { XaiCookieTokenImportResult } from '@/types'
 
 interface Props {
@@ -110,25 +134,39 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const importing = ref(false)
-const file = ref<File | null>(null)
+const loadingFiles = ref(false)
+const fileContents = ref<ImportTextFile[]>([])
+const skippedFiles = ref<ImportTextSkippedFile[]>([])
 const result = ref<XaiCookieTokenImportResult | null>(null)
 const namePrefix = ref('')
 const baseUrl = ref('https://grok.com')
 const fileInput = ref<HTMLInputElement | null>(null)
+const directoryInput = ref<HTMLInputElement | null>(null)
 
-const fileName = computed(() => file.value?.name || '')
+const sourceSummary = computed(() => {
+  if (loadingFiles.value) return t('admin.accounts.xaiCookieTokenImportReadingFiles')
+  if (!fileContents.value.length) return ''
+  return t('admin.accounts.xaiCookieTokenImportSourceSummary', {
+    count: fileContents.value.length,
+    first: fileContents.value[0]?.name || '-'
+  })
+})
 const errorItems = computed(() => result.value?.errors || [])
 
 watch(
   () => props.show,
   (open) => {
     if (open) {
-      file.value = null
+      fileContents.value = []
+      skippedFiles.value = []
       result.value = null
       namePrefix.value = t('admin.accounts.xaiCookieTokenDefaultNamePrefix')
       baseUrl.value = 'https://grok.com'
       if (fileInput.value) {
         fileInput.value.value = ''
+      }
+      if (directoryInput.value) {
+        directoryInput.value.value = ''
       }
     }
   }
@@ -138,32 +176,46 @@ const openFilePicker = () => {
   fileInput.value?.click()
 }
 
-const handleFileChange = (event: Event) => {
+const openDirectoryPicker = () => {
+  directoryInput.value?.click()
+}
+
+const handleFileChange = async (event: Event) => {
   const target = event.target as HTMLInputElement
-  file.value = target.files?.[0] || null
+  const files = Array.from(target.files || [])
+  target.value = ''
+  if (!files.length) return
+
+  loadingFiles.value = true
+  result.value = null
+  try {
+    const { loaded, skipped } = await readImportTextFiles(files, {
+      extensions: ['.txt', '.json'],
+      messages: {
+        unsupportedFile: t('admin.accounts.xaiCookieTokenImportUnsupportedFile'),
+        invalidZip: t('admin.accounts.xaiCookieTokenImportInvalidZip'),
+        zipReadFailed: t('admin.accounts.xaiCookieTokenImportZipReadFailed'),
+        zipUnsupportedBrowser: t('admin.accounts.xaiCookieTokenImportZipUnsupportedBrowser'),
+        unsupportedZipMethod: (method) => t('admin.accounts.xaiCookieTokenImportUnsupportedZipMethod', { method })
+      }
+    })
+    fileContents.value = loaded
+    skippedFiles.value = skipped
+    if (loaded.length) {
+      appStore.showSuccess(t('admin.accounts.xaiCookieTokenImportFilesLoaded', { count: loaded.length }))
+    } else if (skipped.length) {
+      appStore.showError(t('admin.accounts.xaiCookieTokenImportNoSupportedFiles'))
+    }
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.xaiCookieTokenImportFailed'))
+  } finally {
+    loadingFiles.value = false
+  }
 }
 
 const handleClose = () => {
-  if (importing.value) return
+  if (importing.value || loadingFiles.value) return
   emit('close')
-}
-
-const readFileAsText = async (sourceFile: File): Promise<string> => {
-  if (typeof sourceFile.text === 'function') {
-    return sourceFile.text()
-  }
-
-  if (typeof sourceFile.arrayBuffer === 'function') {
-    const buffer = await sourceFile.arrayBuffer()
-    return new TextDecoder().decode(buffer)
-  }
-
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(reader.error || new Error('Failed to read file'))
-    reader.readAsText(sourceFile)
-  })
 }
 
 const extractTokenFromValue = (value: unknown): string => {
@@ -198,15 +250,14 @@ const parseTokenFile = (text: string): string[] => {
 }
 
 const handleImport = async () => {
-  if (!file.value) {
+  if (!fileContents.value.length) {
     appStore.showError(t('admin.accounts.xaiCookieTokenImportSelectFile'))
     return
   }
 
   importing.value = true
   try {
-    const text = await readFileAsText(file.value)
-    const tokens = parseTokenFile(text)
+    const tokens = fileContents.value.flatMap((item) => parseTokenFile(item.content))
     if (!tokens.length) {
       appStore.showError(t('admin.accounts.xaiCookieTokenImportEmptyFile'))
       return
