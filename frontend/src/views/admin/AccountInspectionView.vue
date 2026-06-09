@@ -136,6 +136,23 @@
             </button>
           </div>
         </div>
+        <div v-if="actionProgress.total > 0" class="border-b border-gray-200 px-4 py-3 dark:border-dark-700">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <span>{{ actionProgressLabel }}</span>
+            <span>
+              {{ actionProgress.processed }} / {{ actionProgress.total }}
+              <template v-if="actionProgress.failed > 0"> · 失败 {{ actionProgress.failed }}</template>
+              · {{ actionProgressPercent }}%
+            </span>
+          </div>
+          <div class="mt-2 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+            <div
+              class="h-full rounded-full transition-all duration-200"
+              :class="actionProgress.failed > 0 && !actionProgress.running ? 'bg-amber-500' : 'bg-primary-600'"
+              :style="{ width: `${actionProgressPercent}%` }"
+            />
+          </div>
+        </div>
 
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
@@ -242,12 +259,20 @@ const router = useRouter()
 const appStore = useAppStore()
 
 const inspectionPageSize = 100
-const inspectionActionBatchSize = 500
+const inspectionUpdateActionBatchSize = 500
+const inspectionDeleteActionBatchSize = 50
 const maxVisibleInspectionItems = 5000
 
 const running = ref(false)
 const actionLoading = ref(false)
 const result = ref<AccountInspectionRunResult | null>(null)
+const actionProgress = reactive({
+  action: '' as '' | 'enable' | 'disable' | 'delete',
+  running: false,
+  total: 0,
+  processed: 0,
+  failed: 0
+})
 const actionIds = reactive<Record<'enable' | 'disable' | 'delete' | 'reauth', number[]>>({
   enable: [],
   disable: [],
@@ -277,6 +302,14 @@ const filters = reactive({
 
 const items = computed(() => result.value?.items ?? [])
 const summary = computed(() => result.value?.summary)
+const actionProgressPercent = computed(() => {
+  if (actionProgress.total <= 0) return 0
+  return Math.min(100, Math.round((actionProgress.processed / actionProgress.total) * 100))
+})
+const actionProgressLabel = computed(() => {
+  if (!actionProgress.action) return '批量处理'
+  return `${actionProgress.running ? '正在' : '已完成'}${actionLabel(actionProgress.action)}建议`
+})
 
 const statCards = computed(() => [
   { label: '账号数', value: summary.value?.total_accounts ?? 0, sub: `已测 ${summary.value?.tested ?? 0}`, class: 'text-gray-500 dark:text-gray-400' },
@@ -476,31 +509,57 @@ function idsForAction(action: AccountInspectionAction) {
 }
 
 async function applyAction(action: 'enable' | 'disable' | 'delete') {
-  const ids = idsForAction(action)
-  if (ids.length === 0) return
+  const ids = idsForAction(action).slice()
+  const total = ids.length
+  if (total === 0) return
   const label = actionLabel(action)
-  if (!window.confirm(`确认${label} ${ids.length} 个账号？`)) return
+  if (!window.confirm(`确认${label} ${total} 个账号？`)) return
 
   actionLoading.value = true
-  logLine(`apply ${action} ids=${ids.length}`)
+  actionProgress.action = action
+  actionProgress.running = true
+  actionProgress.total = total
+  actionProgress.processed = 0
+  actionProgress.failed = 0
+  const batchSize = action === 'delete' ? inspectionDeleteActionBatchSize : inspectionUpdateActionBatchSize
+  logLine(`apply ${action} ids=${total} batch_size=${batchSize}`)
   try {
-    for (let i = 0; i < ids.length; i += inspectionActionBatchSize) {
-      const batch = ids.slice(i, i + inspectionActionBatchSize)
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      let successIDs = batch
+      let failedCount = 0
       if (action === 'delete') {
-        await adminAPI.accounts.batchDelete(batch)
+        const res = await adminAPI.accounts.batchDelete(batch)
+        if (Array.isArray(res.success_ids)) {
+          successIDs = res.success_ids
+        }
+        failedCount = res.failed || 0
       } else {
-        await adminAPI.accounts.bulkUpdate(batch, { schedulable: action === 'enable' })
+        const res = await adminAPI.accounts.bulkUpdate(batch, { schedulable: action === 'enable' })
+        if (Array.isArray(res.success_ids)) {
+          successIDs = res.success_ids
+        }
+        failedCount = res.failed || 0
       }
-      logLine(`apply ${action} ${Math.min(i + batch.length, ids.length)}/${ids.length}`)
+      actionProgress.processed = Math.min(i + batch.length, total)
+      actionProgress.failed += failedCount
+      if (successIDs.length > 0) {
+        markInspectionActionApplied(action, successIDs)
+      }
+      logLine(`apply ${action} ${actionProgress.processed}/${total}${failedCount > 0 ? ` failed+=${failedCount}` : ''}`)
     }
-    appStore.showSuccess(`${label}完成`)
+    if (actionProgress.failed > 0) {
+      appStore.showWarning(`${label}完成，失败 ${actionProgress.failed} 个`)
+    } else {
+      appStore.showSuccess(`${label}完成`)
+    }
     logLine(`apply ${action} done`)
-    markInspectionActionApplied(action, ids)
   } catch (error) {
     console.error('Failed to apply inspection action:', error)
     logLine(`apply ${action} error ${error instanceof Error ? error.message : String(error)}`)
     appStore.showError(`${label}失败`)
   } finally {
+    actionProgress.running = false
     actionLoading.value = false
   }
 }
