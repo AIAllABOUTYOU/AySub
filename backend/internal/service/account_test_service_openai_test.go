@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,10 +47,12 @@ func (u *queuedHTTPUpstream) DoWithTLS(req *http.Request, _ string, _ int64, _ i
 type grokCookieHTTPUpstream struct {
 	responses []*http.Response
 	requests  []*http.Request
+	proxies   []string
 }
 
-func (u *grokCookieHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+func (u *grokCookieHTTPUpstream) Do(req *http.Request, proxyURL string, _ int64, _ int) (*http.Response, error) {
 	u.requests = append(u.requests, req)
+	u.proxies = append(u.proxies, proxyURL)
 	if len(u.responses) == 0 {
 		return nil, fmt.Errorf("no mocked response")
 	}
@@ -112,6 +115,73 @@ data: {"result":{"response":{"finalMetadata":{}}}}
 	require.Equal(t, "hi", gjson.GetBytes(body, "message").String())
 	require.Contains(t, recorder.Body.String(), `"type":"content","text":"ok"`)
 	require.Contains(t, recorder.Body.String(), `"type":"test_complete"`)
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_XAICookieAccountTestRetriesCloudflareChallenge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	var solverPayload struct {
+		Cmd   string `json:"cmd"`
+		URL   string `json:"url"`
+		Proxy *struct {
+			URL string `json:"url"`
+		} `json:"proxy"`
+	}
+	solver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&solverPayload))
+		_, _ = io.WriteString(w, `{"status":"ok","solution":{"userAgent":"Mozilla/5.0 Solver","cookies":[{"name":"cf_clearance","value":"cf-new","domain":".grok.com"}]}}`)
+	}))
+	defer solver.Close()
+
+	challenge := newJSONResponse(http.StatusForbidden, `<!doctype html><title>Just a moment...</title>`)
+	challenge.Header.Set("Cf-Mitigated", "challenge")
+	ok := newJSONResponse(http.StatusOK, `data: {"result":{"response":{"messageTag":"final","token":"ok"}}}
+data: {"result":{"response":{"finalMetadata":{}}}}
+`)
+	proxyID := int64(1)
+	account := &Account{
+		ID:          78,
+		Name:        "grok cookie",
+		Platform:    PlatformXAI,
+		Type:        AccountTypeCookie,
+		ProxyID:     &proxyID,
+		Proxy:       &Proxy{Protocol: "socks5", Host: "warp", Port: 1080, Status: StatusActive},
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"base_url":  "https://grok.com",
+			"sso_token": "tok",
+		},
+	}
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{account.ID: account},
+		},
+	}
+	upstream := &grokCookieHTTPUpstream{responses: []*http.Response{challenge, ok}}
+	svc := &AccountTestService{
+		accountRepo:  repo,
+		httpUpstream: upstream,
+		cfg: &config.Config{Grok: config.GrokConfig{
+			FlareSolverrURL:            solver.URL,
+			FlareSolverrTimeoutSeconds: 2,
+		}},
+	}
+
+	err := svc.TestAccountConnection(ctx, account.ID, "grok-4.20-auto", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, []string{"socks5://warp:1080", "socks5://warp:1080"}, upstream.proxies)
+	require.Equal(t, "request.get", solverPayload.Cmd)
+	require.Equal(t, "https://grok.com", solverPayload.URL)
+	require.NotNil(t, solverPayload.Proxy)
+	require.Equal(t, "socks5://warp:1080", solverPayload.Proxy.URL)
+	require.Contains(t, upstream.requests[1].Header.Get("Cookie"), "cf_clearance=cf-new")
+	require.Equal(t, "Mozilla/5.0 Solver", upstream.requests[1].Header.Get("User-Agent"))
+	require.Equal(t, "cf-new", account.GetCredential("cf_clearance"))
+	require.Contains(t, recorder.Body.String(), `"type":"content","text":"ok"`)
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 }
 

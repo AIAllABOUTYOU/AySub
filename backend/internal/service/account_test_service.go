@@ -743,6 +743,14 @@ func (s *AccountTestService) testXAICookieAccountConnection(c *gin.Context, acco
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	gateway := &OpenAIGatewayService{
+		httpUpstream: s.httpUpstream,
+		cfg:          s.cfg,
+	}
+	resp = gateway.retryGrokWebResponseAfterCloudflareChallenge(ctx, account, resp, proxyURL, "account_test", func() (*http.Request, error) {
+		return (&OpenAIGatewayService{}).buildGrokWebChatRequest(ctx, account, payload)
+	})
+
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
 		message := strings.TrimSpace(extractUpstreamErrorMessage(body))
