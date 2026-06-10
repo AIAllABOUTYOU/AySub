@@ -37,6 +37,18 @@ func TestDefaultAntigravityModelMapping_ContainsOpus48(t *testing.T) {
 	}
 }
 
+func TestDefaultAntigravityModelMapping_ContainsFable5(t *testing.T) {
+	t.Parallel()
+
+	got, ok := DefaultAntigravityModelMapping["claude-fable-5"]
+	if !ok {
+		t.Fatal("expected mapping for claude-fable-5 to exist")
+	}
+	if got != "claude-fable-5" {
+		t.Fatalf("unexpected claude-fable-5 mapping: got %q", got)
+	}
+}
+
 func TestDefaultBedrockModelMapping_ContainsOpus48(t *testing.T) {
 	t.Parallel()
 
@@ -46,5 +58,17 @@ func TestDefaultBedrockModelMapping_ContainsOpus48(t *testing.T) {
 	}
 	if got != "us.anthropic.claude-opus-4-8-v1" {
 		t.Fatalf("unexpected Bedrock claude-opus-4-8 mapping: got %q", got)
+	}
+}
+
+func TestDefaultBedrockModelMapping_ContainsFable5(t *testing.T) {
+	t.Parallel()
+
+	got, ok := DefaultBedrockModelMapping["claude-fable-5"]
+	if !ok {
+		t.Fatal("expected Bedrock mapping for claude-fable-5 to exist")
+	}
+	if got != "anthropic.claude-fable-5" {
+		t.Fatalf("unexpected Bedrock claude-fable-5 mapping: got %q", got)
 	}
 }

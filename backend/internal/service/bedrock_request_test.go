@@ -175,6 +175,7 @@ func TestIsBedrockClaude45OrNewer(t *testing.T) {
 	}{
 		{"us.anthropic.claude-opus-4-6-v1", true},
 		{"us.anthropic.claude-opus-4-8-v1", true},
+		{"anthropic.claude-fable-5", true},
 		{"us.anthropic.claude-sonnet-4-6", true},
 		{"us.anthropic.claude-sonnet-4-5-20250929-v1:0", true},
 		{"us.anthropic.claude-opus-4-5-20251101-v1:0", true},
@@ -788,6 +789,20 @@ func TestSanitizeBedrockThinking(t *testing.T) {
 		result := sanitizeBedrockThinking([]byte(input), "us.anthropic.claude-sonnet-4-6")
 		assert.Equal(t, "enabled", gjson.GetBytes(result, "thinking.type").String())
 		assert.Equal(t, int64(defaultThinkingBudgetTokens), gjson.GetBytes(result, "thinking.budget_tokens").Int())
+	})
+
+	t.Run("fable 5 converts enabled to adaptive", func(t *testing.T) {
+		input := `{"thinking":{"type":"enabled","budget_tokens":20000},"messages":[]}`
+		result := sanitizeBedrockThinking([]byte(input), "anthropic.claude-fable-5")
+		assert.Equal(t, "adaptive", gjson.GetBytes(result, "thinking.type").String())
+		assert.False(t, gjson.GetBytes(result, "thinking.budget_tokens").Exists())
+	})
+
+	t.Run("fable 5 removes budget_tokens from adaptive", func(t *testing.T) {
+		input := `{"thinking":{"type":"adaptive","budget_tokens":20000},"messages":[]}`
+		result := sanitizeBedrockThinking([]byte(input), "claude-fable-5")
+		assert.Equal(t, "adaptive", gjson.GetBytes(result, "thinking.type").String())
+		assert.False(t, gjson.GetBytes(result, "thinking.budget_tokens").Exists())
 	})
 }
 

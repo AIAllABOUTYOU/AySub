@@ -1199,6 +1199,67 @@ func TestOpenAIGatewayServiceForwardImages_APIKeyStreamingDrainsAfterClientDisco
 	require.Equal(t, 2, result.Usage.ImageOutputTokens)
 }
 
+func TestOpenAIGatewayServiceForwardImages_APIKeyStreamingWrapsJSONResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","stream":true,"response_format":"url"}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{
+			resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+					"X-Request-Id": []string{"req_img_json_stream_apikey"},
+				},
+				Body: io.NopCloser(strings.NewReader(
+					`{"created":1710000012,"data":[{"url":"https://cdn.example/final.png","revised_prompt":"draw a small cat"}],"usage":{"input_tokens":3,"output_tokens":4,"output_tokens_details":{"image_tokens":2}},"output_format":"png","quality":"high","size":"1024x1024","model":"gpt-image-2"}`,
+				)),
+			},
+		},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+
+	account := &Account{
+		ID:       12,
+		Name:     "openai-apikey",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "test-api-key",
+		},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Stream)
+	require.Equal(t, 1, result.ImageCount)
+	require.Equal(t, 3, result.Usage.InputTokens)
+	require.Equal(t, 4, result.Usage.OutputTokens)
+	require.Equal(t, 2, result.Usage.ImageOutputTokens)
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+
+	events := parseOpenAIImageTestSSEEvents(rec.Body.String())
+	completed, ok := findOpenAIImageTestSSEEvent(events, "image_generation.completed")
+	require.True(t, ok)
+	require.Equal(t, "image_generation.completed", gjson.Get(completed.Data, "type").String())
+	require.Equal(t, int64(1710000012), gjson.Get(completed.Data, "created_at").Int())
+	require.Equal(t, "https://cdn.example/final.png", gjson.Get(completed.Data, "url").String())
+	require.Equal(t, "draw a small cat", gjson.Get(completed.Data, "revised_prompt").String())
+	require.Equal(t, "gpt-image-2", gjson.Get(completed.Data, "model").String())
+	require.Equal(t, "png", gjson.Get(completed.Data, "output_format").String())
+	require.JSONEq(t, `{"input_tokens":3,"output_tokens":4,"output_tokens_details":{"image_tokens":2}}`, gjson.Get(completed.Data, "usage").Raw)
+	require.Contains(t, rec.Body.String(), "data: [DONE]")
+}
+
 func TestOpenAIGatewayServiceForwardImages_OAuthEditsMultipartUsesResponsesAPI(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
