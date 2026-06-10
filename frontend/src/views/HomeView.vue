@@ -408,7 +408,7 @@ const defaultHomeConfig = computed<ResolvedHomeConfig>(() => {
     nav_items: [
     { label: t('home.nav.home'), url: '#top', visible: true },
     { label: t('home.nav.features'), url: '#features', visible: true },
-    { label: t('home.nav.models'), url: '#models', visible: true },
+    { label: t('home.nav.models'), url: '/models', visible: true },
     { label: t('home.nav.pricing'), url: '#pricing', visible: true },
     { label: t('home.nav.extensions'), url: '#custom-0', visible: false },
     { label: t('home.nav.info'), url: '#info', visible: true }
@@ -734,7 +734,11 @@ onMounted(() => {
   opacity: 0.55;
 }
 
-.home-shell > header,
+.home-shell > header {
+  position: relative;
+  z-index: 30;
+}
+
 .home-shell > main,
 .home-shell > footer {
   position: relative;

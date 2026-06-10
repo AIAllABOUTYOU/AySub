@@ -12,4 +12,9 @@ func RegisterPublicStatusRoutes(v1 *gin.RouterGroup, h *handler.Handlers) {
 	{
 		status.GET("/public", h.PublicStatus.Get)
 	}
+
+	models := v1.Group("/models")
+	{
+		models.GET("/marketplace", h.AvailableChannel.PublicMarketplace)
+	}
 }

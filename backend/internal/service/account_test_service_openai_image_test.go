@@ -91,3 +91,43 @@ func TestAccountTestService_OpenAIImageAPIKeyUsesConfiguredV1BaseURL(t *testing.
 	require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
 	require.Contains(t, rec.Body.String(), "\"success\":true")
 }
+
+func TestAccountTestService_XAIImageAPIKeyUsesGrokImagineModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/1/test", nil)
+
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: io.NopCloser(strings.NewReader(`{"data":[{"b64_json":"aGVsbG8="}]}`)),
+		},
+	}
+	svc := &AccountTestService{
+		httpUpstream: upstream,
+		cfg:          &config.Config{},
+	}
+	account := &Account{
+		ID:       55,
+		Name:     "xai-apikey",
+		Platform: PlatformXAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "xai-key",
+		},
+	}
+
+	require.True(t, isOpenAIImageModel("grok-imagine-image-lite"))
+	err := svc.testOpenAIImageAPIKey(c, context.Background(), account, "grok-imagine-image-lite", "draw a cat")
+	require.NoError(t, err)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "https://api.x.ai/v1/images/generations", upstream.lastReq.URL.String())
+	require.Equal(t, "Bearer xai-key", upstream.lastReq.Header.Get("Authorization"))
+	require.Contains(t, string(upstream.lastBody), `"model":"grok-imagine-image-lite"`)
+	require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
+	require.Contains(t, rec.Body.String(), "\"success\":true")
+}

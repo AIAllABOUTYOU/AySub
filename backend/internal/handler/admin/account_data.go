@@ -83,10 +83,11 @@ type DataImportError struct {
 }
 
 type XaiCookieTokenImportRequest struct {
-	Tokens     []string           `json:"tokens"`
-	SSOBasic   []XaiSSOBasicToken `json:"ssoBasic"`
-	NamePrefix string             `json:"name_prefix"`
-	BaseURL    string             `json:"base_url"`
+	Tokens         []string           `json:"tokens"`
+	SSOBasic       []XaiSSOBasicToken `json:"ssoBasic"`
+	NamePrefix     string             `json:"name_prefix"`
+	BaseURL        string             `json:"base_url"`
+	NameStartIndex int                `json:"name_start_index"`
 }
 
 type XaiCookieTokenImportResult struct {
@@ -510,7 +511,10 @@ func (h *AccountHandler) importXaiCookieTokens(ctx context.Context, req XaiCooki
 	}
 
 	seenInput := map[string]struct{}{}
-	createIndex := 0
+	createIndex := req.NameStartIndex
+	if createIndex < 0 {
+		createIndex = 0
+	}
 	for _, item := range importItems {
 		token := normalizeXaiCookieToken(item.Token)
 		if token == "" {

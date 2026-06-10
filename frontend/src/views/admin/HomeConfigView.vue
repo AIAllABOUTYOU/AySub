@@ -595,7 +595,7 @@ function defaultAdminHomeConfig(): EditableHomeConfig {
     nav_items: [
       { label: t('home.nav.home'), url: '#top', visible: true },
       { label: t('home.nav.features'), url: '#features', visible: true },
-      { label: t('home.nav.models'), url: '#models', visible: true },
+      { label: t('home.nav.models'), url: '/models', visible: true },
       { label: t('home.nav.pricing'), url: '#pricing', visible: true },
       { label: t('home.nav.info'), url: '#info', visible: true }
     ],

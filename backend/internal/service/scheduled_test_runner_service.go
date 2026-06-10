@@ -10,7 +10,10 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const scheduledTestDefaultMaxWorkers = 10
+const (
+	scheduledTestDefaultMaxWorkers = 10
+	scheduledTestPlanTimeout       = 90 * time.Second
+)
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
 type ScheduledTestRunnerService struct {
@@ -101,12 +104,20 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 		return
 	}
 
-	logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] found %d due plans", len(plans))
+	runnablePlans, skippedPlans := selectScheduledTestPlans(plans)
+	if len(skippedPlans) > 0 {
+		s.advanceSkippedPlans(ctx, skippedPlans)
+	}
+	if len(runnablePlans) == 0 {
+		return
+	}
+
+	logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] found %d due plans (running=%d skipped_duplicate_accounts=%d)", len(plans), len(runnablePlans), len(skippedPlans))
 
 	sem := make(chan struct{}, scheduledTestDefaultMaxWorkers)
 	var wg sync.WaitGroup
 
-	for _, plan := range plans {
+	for _, plan := range runnablePlans {
 		sem <- struct{}{}
 		wg.Add(1)
 		go func(p *ScheduledTestPlan) {
@@ -120,7 +131,10 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 }
 
 func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan) {
-	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
+	testCtx, cancel := context.WithTimeout(ctx, scheduledTestPlanTimeout)
+	defer cancel()
+
+	result, err := s.accountTestSvc.RunTestBackground(testCtx, plan.AccountID, plan.ModelID)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
 		return
@@ -143,6 +157,45 @@ func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *Sched
 
 	if err := s.planRepo.UpdateAfterRun(ctx, plan.ID, time.Now(), nextRun); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d UpdateAfterRun error: %v", plan.ID, err)
+	}
+}
+
+func selectScheduledTestPlans(plans []*ScheduledTestPlan) ([]*ScheduledTestPlan, []*ScheduledTestPlan) {
+	if len(plans) == 0 {
+		return nil, nil
+	}
+
+	runnable := make([]*ScheduledTestPlan, 0, len(plans))
+	skipped := make([]*ScheduledTestPlan, 0)
+	seenAccountIDs := make(map[int64]struct{}, len(plans))
+	for _, plan := range plans {
+		if plan == nil {
+			continue
+		}
+		if _, exists := seenAccountIDs[plan.AccountID]; exists {
+			skipped = append(skipped, plan)
+			continue
+		}
+		seenAccountIDs[plan.AccountID] = struct{}{}
+		runnable = append(runnable, plan)
+	}
+	return runnable, skipped
+}
+
+func (s *ScheduledTestRunnerService) advanceSkippedPlans(ctx context.Context, plans []*ScheduledTestPlan) {
+	for _, plan := range plans {
+		if plan == nil {
+			continue
+		}
+		nextRun, err := computeNextRun(plan.CronExpression, time.Now())
+		if err != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d skip duplicate computeNextRun error: %v", plan.ID, err)
+			continue
+		}
+		plan.NextRunAt = &nextRun
+		if _, err := s.planRepo.Update(ctx, plan); err != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d skip duplicate Update error: %v", plan.ID, err)
+		}
 	}
 }
 

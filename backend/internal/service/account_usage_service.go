@@ -1373,3 +1373,32 @@ func buildGeminiUsageProgress(used, limit int64, resetAt time.Time, tokens int64
 func (s *AccountUsageService) GetAccountWindowStats(ctx context.Context, accountID int64, startTime time.Time) (*usagestats.AccountStats, error) {
 	return s.usageLogRepo.GetAccountWindowStats(ctx, accountID, startTime)
 }
+
+func (s *AccountUsageService) GetAccountWindowStatsBatch(ctx context.Context, accountIDs []int64, startTime time.Time) (map[int64]*usagestats.AccountStats, error) {
+	result := make(map[int64]*usagestats.AccountStats, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return result, nil
+	}
+	if batchReader, ok := s.usageLogRepo.(accountWindowStatsBatchReader); ok {
+		return batchReader.GetAccountWindowStatsBatch(ctx, accountIDs, startTime)
+	}
+
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(8)
+	for _, accountID := range accountIDs {
+		id := accountID
+		g.Go(func() error {
+			stats, err := s.usageLogRepo.GetAccountWindowStats(gctx, id, startTime)
+			if err != nil || stats == nil {
+				return nil
+			}
+			mu.Lock()
+			result[id] = stats
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return result, nil
+}

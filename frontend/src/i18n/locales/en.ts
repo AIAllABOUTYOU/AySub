@@ -1396,16 +1396,28 @@ export default {
   modelMarketplace: {
     title: 'Model Marketplace',
     description: 'Browse available platforms, channels, groups, and pricing by model',
+    publicEyebrow: 'Public models and pricing',
+    publicDescription: 'Browse available models, group multipliers, and display pricing from enabled public channels. Sign in to see the full entries matched to your account permissions.',
     searchPlaceholder: 'Search models, platforms, channels, or groups...',
     empty: 'No available models',
     noGroups: 'No accessible groups',
     modelSubtitle: '{count} available entries',
+    filteredCount: 'Showing {filtered} / {total} models',
+    entryCount: 'Entries',
+    viewDetails: 'View details',
+    hideDetails: 'Hide details',
     filters: {
+      title: 'Filters',
+      clear: 'Clear',
       allPlatforms: 'All platforms'
     },
     stats: {
       models: '{count} models',
-      channels: '{count} channels'
+      channels: '{count} channels',
+      platforms: '{count} platforms'
+    },
+    summary: {
+      title: 'Overview'
     },
     columns: {
       model: 'Model',
@@ -3783,6 +3795,7 @@ export default {
       xaiCookieTokenImportErrorLine: 'Line {line}',
       xaiCookieTokenImportButton: 'Start Import',
       xaiCookieTokenImporting: 'Importing...',
+      xaiCookieTokenImportProgress: 'Importing batch {current}/{total}, processed {processed}/{total_items} tokens',
       xaiCookieTokenImportEmptyFile: 'No importable tokens found in the file',
       xaiCookieTokenImportSuccess: 'Import completed: created {created}, skipped {skipped}',
       xaiCookieTokenImportCompletedWithErrors: 'Import completed with errors: created {created}, skipped {skipped}, failed {failed}',
@@ -3853,6 +3866,9 @@ export default {
       dataImportZipUnsupportedBrowser: 'This browser cannot decompress deflate zip entries. Use an uncompressed zip or select the folder directly.',
       dataImportParseFailed: 'Failed to parse data file',
       dataImportFailed: 'Data import failed',
+      dataImportPhaseProxy: 'proxies',
+      dataImportPhaseAccount: 'accounts',
+      dataImportProgress: 'Importing {phase}: batch {current}/{total}, processed {processed}/{total_items} items',
       dataImportResult: 'Import Result',
       dataImportResultSummary: 'Proxies created {proxy_created}, reused {proxy_reused}, failed {proxy_failed}; Accounts created {account_created}, failed {account_failed}',
       dataImportErrors: 'Error Details',

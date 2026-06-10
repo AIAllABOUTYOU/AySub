@@ -71,6 +71,14 @@ export async function getAvailable(options?: { signal?: AbortSignal }): Promise<
   return data
 }
 
-export const userChannelsAPI = { getAvailable }
+/** 列出免登录可见的模型广场数据（仅公开分组）。 */
+export async function getPublicMarketplace(options?: { signal?: AbortSignal }): Promise<UserAvailableChannel[]> {
+  const { data } = await apiClient.get<UserAvailableChannel[]>('/models/marketplace', {
+    signal: options?.signal
+  })
+  return data
+}
+
+export const userChannelsAPI = { getAvailable, getPublicMarketplace }
 
 export default userChannelsAPI

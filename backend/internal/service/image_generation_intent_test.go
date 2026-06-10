@@ -28,6 +28,13 @@ func TestIsImageGenerationIntent(t *testing.T) {
 			want:     true,
 		},
 		{
+			name:     "grok imagine image model",
+			endpoint: "/v1/responses",
+			model:    "grok-imagine-image-lite",
+			body:     []byte(`{"model":"grok-imagine-image-lite"}`),
+			want:     true,
+		},
+		{
 			name:     "image tool",
 			endpoint: "/v1/responses",
 			model:    "gpt-5.4",

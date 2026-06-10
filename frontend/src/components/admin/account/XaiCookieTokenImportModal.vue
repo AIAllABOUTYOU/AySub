@@ -70,6 +70,16 @@
         </div>
       </div>
 
+      <div v-if="importProgress" class="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
+        <div class="flex items-center justify-between text-sm text-blue-700 dark:text-blue-300">
+          <span>{{ t('admin.accounts.xaiCookieTokenImportProgress', importProgress) }}</span>
+          <span>{{ importProgress.percent }}%</span>
+        </div>
+        <div class="h-2 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-900/50">
+          <div class="h-full rounded-full bg-blue-500 transition-all" :style="{ width: `${importProgress.percent}%` }"></div>
+        </div>
+      </div>
+
       <div v-if="result" class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700">
         <div class="text-sm font-medium text-gray-900 dark:text-white">
           {{ t('admin.accounts.xaiCookieTokenImportResult') }}
@@ -130,6 +140,8 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+const TOKEN_IMPORT_BATCH_SIZE = 100
+
 const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -138,6 +150,13 @@ const loadingFiles = ref(false)
 const fileContents = ref<ImportTextFile[]>([])
 const skippedFiles = ref<ImportTextSkippedFile[]>([])
 const result = ref<XaiCookieTokenImportResult | null>(null)
+const importProgress = ref<{
+  current: number
+  total: number
+  processed: number
+  total_items: number
+  percent: number
+} | null>(null)
 const namePrefix = ref('')
 const baseUrl = ref('https://grok.com')
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -160,6 +179,7 @@ watch(
       fileContents.value = []
       skippedFiles.value = []
       result.value = null
+      importProgress.value = null
       namePrefix.value = t('admin.accounts.xaiCookieTokenDefaultNamePrefix')
       baseUrl.value = 'https://grok.com'
       if (fileInput.value) {
@@ -188,6 +208,7 @@ const handleFileChange = async (event: Event) => {
 
   loadingFiles.value = true
   result.value = null
+  importProgress.value = null
   try {
     const { loaded, skipped } = await readImportTextFiles(files, {
       extensions: ['.txt', '.json'],
@@ -249,6 +270,32 @@ const parseTokenFile = (text: string): string[] => {
   return normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
 }
 
+const createEmptyResult = (): XaiCookieTokenImportResult => ({
+  created: 0,
+  skipped: 0,
+  failed: 0,
+  errors: []
+})
+
+const appendImportResult = (
+  target: XaiCookieTokenImportResult,
+  source: XaiCookieTokenImportResult,
+  lineOffset: number
+) => {
+  target.created += source.created || 0
+  target.skipped += source.skipped || 0
+  target.failed += source.failed || 0
+  if (source.errors?.length) {
+    target.errors = [
+      ...(target.errors || []),
+      ...source.errors.map((item) => ({
+        ...item,
+        line: item.line + lineOffset
+      }))
+    ]
+  }
+}
+
 const handleImport = async () => {
   if (!fileContents.value.length) {
     appStore.showError(t('admin.accounts.xaiCookieTokenImportSelectFile'))
@@ -263,19 +310,43 @@ const handleImport = async () => {
       return
     }
 
-    const res = await adminAPI.accounts.importXaiCookieTokens({
-      tokens,
-      name_prefix: namePrefix.value.trim(),
-      base_url: baseUrl.value.trim()
-    })
-    result.value = res
+    const aggregate = createEmptyResult()
+    const total = Math.ceil(tokens.length / TOKEN_IMPORT_BATCH_SIZE)
+    result.value = aggregate
+    for (let index = 0; index < total; index += 1) {
+      const offset = index * TOKEN_IMPORT_BATCH_SIZE
+      const batch = tokens.slice(offset, offset + TOKEN_IMPORT_BATCH_SIZE)
+      importProgress.value = {
+        current: index + 1,
+        total,
+        processed: offset,
+        total_items: tokens.length,
+        percent: Math.floor((offset / tokens.length) * 100)
+      }
+      const res = await adminAPI.accounts.importXaiCookieTokens({
+        tokens: batch,
+        name_prefix: namePrefix.value.trim(),
+        base_url: baseUrl.value.trim(),
+        name_start_index: aggregate.created
+      })
+      appendImportResult(aggregate, res, offset)
+      result.value = { ...aggregate, errors: [...(aggregate.errors || [])] }
+      importProgress.value = {
+        current: index + 1,
+        total,
+        processed: Math.min(offset + batch.length, tokens.length),
+        total_items: tokens.length,
+        percent: Math.floor((Math.min(offset + batch.length, tokens.length) / tokens.length) * 100)
+      }
+    }
+    importProgress.value = null
 
     const msgParams = {
-      created: res.created,
-      skipped: res.skipped,
-      failed: res.failed
+      created: aggregate.created,
+      skipped: aggregate.skipped,
+      failed: aggregate.failed
     }
-    if (res.failed > 0) {
+    if (aggregate.failed > 0) {
       appStore.showError(t('admin.accounts.xaiCookieTokenImportCompletedWithErrors', msgParams))
     } else {
       appStore.showSuccess(t('admin.accounts.xaiCookieTokenImportSuccess', msgParams))

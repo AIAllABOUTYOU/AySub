@@ -166,6 +166,46 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
+// PublicMarketplace 列出无需登录即可查看的模型广场数据。
+// GET /api/v1/models/marketplace
+//
+// 公开入口只暴露启用渠道中挂载到公开分组的模型与展示价格；用户专属分组仍只在
+// 登录后的 /channels/available 中按当前用户权限返回。
+func (h *AvailableChannelHandler) PublicMarketplace(c *gin.Context) {
+	if !h.featureEnabled(c) {
+		response.Success(c, []userAvailableChannel{})
+		return
+	}
+
+	channels, err := h.channelService.ListAvailable(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	out := make([]userAvailableChannel, 0, len(channels))
+	for _, ch := range channels {
+		if ch.Status != service.StatusActive {
+			continue
+		}
+		visibleGroups := filterPublicVisibleGroups(ch.Groups)
+		if len(visibleGroups) == 0 {
+			continue
+		}
+		sections := buildPlatformSections(ch, visibleGroups)
+		if len(sections) == 0 {
+			continue
+		}
+		out = append(out, userAvailableChannel{
+			Name:        ch.Name,
+			Description: ch.Description,
+			Platforms:   sections,
+		})
+	}
+
+	response.Success(c, out)
+}
+
 // buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：
 // 每个 section 对应一个平台，只包含该平台的 groups 和 supported_models。
 // 输出按 platform 字母序稳定排序，便于前端等效比较与回归测试。
@@ -210,6 +250,25 @@ func filterUserVisibleGroups(
 	visible := make([]userAvailableGroup, 0, len(groups))
 	for _, g := range groups {
 		if _, ok := allowed[g.ID]; !ok {
+			continue
+		}
+		visible = append(visible, userAvailableGroup{
+			ID:               g.ID,
+			Name:             g.Name,
+			Platform:         g.Platform,
+			SubscriptionType: g.SubscriptionType,
+			RateMultiplier:   g.RateMultiplier,
+			IsExclusive:      g.IsExclusive,
+		})
+	}
+	return visible
+}
+
+// filterPublicVisibleGroups 仅保留公开分组，用于免登录模型广场。
+func filterPublicVisibleGroups(groups []service.AvailableGroupRef) []userAvailableGroup {
+	visible := make([]userAvailableGroup, 0, len(groups))
+	for _, g := range groups {
+		if g.IsExclusive {
 			continue
 		}
 		visible = append(visible, userAvailableGroup{

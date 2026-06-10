@@ -64,6 +64,19 @@
       </div>
 
       <div
+        v-if="importProgress"
+        class="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30"
+      >
+        <div class="flex items-center justify-between text-sm text-blue-700 dark:text-blue-300">
+          <span>{{ t('admin.accounts.dataImportProgress', importProgress) }}</span>
+          <span>{{ importProgress.percent }}%</span>
+        </div>
+        <div class="h-2 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-900/50">
+          <div class="h-full rounded-full bg-blue-500 transition-all" :style="{ width: `${importProgress.percent}%` }"></div>
+        </div>
+      </div>
+
+      <div
         v-if="result"
         class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
       >
@@ -128,6 +141,9 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+const PROXY_IMPORT_BATCH_SIZE = 100
+const ACCOUNT_IMPORT_BATCH_SIZE = 50
+
 const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -136,6 +152,14 @@ const loadingFiles = ref(false)
 const fileContents = ref<ImportTextFile[]>([])
 const skippedFiles = ref<ImportTextSkippedFile[]>([])
 const result = ref<AdminDataImportResult | null>(null)
+const importProgress = ref<{
+  phase: string
+  current: number
+  total: number
+  processed: number
+  total_items: number
+  percent: number
+} | null>(null)
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const directoryInput = ref<HTMLInputElement | null>(null)
@@ -157,6 +181,7 @@ watch(
       fileContents.value = []
       skippedFiles.value = []
       result.value = null
+      importProgress.value = null
       if (fileInput.value) {
         fileInput.value.value = ''
       }
@@ -183,6 +208,7 @@ const handleFileChange = async (event: Event) => {
 
   loadingFiles.value = true
   result.value = null
+  importProgress.value = null
   try {
     const { loaded, skipped } = await readImportTextFiles(files, {
       extensions: ['.json'],
@@ -222,13 +248,10 @@ const handleImport = async () => {
   importing.value = true
   try {
     const dataPayload = mergeAdminDataPayloads(fileContents.value.map((item) => parseAdminDataPayload(item.content)))
+    const res = await importDataPayloadInBatches(dataPayload)
 
-    const res = await adminAPI.accounts.importData({
-      data: dataPayload,
-      skip_default_group_bind: true
-    })
-
-    result.value = res
+    result.value = { ...res, errors: [...(res.errors || [])] }
+    importProgress.value = null
 
     const msgParams: Record<string, unknown> = {
       account_created: res.account_created,
@@ -252,6 +275,101 @@ const handleImport = async () => {
   } finally {
     importing.value = false
   }
+}
+
+const createEmptyResult = (): AdminDataImportResult => ({
+  proxy_created: 0,
+  proxy_reused: 0,
+  proxy_failed: 0,
+  account_created: 0,
+  account_failed: 0,
+  errors: []
+})
+
+const appendImportResult = (target: AdminDataImportResult, source: AdminDataImportResult) => {
+  target.proxy_created += source.proxy_created || 0
+  target.proxy_reused += source.proxy_reused || 0
+  target.proxy_failed += source.proxy_failed || 0
+  target.account_created += source.account_created || 0
+  target.account_failed += source.account_failed || 0
+  if (source.errors?.length) {
+    target.errors = [...(target.errors || []), ...source.errors]
+  }
+}
+
+const importDataPayloadInBatches = async (payload: AdminDataPayload): Promise<AdminDataImportResult> => {
+  const aggregate = createEmptyResult()
+  result.value = aggregate
+  const proxyBatches = chunkArray(payload.proxies || [], PROXY_IMPORT_BATCH_SIZE)
+  const accountBatches = chunkArray(payload.accounts || [], ACCOUNT_IMPORT_BATCH_SIZE)
+  const totalBatches = proxyBatches.length + accountBatches.length
+  let completedBatches = 0
+  const totalItems = (payload.proxies?.length || 0) + (payload.accounts?.length || 0)
+  let processedItems = 0
+
+  for (const batch of proxyBatches) {
+    setImportProgress('proxy', completedBatches, totalBatches, processedItems, totalItems)
+    const res = await importDataChunk(payload, batch, [])
+    appendImportResult(aggregate, res)
+    completedBatches += 1
+    processedItems += batch.length
+    result.value = { ...aggregate, errors: [...(aggregate.errors || [])] }
+    setImportProgress('proxy', completedBatches, totalBatches, processedItems, totalItems)
+  }
+
+  for (const batch of accountBatches) {
+    setImportProgress('account', completedBatches, totalBatches, processedItems, totalItems)
+    const res = await importDataChunk(payload, [], batch)
+    appendImportResult(aggregate, res)
+    completedBatches += 1
+    processedItems += batch.length
+    result.value = { ...aggregate, errors: [...(aggregate.errors || [])] }
+    setImportProgress('account', completedBatches, totalBatches, processedItems, totalItems)
+  }
+
+  return aggregate
+}
+
+const importDataChunk = async (
+  source: AdminDataPayload,
+  proxies: AdminDataPayload['proxies'],
+  accounts: AdminDataPayload['accounts']
+) => {
+  return adminAPI.accounts.importData({
+    data: {
+      type: source.type,
+      version: source.version,
+      exported_at: source.exported_at || new Date().toISOString(),
+      proxies,
+      accounts
+    },
+    skip_default_group_bind: true
+  })
+}
+
+const setImportProgress = (
+  phase: 'proxy' | 'account',
+  completedBatches: number,
+  totalBatches: number,
+  processedItems: number,
+  totalItems: number
+) => {
+  importProgress.value = {
+    phase: phase === 'proxy' ? t('admin.accounts.dataImportPhaseProxy') : t('admin.accounts.dataImportPhaseAccount'),
+    current: Math.min(completedBatches + 1, Math.max(totalBatches, 1)),
+    total: Math.max(totalBatches, 1),
+    processed: processedItems,
+    total_items: totalItems,
+    percent: totalItems > 0 ? Math.floor((processedItems / totalItems) * 100) : 100
+  }
+}
+
+const chunkArray = <T,>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
 }
 
 const parseAdminDataPayload = (text: string): AdminDataPayload => {

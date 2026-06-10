@@ -16,6 +16,7 @@ type accountRepoStubForBulkUpdate struct {
 	accountRepoStub
 	bulkUpdateErr    error
 	bulkUpdateIDs    []int64
+	bulkUpdateCalls  [][]int64
 	bindGroupErrByID map[int64]error
 	bindGroupsCalls  []int64
 	getByIDsAccounts []*Account
@@ -44,6 +45,7 @@ type accountRepoStubForBulkUpdate struct {
 
 func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, _ AccountBulkUpdate) (int64, error) {
 	s.bulkUpdateIDs = append([]int64{}, ids...)
+	s.bulkUpdateCalls = append(s.bulkUpdateCalls, append([]int64{}, ids...))
 	if s.bulkUpdateErr != nil {
 		return 0, s.bulkUpdateErr
 	}
@@ -245,4 +247,49 @@ func TestAdminServiceBulkUpdateAccounts_ResolvesIDsFromFilters(t *testing.T) {
 	require.Equal(t, 2, result.Success)
 	require.Equal(t, 0, result.Failed)
 	require.Equal(t, []int64{7, 11}, result.SuccessIDs)
+}
+
+func TestAdminServiceBulkUpdateAccounts_ChunksLargeColumnUpdates(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	accountIDs := make([]int64, accountBulkUpdateChunkSize*2+7)
+	for i := range accountIDs {
+		accountIDs[i] = int64(i + 1)
+	}
+
+	schedulable := true
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs:  accountIDs,
+		Schedulable: &schedulable,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, len(accountIDs), result.Success)
+	require.Len(t, repo.bulkUpdateCalls, 3)
+	require.Len(t, repo.bulkUpdateCalls[0], accountBulkUpdateChunkSize)
+	require.Len(t, repo.bulkUpdateCalls[1], accountBulkUpdateChunkSize)
+	require.Len(t, repo.bulkUpdateCalls[2], 7)
+	require.Equal(t, int64(1), repo.bulkUpdateCalls[0][0])
+	require.Equal(t, int64(accountBulkUpdateChunkSize*2+7), repo.bulkUpdateCalls[2][6])
+}
+
+func TestAdminServiceBulkUpdateAccounts_GroupOnlySkipsColumnUpdate(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{}
+	svc := &adminServiceImpl{
+		accountRepo: repo,
+		groupRepo:   &groupRepoStubForAdmin{getByID: &Group{ID: 10, Name: "g10"}},
+	}
+
+	groupIDs := []int64{10}
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs:            []int64{1, 2},
+		GroupIDs:              &groupIDs,
+		SkipMixedChannelCheck: true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Success)
+	require.Empty(t, repo.bulkUpdateCalls)
+	require.Equal(t, []int64{1, 2}, repo.bindGroupsCalls)
 }

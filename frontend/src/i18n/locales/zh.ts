@@ -1399,16 +1399,28 @@ export default {
   modelMarketplace: {
     title: '模型广场',
     description: '按模型查看可用平台、渠道、分组与计费信息',
+    publicEyebrow: '公开模型与价格',
+    publicDescription: '公开查看已启用渠道中的可用模型、分组倍率和展示价格，登录后可查看与你账户权限匹配的完整可用入口。',
     searchPlaceholder: '搜索模型、平台、渠道或分组...',
     empty: '暂无可用模型',
     noGroups: '暂无可访问分组',
     modelSubtitle: '{count} 个可用入口',
+    filteredCount: '显示 {filtered} / {total} 个模型',
+    entryCount: '入口',
+    viewDetails: '查看详情',
+    hideDetails: '收起详情',
     filters: {
+      title: '筛选',
+      clear: '清除',
       allPlatforms: '全部平台'
     },
     stats: {
       models: '{count} 个模型',
-      channels: '{count} 个渠道'
+      channels: '{count} 个渠道',
+      platforms: '{count} 个平台'
+    },
+    summary: {
+      title: '概览'
     },
     columns: {
       model: '模型',
@@ -3858,6 +3870,7 @@ export default {
       xaiCookieTokenImportErrorLine: '第 {line} 行',
       xaiCookieTokenImportButton: '开始导入',
       xaiCookieTokenImporting: '导入中...',
+      xaiCookieTokenImportProgress: '正在导入第 {current}/{total} 批，已处理 {processed}/{total_items} 个 Token',
       xaiCookieTokenImportEmptyFile: '文件中没有可导入的 Token',
       xaiCookieTokenImportSuccess: '导入完成：创建 {created}，跳过 {skipped}',
       xaiCookieTokenImportCompletedWithErrors: '导入完成但有错误：创建 {created}，跳过 {skipped}，失败 {failed}',
@@ -3928,6 +3941,9 @@ export default {
       dataImportZipUnsupportedBrowser: '当前浏览器不支持解压 deflate zip，请改用未压缩 zip 或直接选择文件夹',
       dataImportParseFailed: '数据解析失败',
       dataImportFailed: '数据导入失败',
+      dataImportPhaseProxy: '代理',
+      dataImportPhaseAccount: '账号',
+      dataImportProgress: '正在导入{phase}：第 {current}/{total} 批，已处理 {processed}/{total_items} 条',
       dataImportResult: '导入结果',
       dataImportResultSummary: '代理创建 {proxy_created}，复用 {proxy_reused}，失败 {proxy_failed}；账号创建 {account_created}，失败 {account_failed}',
       dataImportErrors: '失败详情',

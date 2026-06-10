@@ -42,6 +42,18 @@ func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {
 	require.ElementsMatch(t, []int64{1, 3}, ids)
 }
 
+func TestFilterPublicVisibleGroups_PublicOnly(t *testing.T) {
+	groups := []service.AvailableGroupRef{
+		{ID: 1, Name: "public", Platform: "anthropic", IsExclusive: false},
+		{ID: 2, Name: "exclusive", Platform: "anthropic", IsExclusive: true},
+	}
+
+	visible := filterPublicVisibleGroups(groups)
+	require.Len(t, visible, 1)
+	require.Equal(t, int64(1), visible[0].ID)
+	require.False(t, visible[0].IsExclusive)
+}
+
 func TestToUserSupportedModels_FiltersByAllowedPlatforms(t *testing.T) {
 	// 用户可访问分组只覆盖 anthropic；anthropic 平台的模型保留，openai 模型被剔除。
 	src := []service.SupportedModel{

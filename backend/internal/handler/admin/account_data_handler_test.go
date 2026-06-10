@@ -326,6 +326,25 @@ func TestImportXaiCookieTokensCreatesAccountsAndSkipsDuplicates(t *testing.T) {
 	require.Equal(t, 1, adminSvc.createdAccounts[0].Priority)
 }
 
+func TestImportXaiCookieTokensUsesNameStartIndex(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+
+	body, _ := json.Marshal(map[string]any{
+		"tokens":           []string{"token-a", "token-b"},
+		"name_prefix":      "Imported Grok",
+		"name_start_index": 100,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/xai-cookie-tokens", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	require.Len(t, adminSvc.createdAccounts, 2)
+	require.Equal(t, "Imported Grok 101", adminSvc.createdAccounts[0].Name)
+	require.Equal(t, "Imported Grok 102", adminSvc.createdAccounts[1].Name)
+}
+
 func TestImportXaiCookieTokensAcceptsGrok2APISSOBasicJSON(t *testing.T) {
 	router, adminSvc := setupAccountDataRouter()
 	adminSvc.accounts = []service.Account{

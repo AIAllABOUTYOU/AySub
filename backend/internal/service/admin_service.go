@@ -546,6 +546,7 @@ const (
 	proxyQualityResponseHeaderTimeout = 10 * time.Second
 	proxyQualityMaxBodyBytes          = int64(8 * 1024)
 	proxyQualityClientUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+	accountBulkUpdateChunkSize        = 500
 )
 
 var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_STATUS_UNAVAILABLE", "RPM cache not available")
@@ -2885,8 +2886,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		repoUpdates.Schedulable = input.Schedulable
 	}
 
-	// Run bulk update for column/jsonb fields first.
-	if _, err := s.accountRepo.BulkUpdate(ctx, input.AccountIDs, repoUpdates); err != nil {
+	// Run bulk update for column/jsonb fields first. Chunking keeps very large
+	// admin updates from producing oversized SQL/outbox payloads.
+	if err := s.bulkUpdateAccountColumns(ctx, input.AccountIDs, repoUpdates); err != nil {
 		return nil, err
 	}
 
@@ -2912,6 +2914,35 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 
 	return result, nil
+}
+
+func (s *adminServiceImpl) bulkUpdateAccountColumns(ctx context.Context, accountIDs []int64, repoUpdates AccountBulkUpdate) error {
+	if !hasAccountBulkColumnUpdates(repoUpdates) {
+		return nil
+	}
+	for start := 0; start < len(accountIDs); start += accountBulkUpdateChunkSize {
+		end := start + accountBulkUpdateChunkSize
+		if end > len(accountIDs) {
+			end = len(accountIDs)
+		}
+		if _, err := s.accountRepo.BulkUpdate(ctx, accountIDs[start:end], repoUpdates); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hasAccountBulkColumnUpdates(updates AccountBulkUpdate) bool {
+	return updates.Name != nil ||
+		updates.ProxyID != nil ||
+		updates.Concurrency != nil ||
+		updates.Priority != nil ||
+		updates.RateMultiplier != nil ||
+		updates.LoadFactor != nil ||
+		updates.Status != nil ||
+		updates.Schedulable != nil ||
+		len(updates.Credentials) > 0 ||
+		len(updates.Extra) > 0
 }
 
 func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filters *BulkUpdateAccountFilters) ([]int64, error) {

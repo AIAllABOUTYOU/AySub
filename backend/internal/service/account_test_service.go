@@ -117,9 +117,9 @@ const (
 	defaultXAITestModel          = "grok-4.20-auto"
 )
 
-// isOpenAIImageModel checks if the model is an OpenAI image generation model (e.g. gpt-image-2).
+// isOpenAIImageModel checks if the model is an OpenAI-compatible image generation model.
 func isOpenAIImageModel(model string) bool {
-	return strings.HasPrefix(strings.ToLower(model), "gpt-image-")
+	return isOpenAIImageGenerationModel(model)
 }
 
 // AccountTestService handles account testing operations

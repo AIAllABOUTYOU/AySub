@@ -264,14 +264,17 @@
                   :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
                 >
                   <div
-                    class="max-w-[82%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-6"
+                    class="max-w-[82%] rounded-xl px-3 py-2 text-sm leading-6"
                     :class="
                       message.role === 'user'
-                        ? 'bg-primary-500 text-white'
+                        ? 'whitespace-pre-wrap bg-primary-500 text-white'
                         : 'bg-gray-100 text-gray-900 dark:bg-dark-700 dark:text-gray-100'
                     "
                   >
-                    {{ message.content }}
+                    <template v-if="message.role === 'user'">
+                      {{ message.content }}
+                    </template>
+                    <div v-else class="experience-chat-markdown" v-html="renderMarkdown(message.content)"></div>
                   </div>
                 </div>
               </div>
@@ -479,6 +482,7 @@ import {
 import { useAppStore } from '@/stores/app'
 import type { ApiKey } from '@/types'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { renderMarkdown } from '@/utils/markdown'
 
 type ExperienceTab = 'chat' | 'image' | 'video' | 'audio'
 type AudioMode = 'speech' | 'transcription' | 'translation'
@@ -1019,3 +1023,99 @@ onBeforeUnmount(() => {
   clearAudioPreview()
 })
 </script>
+
+<style scoped>
+.experience-chat-markdown {
+  overflow-wrap: anywhere;
+}
+
+.experience-chat-markdown :deep(p) {
+  margin: 0 0 0.5rem;
+}
+
+.experience-chat-markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.experience-chat-markdown :deep(ul),
+.experience-chat-markdown :deep(ol) {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.experience-chat-markdown :deep(ul) {
+  list-style: disc;
+}
+
+.experience-chat-markdown :deep(ol) {
+  list-style: decimal;
+}
+
+.experience-chat-markdown :deep(li) {
+  margin: 0.125rem 0;
+}
+
+.experience-chat-markdown :deep(a) {
+  color: rgb(13 148 136);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.experience-chat-markdown :deep(blockquote) {
+  margin: 0.5rem 0;
+  border-left: 3px solid rgb(209 213 219);
+  padding-left: 0.75rem;
+  color: rgb(75 85 99);
+}
+
+.dark .experience-chat-markdown :deep(blockquote) {
+  border-left-color: rgb(71 85 105);
+  color: rgb(203 213 225);
+}
+
+.experience-chat-markdown :deep(code) {
+  border-radius: 0.25rem;
+  background: rgb(229 231 235);
+  padding: 0.125rem 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+.dark .experience-chat-markdown :deep(code) {
+  background: rgb(15 23 42);
+}
+
+.experience-chat-markdown :deep(pre) {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: rgb(17 24 39);
+  padding: 0.75rem;
+  color: rgb(243 244 246);
+}
+
+.experience-chat-markdown :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.experience-chat-markdown :deep(table) {
+  margin: 0.5rem 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.experience-chat-markdown :deep(th),
+.experience-chat-markdown :deep(td) {
+  border: 1px solid rgb(209 213 219);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.dark .experience-chat-markdown :deep(th),
+.dark .experience-chat-markdown :deep(td) {
+  border-color: rgb(71 85 105);
+}
+</style>

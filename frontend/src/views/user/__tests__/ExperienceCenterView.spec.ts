@@ -9,6 +9,9 @@ const {
   fetchPublicSettings,
   showError,
   createImageGeneration,
+  createChatCompletion,
+  appendPlaygroundMessage,
+  createPlaygroundSession,
   listPlaygroundSessions,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
@@ -16,6 +19,9 @@ const {
   fetchPublicSettings: vi.fn(),
   showError: vi.fn(),
   createImageGeneration: vi.fn(),
+  createChatCompletion: vi.fn(),
+  appendPlaygroundMessage: vi.fn(),
+  createPlaygroundSession: vi.fn(),
   listPlaygroundSessions: vi.fn(),
 }))
 
@@ -32,9 +38,9 @@ vi.mock('@/api/channels', () => ({
 }))
 
 vi.mock('@/api/playground', () => ({
-  appendPlaygroundMessage: vi.fn(),
-  createPlaygroundSession: vi.fn(),
-  createChatCompletion: vi.fn(),
+  appendPlaygroundMessage,
+  createPlaygroundSession,
+  createChatCompletion,
   createAudioSpeech: vi.fn(),
   createAudioTranscription: vi.fn(),
   createAudioTranslation: vi.fn(),
@@ -116,6 +122,9 @@ describe('ExperienceCenterView', () => {
     fetchPublicSettings.mockReset()
     showError.mockReset()
     createImageGeneration.mockReset()
+    createChatCompletion.mockReset()
+    appendPlaygroundMessage.mockReset()
+    createPlaygroundSession.mockReset()
     listPlaygroundSessions.mockReset()
 
     listKeys.mockResolvedValue({
@@ -149,6 +158,21 @@ describe('ExperienceCenterView', () => {
     fetchPublicSettings.mockResolvedValue({ api_base_url: 'https://gateway.example/v1' })
     listPlaygroundSessions.mockResolvedValue({ items: [] })
     createImageGeneration.mockResolvedValue([{ url: 'https://assets.example/image.png' }])
+    createChatCompletion.mockResolvedValue('**Done**\n\n- item\n\n<script>alert("x")</script>')
+    createPlaygroundSession.mockResolvedValue({
+      id: 9,
+      user_id: 1,
+      api_key_id: 1,
+      api_key_name: 'Grok key',
+      title: 'hello',
+      mode: 'chat',
+      model: 'grok-4.20-auto',
+      metadata: {},
+      created_at: '2026-06-10T00:00:00Z',
+      updated_at: '2026-06-10T00:00:00Z',
+      messages: [],
+    })
+    appendPlaygroundMessage.mockResolvedValue({})
   })
 
   it('switches Grok image testing to an image-capable model', async () => {
@@ -182,5 +206,27 @@ describe('ExperienceCenterView', () => {
         prompt: 'draw a cat',
       })
     )
+  })
+
+  it('renders assistant chat replies as sanitized markdown', async () => {
+    const wrapper = mount(ExperienceCenterView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          Icon: IconStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    await wrapper.get('textarea').setValue('hello')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.html()).toContain('<strong>Done</strong>')
+    expect(wrapper.find('.experience-chat-markdown ul').exists()).toBe(true)
+    expect(wrapper.find('.experience-chat-markdown script').exists()).toBe(false)
+    expect(wrapper.html()).not.toContain('alert("x")')
   })
 })

@@ -1270,6 +1270,7 @@ export interface XaiCookieTokenImportRequest {
   ssoBasic?: XaiSSOBasicToken[]
   name_prefix?: string
   base_url?: string
+  name_start_index?: number
 }
 
 export interface XaiCookieTokenImportError {
