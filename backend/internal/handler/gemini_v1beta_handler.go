@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -464,7 +463,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				}
 			}
 
-			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotWithWaitTimeout(
+			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotWithWaitTimeoutSilent(
 				c,
 				account.ID,
 				selection.WaitPlan.MaxConcurrency,
@@ -521,8 +520,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			accountReleaseFunc()
 		}
 		if err != nil {
-			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
+			if failoverErr, ok := ClassifyUpstreamFailoverError(c.Request.Context(), err); ok {
 				failoverAction := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
 				switch failoverAction {
 				case FailoverContinue:

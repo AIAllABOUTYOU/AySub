@@ -64,6 +64,7 @@ const geminiPrecheckCacheTTL = time.Minute
 const (
 	defaultRateLimit429CooldownSeconds = 5
 	maxRateLimit429CooldownSeconds     = 7200
+	defaultFailoverTempUnschedSeconds  = 60
 )
 
 const (
@@ -331,6 +332,57 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 	}
 
 	return shouldDisable
+}
+
+func (s *RateLimitService) MarkTransientFailover(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
+	if s == nil || account == nil || s.accountRepo == nil {
+		return false
+	}
+	if statusCode == http.StatusTooManyRequests || statusCode == 529 {
+		if statusCode == http.StatusTooManyRequests && account.IsRateLimited() {
+			return true
+		}
+		if statusCode == 529 && account.IsOverloaded() {
+			return true
+		}
+		return s.HandleUpstreamError(ctx, account, statusCode, http.Header{}, responseBody)
+	}
+	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+		return s.HandleUpstreamError(ctx, account, statusCode, http.Header{}, responseBody)
+	}
+	if statusCode != 0 && statusCode != http.StatusRequestTimeout && (statusCode < 500 || statusCode > 599) {
+		return false
+	}
+
+	now := time.Now()
+	until := now.Add(time.Duration(defaultFailoverTempUnschedSeconds) * time.Second)
+	state := &TempUnschedState{
+		UntilUnix:       until.Unix(),
+		TriggeredAtUnix: now.Unix(),
+		StatusCode:      statusCode,
+		MatchedKeyword:  "failover",
+		RuleIndex:       -1,
+		ErrorMessage:    truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
+	}
+	reason := ""
+	if raw, err := json.Marshal(state); err == nil {
+		reason = string(raw)
+	}
+	if reason == "" {
+		reason = fmt.Sprintf("failover temporary unschedulable: status=%d", statusCode)
+	}
+	s.notifyAccountSchedulingBlocked(account, until, "failover_transient")
+	if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, reason); err != nil {
+		slog.Warn("failover_temp_unsched_set_failed", "account_id", account.ID, "status_code", statusCode, "error", err)
+		return false
+	}
+	if s.tempUnschedCache != nil {
+		if err := s.tempUnschedCache.SetTempUnsched(ctx, account.ID, state); err != nil {
+			slog.Warn("failover_temp_unsched_cache_set_failed", "account_id", account.ID, "status_code", statusCode, "error", err)
+		}
+	}
+	slog.Warn("account_failover_temp_unschedulable", "account_id", account.ID, "until", until, "status_code", statusCode)
+	return true
 }
 
 // PreCheckUsage proactively checks local quota before dispatching a request.

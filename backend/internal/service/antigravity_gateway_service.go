@@ -2510,7 +2510,7 @@ handleSuccess:
 
 func (s *AntigravityGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	switch statusCode {
-	case 401, 403, 429, 529:
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusRequestTimeout, http.StatusTooManyRequests, 529:
 		return true
 	default:
 		return statusCode >= 500

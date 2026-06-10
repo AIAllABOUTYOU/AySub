@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -139,7 +138,14 @@ func (h *OpenAIGatewayHandler) Videos(c *gin.Context) {
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, false, &streamStarted, reqLog)
+		accountReleaseFunc, acquireFailoverErr, acquired := h.acquireResponsesAccountSlotForFailover(c, apiKey.GroupID, sessionHash, selection, false, &streamStarted, reqLog)
+		if acquireFailoverErr != nil {
+			if !h.handleOpenAIAccountFailover(c, reqLog, account, acquireFailoverErr, failedAccountIDs, &lastFailoverErr, &switchCount, maxAccountSwitches) {
+				h.handleFailoverExhausted(c, acquireFailoverErr, streamStarted)
+				return
+			}
+			continue
+		}
 		if !acquired {
 			return
 		}
@@ -155,29 +161,21 @@ func (h *OpenAIGatewayHandler) Videos(c *gin.Context) {
 		}()
 		service.SetOpsLatencyMs(c, service.OpsResponseLatencyMsKey, time.Since(forwardStart).Milliseconds())
 		if err != nil {
-			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			if failoverErr, ok := ClassifyUpstreamFailoverError(c.Request.Context(), err); ok {
 				if failoverErr.RetryableOnSameAccount {
 					retryLimit := account.GetPoolModeRetryCount()
 					if sameAccountRetryCount[account.ID] < retryLimit {
 						sameAccountRetryCount[account.ID]++
-						select {
-						case <-c.Request.Context().Done():
+						if !sleepOpenAISameAccountRetry(c.Request.Context(), sameAccountRetryDelay) {
 							return
-						case <-time.After(sameAccountRetryDelay):
 						}
 						continue
 					}
 				}
-				h.gatewayService.RecordOpenAIAccountSwitch()
-				failedAccountIDs[account.ID] = struct{}{}
-				lastFailoverErr = failoverErr
-				if switchCount >= maxAccountSwitches {
+				if !h.handleOpenAIAccountFailover(c, reqLog, account, failoverErr, failedAccountIDs, &lastFailoverErr, &switchCount, maxAccountSwitches) {
 					h.handleFailoverExhausted(c, failoverErr, streamStarted)
 					return
 				}
-				switchCount++
 				continue
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)

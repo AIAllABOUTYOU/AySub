@@ -14,9 +14,10 @@ import (
 // Mock
 // ---------------------------------------------------------------------------
 
-// mockTempUnscheduler 记录 TempUnscheduleRetryableError 的调用信息。
+// mockTempUnscheduler 记录临时封禁调用信息。
 type mockTempUnscheduler struct {
-	calls []tempUnscheduleCall
+	retryableCalls []tempUnscheduleCall
+	failoverCalls  []tempUnscheduleCall
 }
 
 type tempUnscheduleCall struct {
@@ -25,7 +26,11 @@ type tempUnscheduleCall struct {
 }
 
 func (m *mockTempUnscheduler) TempUnscheduleRetryableError(_ context.Context, accountID int64, failoverErr *service.UpstreamFailoverError) {
-	m.calls = append(m.calls, tempUnscheduleCall{accountID: accountID, failoverErr: failoverErr})
+	m.retryableCalls = append(m.retryableCalls, tempUnscheduleCall{accountID: accountID, failoverErr: failoverErr})
+}
+
+func (m *mockTempUnscheduler) TempUnscheduleFailoverError(_ context.Context, accountID int64, failoverErr *service.UpstreamFailoverError) {
+	m.failoverCalls = append(m.failoverCalls, tempUnscheduleCall{accountID: accountID, failoverErr: failoverErr})
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +145,10 @@ func TestHandleFailoverError_BasicSwitch(t *testing.T) {
 		require.Contains(t, fs.FailedAccountIDs, int64(100))
 		require.Equal(t, err, fs.LastFailoverErr)
 		require.False(t, fs.ForceCacheBilling)
-		require.Empty(t, mock.calls, "不应调用 TempUnschedule")
+		require.Empty(t, mock.retryableCalls, "非重试错误不应调用 Retryable TempUnschedule")
+		require.Len(t, mock.failoverCalls, 1, "进入 failover 时应调用通用 TempUnschedule")
+		require.Equal(t, int64(100), mock.failoverCalls[0].accountID)
+		require.Equal(t, err, mock.failoverCalls[0].failoverErr)
 	})
 
 	t.Run("非重试错误_Antigravity_第一次切换无延迟", func(t *testing.T) {
@@ -285,7 +293,8 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 		require.Equal(t, 1, fs.SameAccountRetryCount[100])
 		require.Equal(t, 0, fs.SwitchCount, "同账号重试不应增加切换计数")
 		require.NotContains(t, fs.FailedAccountIDs, int64(100), "同账号重试不应加入失败列表")
-		require.Empty(t, mock.calls, "同账号重试期间不应调用 TempUnschedule")
+		require.Empty(t, mock.retryableCalls, "同账号重试期间不应调用 Retryable TempUnschedule")
+		require.Empty(t, mock.failoverCalls, "同账号重试期间不应调用通用 TempUnschedule")
 		// 验证等待了 sameAccountRetryDelay (500ms)
 		require.GreaterOrEqual(t, elapsed, 400*time.Millisecond)
 		require.Less(t, elapsed, 2*time.Second)
@@ -302,7 +311,8 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 			require.Equal(t, i, fs.SameAccountRetryCount[100])
 		}
 
-		require.Empty(t, mock.calls, "达到最大重试次数前均不应调用 TempUnschedule")
+		require.Empty(t, mock.retryableCalls, "达到最大重试次数前均不应调用 Retryable TempUnschedule")
+		require.Empty(t, mock.failoverCalls, "达到最大重试次数前均不应调用通用 TempUnschedule")
 	})
 
 	t.Run("超过最大重试次数后触发TempUnschedule并切换", func(t *testing.T) {
@@ -322,9 +332,12 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 		require.Contains(t, fs.FailedAccountIDs, int64(100))
 
 		// 验证 TempUnschedule 被调用
-		require.Len(t, mock.calls, 1)
-		require.Equal(t, int64(100), mock.calls[0].accountID)
-		require.Equal(t, err, mock.calls[0].failoverErr)
+		require.Len(t, mock.retryableCalls, 1)
+		require.Equal(t, int64(100), mock.retryableCalls[0].accountID)
+		require.Equal(t, err, mock.retryableCalls[0].failoverErr)
+		require.Len(t, mock.failoverCalls, 1)
+		require.Equal(t, int64(100), mock.failoverCalls[0].accountID)
+		require.Equal(t, err, mock.failoverCalls[0].failoverErr)
 	})
 
 	t.Run("不同账号独立跟踪重试次数", func(t *testing.T) {
@@ -360,7 +373,8 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 		// 再次遇到账号 100，计数仍为 maxSameAccountRetries，条件不满足 → 直接切换
 		action = fs.HandleFailoverError(context.Background(), mock, 100, "openai", err)
 		require.Equal(t, FailoverContinue, action)
-		require.Len(t, mock.calls, 2, "第二次耗尽也应调用 TempUnschedule")
+		require.Len(t, mock.retryableCalls, 2, "第二次耗尽也应调用 Retryable TempUnschedule")
+		require.Len(t, mock.failoverCalls, 2, "第二次耗尽也应调用通用 TempUnschedule")
 	})
 }
 
@@ -369,13 +383,16 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleFailoverError_TempUnschedule(t *testing.T) {
-	t.Run("非重试错误不调用TempUnschedule", func(t *testing.T) {
+	t.Run("非重试错误只调用通用TempUnschedule", func(t *testing.T) {
 		mock := &mockTempUnscheduler{}
 		fs := NewFailoverState(3, false)
 		err := newTestFailoverErr(500, false, false) // RetryableOnSameAccount=false
 
 		fs.HandleFailoverError(context.Background(), mock, 100, "openai", err)
-		require.Empty(t, mock.calls)
+		require.Empty(t, mock.retryableCalls)
+		require.Len(t, mock.failoverCalls, 1)
+		require.Equal(t, int64(100), mock.failoverCalls[0].accountID)
+		require.Equal(t, err, mock.failoverCalls[0].failoverErr)
 	})
 
 	t.Run("重试错误耗尽后调用TempUnschedule_传入正确参数", func(t *testing.T) {
@@ -389,10 +406,13 @@ func TestHandleFailoverError_TempUnschedule(t *testing.T) {
 		// 再次触发时才会执行 TempUnschedule + 切换
 		fs.HandleFailoverError(context.Background(), mock, 42, "openai", err)
 
-		require.Len(t, mock.calls, 1)
-		require.Equal(t, int64(42), mock.calls[0].accountID)
-		require.Equal(t, 502, mock.calls[0].failoverErr.StatusCode)
-		require.True(t, mock.calls[0].failoverErr.RetryableOnSameAccount)
+		require.Len(t, mock.retryableCalls, 1)
+		require.Equal(t, int64(42), mock.retryableCalls[0].accountID)
+		require.Equal(t, 502, mock.retryableCalls[0].failoverErr.StatusCode)
+		require.True(t, mock.retryableCalls[0].failoverErr.RetryableOnSameAccount)
+		require.Len(t, mock.failoverCalls, 1)
+		require.Equal(t, int64(42), mock.failoverCalls[0].accountID)
+		require.Equal(t, 502, mock.failoverCalls[0].failoverErr.StatusCode)
 	})
 }
 
@@ -531,7 +551,8 @@ func TestHandleFailoverError_IntegrationScenario(t *testing.T) {
 		action := fs.HandleFailoverError(context.Background(), mock, 100, "openai", retryErr)
 		require.Equal(t, FailoverContinue, action)
 		require.Equal(t, 1, fs.SwitchCount)
-		require.Len(t, mock.calls, 1)
+		require.Len(t, mock.retryableCalls, 1)
+		require.Len(t, mock.failoverCalls, 1)
 
 		// 3. 账号 200 遇到不可重试错误 → 直接切换
 		switchErr := newTestFailoverErr(500, false, false)
@@ -552,7 +573,8 @@ func TestHandleFailoverError_IntegrationScenario(t *testing.T) {
 		require.Equal(t, 3, fs.SwitchCount, "耗尽时不再递增")
 		require.Len(t, fs.FailedAccountIDs, 4, "4个不同账号都在失败列表中")
 		require.True(t, fs.ForceCacheBilling)
-		require.Len(t, mock.calls, 1, "只有账号 100 触发了 TempUnschedule")
+		require.Len(t, mock.retryableCalls, 1, "只有账号 100 触发了 Retryable TempUnschedule")
+		require.Len(t, mock.failoverCalls, 4, "每个进入 failover 的账号都应触发通用 TempUnschedule")
 	})
 
 	t.Run("模拟Antigravity平台完整流程", func(t *testing.T) {

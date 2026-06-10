@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -143,7 +142,14 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		account := selection.Account
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, accountAcquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, "", selection, false, &streamStarted, reqLog)
+		accountReleaseFunc, acquireFailoverErr, accountAcquired := h.acquireResponsesAccountSlotForFailover(c, apiKey.GroupID, "", selection, false, &streamStarted, reqLog)
+		if acquireFailoverErr != nil {
+			if !h.handleOpenAIAccountFailover(c, reqLog, account, acquireFailoverErr, failedAccountIDs, &lastFailoverErr, &switchCount, maxAccountSwitches) {
+				h.handleFailoverExhausted(c, acquireFailoverErr, false)
+				return
+			}
+			continue
+		}
 		if !accountAcquired {
 			return
 		}
@@ -174,27 +180,15 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 		service.SetOpsLatencyMs(c, service.OpsResponseLatencyMsKey, responseLatencyMs)
 
 		if err != nil {
-			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
+			if failoverErr, ok := ClassifyUpstreamFailoverError(c.Request.Context(), err); ok {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleFailoverExhausted(c, failoverErr, true)
 					return
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
-				h.gatewayService.RecordOpenAIAccountSwitch()
-				failedAccountIDs[account.ID] = struct{}{}
-				lastFailoverErr = failoverErr
-				if switchCount >= maxAccountSwitches {
+				if !h.handleOpenAIAccountFailover(c, reqLog, account, failoverErr, failedAccountIDs, &lastFailoverErr, &switchCount, maxAccountSwitches) {
 					h.handleFailoverExhausted(c, failoverErr, false)
 					return
 				}
-				switchCount++
-				reqLog.Warn("openai_embeddings.upstream_failover_switching",
-					zap.Int64("account_id", account.ID),
-					zap.Int("upstream_status", failoverErr.StatusCode),
-					zap.Int("switch_count", switchCount),
-					zap.Int("max_switches", maxAccountSwitches),
-				)
 				continue
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)

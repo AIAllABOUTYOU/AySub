@@ -14,6 +14,7 @@ import (
 // GatewayService 隐式实现此接口。
 type TempUnscheduler interface {
 	TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *service.UpstreamFailoverError)
+	TempUnscheduleFailoverError(ctx context.Context, accountID int64, failoverErr *service.UpstreamFailoverError)
 }
 
 // FailoverAction 表示 failover 错误处理后的下一步动作
@@ -95,6 +96,7 @@ func (s *FailoverState) HandleFailoverError(
 	if failoverErr.RetryableOnSameAccount {
 		gatewayService.TempUnscheduleRetryableError(ctx, accountID, failoverErr)
 	}
+	gatewayService.TempUnscheduleFailoverError(ctx, accountID, failoverErr)
 
 	// 加入失败列表
 	s.FailedAccountIDs[accountID] = struct{}{}

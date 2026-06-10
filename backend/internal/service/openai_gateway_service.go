@@ -379,6 +379,7 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+	selectionCursors                    *accountSelectionCursorStore
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -438,6 +439,7 @@ func NewOpenAIGatewayService(
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
+		selectionCursors:      newAccountSelectionCursorStore(),
 	}
 	if rateLimitService != nil {
 		rateLimitService.SetAccountRuntimeBlocker(svc)
@@ -1943,6 +1945,20 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		return nil, ErrNoAvailableAccounts
 	}
 
+	strategy := normalizeAccountSelectionStrategy(cfg.SelectionStrategy)
+	if strategy != AccountSelectionStrategyLoadAware {
+		key := accountSelectionKey("openai", derefGroupID(groupID), requestedModel, requireCompact, requiredCapability)
+		if selection, ok, selectErr := s.tryAcquireOpenAIBySelectionStrategy(ctx, candidates, groupID, sessionHash, requestedModel, requireCompact, requiredCapability, needsUpstreamCheck, strategy, key); selectErr != nil {
+			return nil, selectErr
+		} else if ok {
+			return selection, nil
+		}
+		if requireCompact && baseCandidateCount > 0 {
+			return nil, ErrNoAvailableCompactAccounts
+		}
+		return nil, ErrNoAvailableAccounts
+	}
+
 	accountLoads := make([]AccountWithConcurrency, 0, len(candidates))
 	for _, acc := range candidates {
 		accountLoads = append(accountLoads, AccountWithConcurrency{
@@ -2241,6 +2257,110 @@ func (s *OpenAIGatewayService) newAcquiredSelectionResult(ctx context.Context, a
 	return selection, err
 }
 
+func (s *OpenAIGatewayService) tryAcquireOpenAIBySelectionStrategy(
+	ctx context.Context,
+	candidates []*Account,
+	groupID *int64,
+	sessionHash string,
+	requestedModel string,
+	requireCompact bool,
+	requiredCapability OpenAIEndpointCapability,
+	needsUpstreamCheck bool,
+	strategy AccountSelectionStrategy,
+	key string,
+) (*AccountSelectionResult, bool, error) {
+	ordered := s.orderOpenAIAccountsBySelectionStrategy(candidates, requireCompact, strategy, key)
+	for _, acc := range ordered {
+		fresh := s.resolveFreshSchedulableOpenAIAccount(ctx, acc, requestedModel, false, requiredCapability)
+		if fresh == nil {
+			continue
+		}
+		fresh = s.recheckSelectedOpenAIAccountFromDB(ctx, fresh, requestedModel, requireCompact, requiredCapability)
+		if fresh == nil {
+			continue
+		}
+		if needsUpstreamCheck && groupID != nil && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, fresh, requestedModel, requireCompact) {
+			continue
+		}
+		result, err := s.tryAcquireAccountSlot(ctx, fresh.ID, fresh.Concurrency)
+		if err != nil {
+			return nil, false, err
+		}
+		if result != nil && result.Acquired {
+			selection, selectErr := s.newAcquiredSelectionResult(ctx, fresh, result.ReleaseFunc)
+			if selectErr != nil {
+				return nil, true, selectErr
+			}
+			if sessionHash != "" {
+				_ = s.setStickySessionAccountID(ctx, groupID, sessionHash, fresh.ID, openaiStickySessionTTL)
+			}
+			return selection, true, nil
+		}
+	}
+
+	cfg := s.schedulingConfig()
+	for _, acc := range ordered {
+		fresh := s.resolveFreshSchedulableOpenAIAccount(ctx, acc, requestedModel, false, requiredCapability)
+		if fresh == nil {
+			continue
+		}
+		fresh = s.recheckSelectedOpenAIAccountFromDB(ctx, fresh, requestedModel, requireCompact, requiredCapability)
+		if fresh == nil {
+			continue
+		}
+		if needsUpstreamCheck && groupID != nil && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, fresh, requestedModel, requireCompact) {
+			continue
+		}
+		selection, err := s.newSelectionResult(ctx, fresh, false, nil, &AccountWaitPlan{
+			AccountID:      fresh.ID,
+			MaxConcurrency: fresh.Concurrency,
+			Timeout:        cfg.FallbackWaitTimeout,
+			MaxWaiting:     cfg.FallbackMaxWaiting,
+		})
+		return selection, true, err
+	}
+	return nil, false, nil
+}
+
+func (s *OpenAIGatewayService) orderOpenAIAccountsBySelectionStrategy(candidates []*Account, requireCompact bool, strategy AccountSelectionStrategy, key string) []*Account {
+	var ordered []*Account
+	switch strategy {
+	case AccountSelectionStrategyRoundRobin:
+		if s.selectionCursors == nil {
+			s.selectionCursors = newAccountSelectionCursorStore()
+		}
+		ordered = s.selectionCursors.order(key, candidates)
+	case AccountSelectionStrategyFillFirst:
+		ordered = sortAccountsByPriorityAndID(candidates)
+	default:
+		ordered = append([]*Account(nil), candidates...)
+		sortAccountsByPriorityAndLastUsed(ordered, false)
+	}
+	if requireCompact {
+		ordered = prioritizeOpenAICompactAccounts(ordered)
+	}
+	return ordered
+}
+
+func (s *OpenAIGatewayService) TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
+	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+		return
+	}
+	s.TempUnscheduleFailoverError(ctx, accountID, failoverErr)
+}
+
+func (s *OpenAIGatewayService) TempUnscheduleFailoverError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
+	if s == nil || s.rateLimitService == nil || s.accountRepo == nil || accountID <= 0 || failoverErr == nil {
+		return
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil || account == nil {
+		slog.Warn("openai_failover_temp_unschedule_account_load_failed", "account_id", accountID, "error", err)
+		return
+	}
+	s.rateLimitService.MarkTransientFailover(ctx, account, failoverErr.StatusCode, failoverErr.ResponseBody)
+}
+
 func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig {
 	if s.cfg != nil {
 		return s.cfg.Gateway.Scheduling
@@ -2250,6 +2370,7 @@ func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig
 		StickySessionWaitTimeout: 45 * time.Second,
 		FallbackWaitTimeout:      30 * time.Second,
 		FallbackMaxWaiting:       100,
+		SelectionStrategy:        string(AccountSelectionStrategyLoadAware),
 		LoadBatchEnabled:         true,
 		SlotCleanupInterval:      30 * time.Second,
 	}
@@ -2286,7 +2407,7 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 
 func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	switch statusCode {
-	case 401, 402, 403, 429, 529:
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusRequestTimeout, http.StatusTooManyRequests, 529:
 		return true
 	default:
 		return statusCode >= 500
@@ -3456,10 +3577,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 func shouldFailoverOpenAIPassthroughResponse(statusCode int) bool {
 	switch statusCode {
-	case http.StatusTooManyRequests, 529:
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, 529:
 		return true
 	default:
-		return false
+		return statusCode >= 500
 	}
 }
 

@@ -354,6 +354,13 @@ func (h *ConcurrencyHelper) AcquireAccountSlotWithWaitTimeout(c *gin.Context, ac
 	return h.waitForSlotWithPingTimeout(c, "account", accountID, maxConcurrency, timeout, isStream, streamStarted, true)
 }
 
+// AcquireAccountSlotWithWaitTimeoutSilent acquires an account slot without writing
+// pre-upstream SSE ping frames. This preserves bootstrap failover for streaming
+// requests until the upstream actually sends data.
+func (h *ConcurrencyHelper) AcquireAccountSlotWithWaitTimeoutSilent(c *gin.Context, accountID int64, maxConcurrency int, timeout time.Duration, isStream bool, streamStarted *bool) (func(), error) {
+	return h.waitForSlotWithPingTimeout(c, "account", accountID, maxConcurrency, timeout, false, streamStarted, true)
+}
+
 // nextBackoff 计算下一次退避时间
 // 性能优化：使用指数退避 + 随机抖动，避免惊群效应
 // current: 当前退避时间

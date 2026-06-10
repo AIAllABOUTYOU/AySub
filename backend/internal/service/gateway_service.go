@@ -566,6 +566,12 @@ type UpstreamFailoverError struct {
 }
 
 func (e *UpstreamFailoverError) Error() string {
+	if e == nil {
+		return "upstream error: failover"
+	}
+	if msg := strings.TrimSpace(extractUpstreamErrorMessage(e.ResponseBody)); msg != "" {
+		return fmt.Sprintf("upstream request failed: %s (status=%d, failover)", sanitizeUpstreamErrorMessage(msg), e.StatusCode)
+	}
 	return fmt.Sprintf("upstream error: %d (failover)", e.StatusCode)
 }
 
@@ -582,6 +588,18 @@ func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accou
 	case http.StatusBadGateway:
 		tempUnscheduleEmptyResponse(ctx, s.accountRepo, accountID, "[handler]")
 	}
+}
+
+func (s *GatewayService) TempUnscheduleFailoverError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
+	if s == nil || s.rateLimitService == nil || s.accountRepo == nil || accountID <= 0 || failoverErr == nil {
+		return
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil || account == nil {
+		slog.Warn("failover_temp_unschedule_account_load_failed", "account_id", accountID, "error", err)
+		return
+	}
+	s.rateLimitService.MarkTransientFailover(ctx, account, failoverErr.StatusCode, failoverErr.ResponseBody)
 }
 
 // GatewayService handles API gateway operations
@@ -622,6 +640,7 @@ type GatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	selectionCursors      *accountSelectionCursorStore
 }
 
 // NewGatewayService creates a new GatewayService
@@ -689,6 +708,7 @@ func NewGatewayService(
 		resolver:              resolver,
 		balanceNotifyService:  balanceNotifyService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		selectionCursors:      newAccountSelectionCursorStore(),
 	}
 	svc.userGroupRateResolver = newUserGroupRateResolver(
 		userGroupRateRepo,
@@ -2061,6 +2081,17 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		return nil, ErrNoAvailableAccounts
 	}
 
+	strategy := normalizeAccountSelectionStrategy(cfg.SelectionStrategy)
+	if strategy != AccountSelectionStrategyLoadAware {
+		key := accountSelectionKey("gateway", platform, useMixed, derefGroupID(groupID), requestedModel)
+		if result, ok, selectErr := s.tryAcquireBySelectionStrategy(ctx, candidates, groupID, sessionHash, preferOAuth, strategy, key); selectErr != nil {
+			return nil, selectErr
+		} else if ok {
+			return result, nil
+		}
+		return nil, ErrNoAvailableAccounts
+	}
+
 	accountLoads := make([]AccountWithConcurrency, 0, len(candidates))
 	for _, acc := range candidates {
 		accountLoads = append(accountLoads, AccountWithConcurrency{
@@ -2148,7 +2179,43 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 func (s *GatewayService) tryAcquireByLegacyOrder(ctx context.Context, candidates []*Account, groupID *int64, sessionHash string, preferOAuth bool) (*AccountSelectionResult, bool, error) {
 	ordered := append([]*Account(nil), candidates...)
 	sortAccountsByPriorityAndLastUsed(ordered, preferOAuth)
+	return s.tryAcquireOrderedCandidates(ctx, ordered, groupID, sessionHash)
+}
 
+func (s *GatewayService) tryAcquireBySelectionStrategy(ctx context.Context, candidates []*Account, groupID *int64, sessionHash string, preferOAuth bool, strategy AccountSelectionStrategy, key string) (*AccountSelectionResult, bool, error) {
+	var ordered []*Account
+	switch strategy {
+	case AccountSelectionStrategyRoundRobin:
+		if s.selectionCursors == nil {
+			s.selectionCursors = newAccountSelectionCursorStore()
+		}
+		ordered = s.selectionCursors.order(key, candidates)
+	case AccountSelectionStrategyFillFirst:
+		ordered = sortAccountsByPriorityAndID(candidates)
+	default:
+		ordered = append([]*Account(nil), candidates...)
+		sortAccountsByPriorityAndLastUsed(ordered, preferOAuth)
+	}
+	if result, ok, err := s.tryAcquireOrderedCandidates(ctx, ordered, groupID, sessionHash); err != nil || ok {
+		return result, ok, err
+	}
+	for _, acc := range ordered {
+		if !s.checkAndRegisterSession(ctx, acc, sessionHash) {
+			continue
+		}
+		cfg := s.schedulingConfig()
+		selection, err := s.newSelectionResult(ctx, acc, false, nil, &AccountWaitPlan{
+			AccountID:      acc.ID,
+			MaxConcurrency: acc.Concurrency,
+			Timeout:        cfg.FallbackWaitTimeout,
+			MaxWaiting:     cfg.FallbackMaxWaiting,
+		})
+		return selection, true, err
+	}
+	return nil, false, nil
+}
+
+func (s *GatewayService) tryAcquireOrderedCandidates(ctx context.Context, ordered []*Account, groupID *int64, sessionHash string) (*AccountSelectionResult, bool, error) {
 	for _, acc := range ordered {
 		result, err := s.tryAcquireAccountSlot(ctx, acc.ID, acc.Concurrency)
 		if err == nil && result.Acquired {
@@ -2180,6 +2247,7 @@ func (s *GatewayService) schedulingConfig() config.GatewaySchedulingConfig {
 		StickySessionWaitTimeout: 45 * time.Second,
 		FallbackWaitTimeout:      30 * time.Second,
 		FallbackMaxWaiting:       100,
+		SelectionStrategy:        string(AccountSelectionStrategyLoadAware),
 		LoadBatchEnabled:         true,
 		SlotCleanupInterval:      30 * time.Second,
 	}
@@ -3902,7 +3970,7 @@ func (s *GatewayService) shouldRetryUpstreamError(account *Account, statusCode i
 // shouldFailoverUpstreamError determines whether an upstream error should trigger account failover.
 func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	switch statusCode {
-	case 401, 403, 429, 529:
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusRequestTimeout, http.StatusTooManyRequests, 529:
 		return true
 	default:
 		return statusCode >= 500

@@ -70,6 +70,9 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	if cfg.Gateway.Scheduling.FallbackMaxWaiting != 100 {
 		t.Fatalf("FallbackMaxWaiting = %d, want 100", cfg.Gateway.Scheduling.FallbackMaxWaiting)
 	}
+	if cfg.Gateway.Scheduling.SelectionStrategy != "load-aware" {
+		t.Fatalf("SelectionStrategy = %q, want load-aware", cfg.Gateway.Scheduling.SelectionStrategy)
+	}
 	if !cfg.Gateway.Scheduling.LoadBatchEnabled {
 		t.Fatalf("LoadBatchEnabled = false, want true")
 	}
@@ -78,6 +81,30 @@ func TestLoadDefaultSchedulingConfig(t *testing.T) {
 	}
 	if cfg.Gateway.Scheduling.SlotCleanupInterval != 30*time.Second {
 		t.Fatalf("SlotCleanupInterval = %v, want 30s", cfg.Gateway.Scheduling.SlotCleanupInterval)
+	}
+}
+
+func TestValidateSchedulingSelectionStrategy(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty uses default", input: "", want: "load-aware"},
+		{name: "case insensitive", input: " ROUND-ROBIN ", want: "round-robin"},
+		{name: "fill first", input: "fill-first", want: "fill-first"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			cfg, err := Load()
+			require.NoError(t, err)
+
+			cfg.Gateway.Scheduling.SelectionStrategy = tt.input
+			require.NoError(t, cfg.Validate())
+			require.Equal(t, tt.want, cfg.Gateway.Scheduling.SelectionStrategy)
+		})
 	}
 }
 
@@ -1313,6 +1340,11 @@ func TestValidateConfigErrors(t *testing.T) {
 			name:    "gateway connection isolation",
 			mutate:  func(c *Config) { c.Gateway.ConnectionPoolIsolation = "invalid" },
 			wantErr: "gateway.connection_pool_isolation",
+		},
+		{
+			name:    "gateway scheduling selection strategy",
+			mutate:  func(c *Config) { c.Gateway.Scheduling.SelectionStrategy = "random" },
+			wantErr: "gateway.scheduling.selection_strategy",
 		},
 		{
 			name:    "gateway stream keepalive range",

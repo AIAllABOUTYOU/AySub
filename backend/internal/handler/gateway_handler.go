@@ -432,7 +432,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					}
 				}
 
-				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeoutSilent(
 					c,
 					account.ID,
 					selection.WaitPlan.MaxConcurrency,
@@ -491,8 +491,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				accountReleaseFunc()
 			}
 			if err != nil {
-				var failoverErr *service.UpstreamFailoverError
-				if errors.As(err, &failoverErr) {
+				if failoverErr, ok := ClassifyUpstreamFailoverError(c.Request.Context(), err); ok {
 					// 流式内容已写入客户端，无法撤销，禁止 failover 以防止流拼接腐化
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, service.PlatformGemini, true)
@@ -730,7 +729,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					}
 				}
 
-				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeout(
+				accountReleaseFunc, err = h.concurrencyHelper.AcquireAccountSlotWithWaitTimeoutSilent(
 					c,
 					account.ID,
 					selection.WaitPlan.MaxConcurrency,
@@ -913,8 +912,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					_ = h.antigravityGatewayService.WriteMappedClaudeError(c, account, promptTooLongErr.StatusCode, promptTooLongErr.RequestID, promptTooLongErr.Body)
 					return
 				}
-				var failoverErr *service.UpstreamFailoverError
-				if errors.As(err, &failoverErr) {
+				if failoverErr, ok := ClassifyUpstreamFailoverError(c.Request.Context(), err); ok {
 					// 流式内容已写入客户端，无法撤销，禁止 failover 以防止流拼接腐化
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, account.Platform, true)

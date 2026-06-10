@@ -257,6 +257,25 @@ func TestWaitForSlotWithPingTimeout_TimeoutAndStreamPing(t *testing.T) {
 	})
 }
 
+func TestAcquireAccountSlotWithWaitTimeoutSilent_DoesNotWriteStreamPing(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{
+		accountSeq: []bool{false, false, false},
+	}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatComment, 10*time.Millisecond)
+	c, rec := newHelperTestContext(http.MethodPost, "/v1/messages")
+	streamStarted := false
+
+	release, err := helper.AcquireAccountSlotWithWaitTimeoutSilent(c, 101, 2, 70*time.Millisecond, true, &streamStarted)
+	require.Nil(t, release)
+	var cErr *ConcurrencyError
+	require.ErrorAs(t, err, &cErr)
+	require.True(t, cErr.IsTimeout)
+	require.False(t, streamStarted)
+	require.Empty(t, rec.Body.String())
+	require.Equal(t, 0, rec.Body.Len())
+}
+
 func TestWaitForSlotWithPingTimeout_ParentContextCanceled(t *testing.T) {
 	cache := &helperConcurrencyCacheStub{
 		accountSeq: []bool{false},

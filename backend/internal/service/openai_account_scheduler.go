@@ -719,6 +719,14 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 	req OpenAIAccountScheduleRequest,
 	plan openAIAccountLoadPlan,
 ) []openAIAccountCandidateScore {
+	strategy := AccountSelectionStrategyLoadAware
+	if s != nil && s.service != nil {
+		strategy = normalizeAccountSelectionStrategy(s.service.schedulingConfig().SelectionStrategy)
+	}
+	if strategy != AccountSelectionStrategyLoadAware {
+		return s.buildOpenAISelectionOrderByConfiguredStrategy(req, plan, strategy)
+	}
+
 	buildSelectionOrder := func(pool []openAIAccountCandidateScore) []openAIAccountCandidateScore {
 		if len(pool) == 0 || plan.topK <= 0 {
 			return nil
@@ -752,6 +760,78 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 	}
 
 	return buildSelectionOrder(plan.candidates)
+}
+
+func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrderByConfiguredStrategy(
+	req OpenAIAccountScheduleRequest,
+	plan openAIAccountLoadPlan,
+	strategy AccountSelectionStrategy,
+) []openAIAccountCandidateScore {
+	buildSelectionOrder := func(pool []openAIAccountCandidateScore, keySuffix string) []openAIAccountCandidateScore {
+		if len(pool) == 0 {
+			return nil
+		}
+		accounts := make([]*Account, 0, len(pool))
+		byID := make(map[int64]openAIAccountCandidateScore, len(pool))
+		for _, candidate := range pool {
+			if candidate.account == nil {
+				continue
+			}
+			accounts = append(accounts, candidate.account)
+			byID[candidate.account.ID] = candidate
+		}
+		var orderedAccounts []*Account
+		switch strategy {
+		case AccountSelectionStrategyRoundRobin:
+			if s.service.selectionCursors == nil {
+				s.service.selectionCursors = newAccountSelectionCursorStore()
+			}
+			key := accountSelectionKey(
+				"openai-advanced",
+				derefGroupID(req.GroupID),
+				req.RequestedModel,
+				req.RequiredTransport,
+				req.RequiredCapability,
+				req.RequiredImageCapability,
+				req.RequireCompact,
+				keySuffix,
+			)
+			orderedAccounts = s.service.selectionCursors.order(key, accounts)
+		case AccountSelectionStrategyFillFirst:
+			orderedAccounts = sortAccountsByPriorityAndID(accounts)
+		default:
+			orderedAccounts = sortAccountsByPriorityAndID(accounts)
+		}
+		ordered := make([]openAIAccountCandidateScore, 0, len(orderedAccounts))
+		for _, account := range orderedAccounts {
+			if candidate, ok := byID[account.ID]; ok {
+				ordered = append(ordered, candidate)
+			}
+		}
+		return ordered
+	}
+
+	if req.RequireCompact {
+		supported := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
+		unknown := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
+		for _, candidate := range plan.candidates {
+			switch openAICompactSupportTier(candidate.account) {
+			case 2:
+				supported = append(supported, candidate)
+			case 1:
+				unknown = append(unknown, candidate)
+			}
+		}
+		selectionOrder := make([]openAIAccountCandidateScore, 0, len(plan.allCandidates))
+		selectionOrder = append(selectionOrder, buildSelectionOrder(supported, "compact-supported")...)
+		selectionOrder = append(selectionOrder, buildSelectionOrder(unknown, "compact-unknown")...)
+		if len(plan.staleSnapshotCompactRetry) > 0 && s.service.schedulerSnapshot != nil {
+			selectionOrder = append(selectionOrder, sortOpenAICompactRetryCandidates(plan.staleSnapshotCompactRetry)...)
+		}
+		return selectionOrder
+	}
+
+	return buildSelectionOrder(plan.candidates, "default")
 }
 
 func sortOpenAICompactRetryCandidates(pool []openAIAccountCandidateScore) []openAIAccountCandidateScore {
