@@ -138,6 +138,9 @@ func grokWebUAArch(ua string) string {
 func buildGrokDynamicStatsigID() string {
 	seed := strconv.FormatInt(time.Now().UnixNano(), 36)
 	msg := "x1:TypeError: Cannot read properties of undefined (reading '" + seed + "')"
+	if time.Now().UnixNano()%2 == 0 {
+		msg = "x1:TypeError: Cannot read properties of null (reading 'children[\\'" + seed + "\\']')"
+	}
 	return base64.StdEncoding.EncodeToString([]byte(msg))
 }
 
