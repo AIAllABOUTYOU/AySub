@@ -422,14 +422,14 @@ function handleShowAnnouncementDetail(event: CustomEvent) {
 
 onMounted(() => {
   document.addEventListener('keydown', handleEscape)
-  window.addEventListener('show-announcement-detail', handleShowAnnouncementDetail as EventListener)
+  window.addEventListener('show-announcement-detail', handleShowAnnouncementDetail as any)
   // Fetch announcements on mount
   announcementStore.fetchAnnouncements()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleEscape)
-  window.removeEventListener('show-announcement-detail', handleShowAnnouncementDetail as EventListener)
+  window.removeEventListener('show-announcement-detail', handleShowAnnouncementDetail as any)
   document.body.style.overflow = ''
 })
 

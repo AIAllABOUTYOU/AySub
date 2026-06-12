@@ -21,7 +21,7 @@
           v-for="item in visibleNavItems"
           :key="`${item.label}-${item.url}`"
           :href="item.url"
-          class="relative rounded-md px-3 py-2 text-sm font-medium transition hover:bg-white/8 hover:text-white"
+          class="relative rounded-md px-3 py-2 text-sm font-medium transition hover:bg-white/10 hover:text-white"
           :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300'"
           :target="linkTarget(item.url)"
           :rel="linkRel(item.url)"
@@ -64,7 +64,7 @@
         </a>
         <!-- Mobile Menu Button -->
         <button
-          class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/8 hover:text-white"
+          class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/10 hover:text-white"
           @click="mobileMenuOpen = !mobileMenuOpen"
           :aria-label="mobileMenuOpen ? '关闭菜单' : '打开菜单'"
           :aria-expanded="mobileMenuOpen"
@@ -83,7 +83,7 @@
             :key="`mobile-${item.label}-${item.url}`"
             :href="item.url"
             class="relative block rounded-md px-3 py-2 text-sm font-medium transition"
-            :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300 hover:bg-white/8 hover:text-white'"
+            :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
             :target="linkTarget(item.url)"
             :rel="linkRel(item.url)"
             @click="handleMobileNavClick($event, item.url)"
@@ -228,11 +228,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .home-icon-button {
-  @apply flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition-all hover:bg-white/8 hover:text-white hover:scale-105;
+  @apply flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 transition-all hover:bg-white/10 hover:text-white hover:scale-105;
 }
 
 .home-nav-active {
-  @apply text-white bg-white/8;
+  @apply text-white bg-white/10;
 }
 
 .home-nav-active::after {
