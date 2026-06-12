@@ -48,6 +48,23 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
+// ListPublic handles listing announcements for anonymous users (no auth required)
+// GET /api/v1/announcements/public
+func (h *AnnouncementHandler) ListPublic(c *gin.Context) {
+	// For public access, we list all active announcements without read status
+	items, err := h.announcementService.ListForUser(c.Request.Context(), 0, false)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	out := make([]dto.UserAnnouncement, 0, len(items))
+	for i := range items {
+		out = append(out, *dto.UserAnnouncementFromService(&items[i]))
+	}
+	response.Success(c, out)
+}
+
 // MarkRead marks an announcement as read for current user
 // POST /api/v1/announcements/:id/read
 func (h *AnnouncementHandler) MarkRead(c *gin.Context) {

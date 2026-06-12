@@ -392,6 +392,8 @@ export default {
     total: '总计',
     balance: '余额',
     available: '可用',
+    viewDetails: '查看详情',
+    previous: '上一个',
     copiedToClipboard: '已复制到剪贴板',
     copied: '已复制',
     copyFailed: '复制失败',
@@ -1403,6 +1405,7 @@ export default {
     publicDescription: '公开查看已启用渠道中的可用模型、分组倍率和展示价格，登录后可查看与你账户权限匹配的完整可用入口。',
     searchPlaceholder: '搜索模型、平台、渠道或分组...',
     empty: '暂无可用模型',
+    emptyHint: '调整筛选条件或稍后刷新模型数据',
     noGroups: '暂无可访问分组',
     modelSubtitle: '{count} 个可用入口',
     filteredCount: '显示 {filtered} / {total} 个模型',
@@ -1413,6 +1416,29 @@ export default {
       title: '筛选',
       clear: '清除',
       allPlatforms: '全部平台'
+    },
+    toolbar: {
+      multiplier: '倍率',
+      density: '密度'
+    },
+    sort: {
+      default: '默认排序',
+      price: '价格低到高',
+      channels: '渠道数',
+      name: '模型名'
+    },
+    views: {
+      cards: '卡片',
+      table: '表格'
+    },
+    filterGroups: {
+      providers: '供应商',
+      types: '模型类型',
+      allTypes: '全部类型',
+      tags: '标签',
+      allTags: '全部标签',
+      groups: '可用令牌分组',
+      allGroups: '全部分组'
     },
     stats: {
       models: '{count} 个模型',
@@ -5071,6 +5097,11 @@ export default {
       createSuccess: '计划创建成功',
       updateSuccess: '计划更新成功',
       deleteSuccess: '计划删除成功',
+      loadFailed: '加载计划失败',
+      createFailed: '创建计划失败',
+      updateFailed: '更新计划失败',
+      deleteFailed: '删除计划失败',
+      loadResultsFailed: '加载结果失败',
       results: '测试结果',
       noResults: '暂无测试结果',
       responseText: '响应',
@@ -5434,7 +5465,8 @@ export default {
       },
       notifyModeLabels: {
         silent: '静默',
-        popup: '弹窗'
+        popup: '弹窗',
+        banner: '横幅'
       },
       form: {
         title: '标题',
@@ -7616,11 +7648,19 @@ export default {
   // Custom Page (iframe embed)
   customPage: {
     title: '自定义页面',
+    toc: '目录',
     openInNewTab: '新窗口打开',
     notFoundTitle: '页面不存在',
     notFoundDesc: '该自定义页面不存在或已被删除。',
     notConfiguredTitle: '页面链接未配置',
     notConfiguredDesc: '该自定义页面的 URL 未正确配置。',
+    pageNotFound: '页面未找到',
+    failedToLoad: '加载页面失败'
+  },
+
+  // Account Inspection (admin)
+  accountInspection: {
+    noLogs: '暂无日志'
   },
 
   // Announcements Page

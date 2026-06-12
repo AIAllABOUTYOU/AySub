@@ -240,3 +240,8 @@ htmlcov/
 sub2api/
 new-api/
 grok2api/
+*.md
+
+!README_CN.md
+!README_JA.md
+!README.md

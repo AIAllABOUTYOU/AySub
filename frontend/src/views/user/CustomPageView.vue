@@ -35,7 +35,7 @@
             class="toc-sidebar"
           >
             <div class="toc-header">
-              <span class="toc-title">目录</span>
+              <span class="toc-title">{{ t('customPage.toc') }}</span>
               <button class="toc-close-btn" @click="tocVisible = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
@@ -64,7 +64,7 @@
             @click="tocVisible = true"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-            <span class="ml-1 text-xs">目录</span>
+            <span class="ml-1 text-xs">{{ t('customPage.toc') }}</span>
           </button>
 
           <!-- Content -->
@@ -229,7 +229,7 @@ async function fetchAndRenderMarkdown(slug: string) {
       headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
     })
     if (!resp.ok) {
-      renderedHtml.value = '<p class="text-red-500">Page not found</p>'
+      renderedHtml.value = `<p class="text-red-500">${t('customPage.pageNotFound')}</p>`
       return
     }
     let raw = await resp.text()
@@ -262,7 +262,7 @@ async function fetchAndRenderMarkdown(slug: string) {
     renderedHtml.value = withIds
     tocItems.value = toc
   } catch {
-    renderedHtml.value = '<p class="text-red-500">Failed to load page</p>'
+    renderedHtml.value = `<p class="text-red-500">${t('customPage.failedToLoad')}</p>`
   } finally {
     loading.value = false
     await nextTick()

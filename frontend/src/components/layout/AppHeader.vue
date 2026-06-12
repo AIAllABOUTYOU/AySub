@@ -21,11 +21,8 @@
         </div>
       </div>
 
-      <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
+      <!-- Right: Docs + Announcements + Language + Subscriptions + Balance + User Dropdown -->
       <div class="flex items-center gap-3">
-        <!-- Announcement Bell -->
-        <AnnouncementBell v-if="user" />
-
         <!-- Docs Link -->
         <a
           v-if="docUrl"
@@ -37,6 +34,9 @@
           <Icon name="book" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.docs') }}</span>
         </a>
+
+        <!-- Announcement Bell (before language switcher) -->
+        <AnnouncementBell />
 
         <!-- Language Switcher -->
         <LocaleSwitcher />

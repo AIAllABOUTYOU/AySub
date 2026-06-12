@@ -17,4 +17,10 @@ func RegisterPublicStatusRoutes(v1 *gin.RouterGroup, h *handler.Handlers) {
 	{
 		models.GET("/marketplace", h.AvailableChannel.PublicMarketplace)
 	}
+
+	// Public announcements (no auth required)
+	announcements := v1.Group("/announcements")
+	{
+		announcements.GET("/public", h.Announcement.ListPublic)
+	}
 }

@@ -60,15 +60,26 @@ export async function initI18n(): Promise<void> {
 }
 
 export async function setLocale(locale: string): Promise<void> {
+  console.log('[i18n] setLocale called with:', locale)
+
   if (!isLocaleCode(locale)) {
+    console.warn('[i18n] Invalid locale code:', locale)
     return
   }
 
+  console.log('[i18n] Loading locale messages...')
   await loadLocaleMessages(locale)
+
+  console.log('[i18n] Setting i18n.global.locale.value to:', locale)
   i18n.global.locale.value = locale
+
+  console.log('[i18n] Saving to localStorage')
   localStorage.setItem(LOCALE_KEY, locale)
+
+  console.log('[i18n] Setting document lang attribute')
   document.documentElement.setAttribute('lang', locale)
 
+  console.log('[i18n] Updating document title...')
   // 同步更新浏览器页签标题，使其跟随语言切换
   const { resolveDocumentTitle } = await import('@/router/title')
   const { default: router } = await import('@/router')
@@ -76,6 +87,8 @@ export async function setLocale(locale: string): Promise<void> {
   const route = router.currentRoute.value
   const appStore = useAppStore()
   document.title = resolveDocumentTitle(route.meta.title, appStore.siteName, route.meta.titleKey as string)
+
+  console.log('[i18n] setLocale completed successfully')
 }
 
 export function getLocale(): LocaleCode {

@@ -518,7 +518,7 @@ const exportToExcel = async () => {
       saveAs(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `usage_${filters.value.start_date}_to_${filters.value.end_date}.xlsx`)
       appStore.showSuccess(t('usage.exportSuccess'))
     }
-  } catch (error) { console.error('Failed to export:', error); appStore.showError('Export Failed') }
+  } catch (error) { console.error('Failed to export:', error); appStore.showError(t('usage.exportFailed')) }
   finally { if(exportAbortController === c) { exportAbortController = null; exporting.value = false; exportProgress.show = false } }
 }
 

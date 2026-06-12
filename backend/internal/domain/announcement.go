@@ -16,6 +16,7 @@ const (
 const (
 	AnnouncementNotifyModeSilent = "silent"
 	AnnouncementNotifyModePopup  = "popup"
+	AnnouncementNotifyModeBanner = "banner"
 )
 
 const (

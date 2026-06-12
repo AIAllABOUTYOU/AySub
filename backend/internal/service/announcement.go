@@ -18,6 +18,7 @@ const (
 const (
 	AnnouncementNotifyModeSilent = domain.AnnouncementNotifyModeSilent
 	AnnouncementNotifyModePopup  = domain.AnnouncementNotifyModePopup
+	AnnouncementNotifyModeBanner = domain.AnnouncementNotifyModeBanner
 )
 
 const (

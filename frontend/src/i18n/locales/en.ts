@@ -392,6 +392,8 @@ export default {
     total: 'Total',
     balance: 'Balance',
     available: 'Available',
+    viewDetails: 'View Details',
+    previous: 'Previous',
     copiedToClipboard: 'Copied to clipboard',
     copied: 'Copied',
     copyFailed: 'Failed to copy',
@@ -1400,6 +1402,7 @@ export default {
     publicDescription: 'Browse available models, group multipliers, and display pricing from enabled public channels. Sign in to see the full entries matched to your account permissions.',
     searchPlaceholder: 'Search models, platforms, channels, or groups...',
     empty: 'No available models',
+    emptyHint: 'Adjust filters or refresh model data later',
     noGroups: 'No accessible groups',
     modelSubtitle: '{count} available entries',
     filteredCount: 'Showing {filtered} / {total} models',
@@ -1410,6 +1413,29 @@ export default {
       title: 'Filters',
       clear: 'Clear',
       allPlatforms: 'All platforms'
+    },
+    toolbar: {
+      multiplier: 'Multiplier',
+      density: 'Density'
+    },
+    sort: {
+      default: 'Default',
+      price: 'Price (Low to High)',
+      channels: 'Channels',
+      name: 'Model Name'
+    },
+    views: {
+      cards: 'Cards',
+      table: 'Table'
+    },
+    filterGroups: {
+      providers: 'Providers',
+      types: 'Model Types',
+      allTypes: 'All Types',
+      tags: 'Tags',
+      allTags: 'All Tags',
+      groups: 'Available Groups',
+      allGroups: 'All Groups'
     },
     stats: {
       models: '{count} models',
@@ -5282,7 +5308,8 @@ export default {
       },
       notifyModeLabels: {
         silent: 'Silent',
-        popup: 'Popup'
+        popup: 'Popup',
+        banner: 'Banner'
       },
       form: {
         title: 'Title',
@@ -7464,11 +7491,19 @@ export default {
   // Custom Page (iframe embed)
   customPage: {
     title: 'Custom Page',
+    toc: 'Table of Contents',
     openInNewTab: 'Open in new tab',
     notFoundTitle: 'Page not found',
     notFoundDesc: 'This custom page does not exist or has been removed.',
     notConfiguredTitle: 'Page URL not configured',
     notConfiguredDesc: 'The URL for this custom page has not been properly configured.',
+    pageNotFound: 'Page not found',
+    failedToLoad: 'Failed to load page'
+  },
+
+  // Account Inspection (admin)
+  accountInspection: {
+    noLogs: 'No logs'
   },
 
   // Announcements Page

@@ -64,6 +64,6 @@ func (h *CheckinHandler) Claim(c *gin.Context) {
 	if status.NewBalance != nil {
 		metadata["new_balance"] = *status.NewBalance
 	}
-	securityAuditForUser(c, h.securityAuditService, subject.UserID, "", "checkin.claim", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "daily check-in completed", metadata)
+	securityAuditForUser(c, h.securityAuditService, subject.UserID, "", "checkin.claim", service.SecurityAuditResultSuccess, service.SecurityAuditRiskLow, "每日签到完成", metadata)
 	response.Success(c, status)
 }

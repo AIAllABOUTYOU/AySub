@@ -57,8 +57,44 @@
             >
               {{ t('home.login') }}
             </a>
+            <!-- Mobile Menu Button -->
+            <button
+              class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/8 hover:text-white"
+              @click="mobileMenuOpen = !mobileMenuOpen"
+              :aria-label="mobileMenuOpen ? '关闭菜单' : '打开菜单'"
+              :aria-expanded="mobileMenuOpen"
+            >
+              <Icon :name="mobileMenuOpen ? 'x' : 'menu'" size="md" />
+            </button>
           </div>
         </nav>
+
+        <!-- Mobile Menu -->
+        <Transition name="slide-down">
+          <div v-if="mobileMenuOpen" class="md:hidden border-t border-white/10 bg-[#08090f]/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#08090f]/95">
+            <nav class="mx-auto max-w-7xl space-y-1 px-4 py-3">
+              <a
+                v-for="item in publicNavItems"
+                :key="`mobile-${item.label}-${item.url}`"
+                :href="publicNavUrl(item.url)"
+                class="relative block rounded-md px-3 py-2 text-sm font-medium transition"
+                :class="publicNavUrl(item.url) === '/models' ? 'marketplace-public-nav-active' : 'text-slate-300 hover:bg-white/8 hover:text-white'"
+                :target="linkTarget(publicNavUrl(item.url))"
+                :rel="linkRel(publicNavUrl(item.url))"
+                @click="handleMobileNavClick($event, publicNavUrl(item.url))"
+              >
+                {{ item.label }}
+              </a>
+              <a
+                href="/login"
+                class="block rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:hidden"
+                @click="handleMobileNavClick($event, '/login')"
+              >
+                {{ t('home.login') }}
+              </a>
+            </nav>
+          </div>
+        </Transition>
       </header>
     </template>
 
@@ -861,6 +897,7 @@ const densityMode = ref<'m' | 'k'>('m')
 const showMultiplier = ref(false)
 const selectedRow = ref<ModelMarketplaceRow | null>(null)
 const calculatorOpen = ref(false)
+const mobileMenuOpen = ref(false)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const calculatorForm = reactive({
   modelKey: '',
@@ -1429,6 +1466,11 @@ function handlePublicLink(event: MouseEvent, url: string) {
   if (!url || !isInternalURL(url)) return
   event.preventDefault()
   router.push(url)
+}
+
+function handleMobileNavClick(event: MouseEvent, url: string) {
+  mobileMenuOpen.value = false
+  handlePublicLink(event, url)
 }
 
 function toggleTheme() {
@@ -2058,5 +2100,37 @@ onMounted(() => {
   .marketplace-model-card {
     min-height: auto;
   }
+}
+
+/* 移动端菜单动画 */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-down-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 日间模式移动端菜单 */
+.home-light .md\:hidden.border-t {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+}
+
+.home-light .md\:hidden nav a {
+  color: rgb(51 65 85);
+}
+
+.home-light .md\:hidden nav a:hover {
+  background: rgba(8, 145, 178, 0.08);
+  color: rgb(15 23 42);
 }
 </style>

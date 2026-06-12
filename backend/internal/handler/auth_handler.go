@@ -222,7 +222,7 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 	}
 
 	response.Success(c, SendVerifyCodeResponse{
-		Message:   "Verification code sent successfully",
+		Message:   "验证码已发送",
 		Countdown: result.Countdown,
 	})
 }
@@ -664,7 +664,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	response.Success(c, ForgotPasswordResponse{
-		Message: "If your email is registered, you will receive a password reset link shortly.",
+		Message: "如果您的邮箱已注册，您将很快收到密码重置链接",
 	})
 }
 
@@ -696,7 +696,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	}
 
 	response.Success(c, ResetPasswordResponse{
-		Message: "Your password has been reset successfully. You can now log in with your new password.",
+		Message: "密码重置成功，您现在可以使用新密码登录",
 	})
 }
 
@@ -772,7 +772,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	clearOAuthLogoutCookies(c)
 
 	response.Success(c, LogoutResponse{
-		Message: "Logged out successfully",
+		Message: "已成功退出登录",
 	})
 }
 

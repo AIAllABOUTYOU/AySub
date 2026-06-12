@@ -231,7 +231,7 @@
           <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" @click="logs = []">清空</button>
         </div>
         <div class="max-h-48 overflow-auto rounded-lg bg-gray-950 p-3 font-mono text-xs leading-5 text-gray-100">
-          <div v-if="logs.length === 0" class="text-gray-500">No logs</div>
+          <div v-if="logs.length === 0" class="text-gray-500">{{ t('accountInspection.noLogs') }}</div>
           <div v-for="(line, index) in logs" :key="index">{{ line }}</div>
         </div>
       </section>
@@ -242,6 +242,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api/admin'
@@ -255,6 +256,7 @@ import { useAppStore } from '@/stores/app'
 
 type TabKey = 'all' | 'failed' | 'delete' | 'disable' | 'enable' | 'reauth' | 'success'
 
+const { t } = useI18n()
 const router = useRouter()
 const appStore = useAppStore()
 

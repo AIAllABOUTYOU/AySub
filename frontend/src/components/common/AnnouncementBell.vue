@@ -374,13 +374,19 @@ async function markAsRead(id: number) {
   try {
     await announcementStore.markAsRead(id)
   } catch (err: any) {
-    appStore.showError(err?.message || t('common.unknownError'))
+    // Silently fail for unauthenticated users (401)
+    if (err?.response?.status !== 401) {
+      appStore.showError(err?.message || t('common.unknownError'))
+    }
   }
 }
 
 async function markAsReadAndClose(id: number) {
   await markAsRead(id)
-  appStore.showSuccess(t('announcements.markedAsRead'))
+  // Only show success if user is authenticated
+  if (!selectedAnnouncement.value?.read_at) {
+    appStore.showSuccess(t('announcements.markedAsRead'))
+  }
   closeDetail()
 }
 
@@ -389,7 +395,10 @@ async function markAllAsRead() {
     await announcementStore.markAllAsRead()
     appStore.showSuccess(t('announcements.allMarkedAsRead'))
   } catch (err: any) {
-    appStore.showError(err?.message || t('common.unknownError'))
+    // Silently fail for unauthenticated users (401)
+    if (err?.response?.status !== 401) {
+      appStore.showError(err?.message || t('common.unknownError'))
+    }
   }
 }
 
@@ -403,12 +412,24 @@ function handleEscape(e: KeyboardEvent) {
   }
 }
 
+// Listen for custom event from AnnouncementBanner
+function handleShowAnnouncementDetail(event: CustomEvent) {
+  const { announcement } = event.detail
+  if (announcement) {
+    openDetail(announcement)
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleEscape)
+  window.addEventListener('show-announcement-detail', handleShowAnnouncementDetail as EventListener)
+  // Fetch announcements on mount
+  announcementStore.fetchAnnouncements()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleEscape)
+  window.removeEventListener('show-announcement-detail', handleShowAnnouncementDetail as EventListener)
   document.body.style.overflow = ''
 })
 

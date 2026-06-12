@@ -552,7 +552,7 @@ func (h *AuthHandler) SendPendingOAuthVerifyCode(c *gin.Context) {
 	}
 
 	response.Success(c, SendVerifyCodeResponse{
-		Message:   "Verification code sent successfully",
+		Message:   "验证码已发送",
 		Countdown: result.Countdown,
 	})
 }

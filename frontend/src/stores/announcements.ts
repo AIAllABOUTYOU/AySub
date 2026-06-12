@@ -33,8 +33,19 @@ export const useAnnouncementStore = defineStore('announcements', () => {
 
     try {
       loading.value = true
-      const all = await announcementsAPI.list(false)
-      announcements.value = all.slice(0, 20)
+      // Try authenticated endpoint first, fallback to public if not authenticated
+      try {
+        const all = await announcementsAPI.list(false)
+        announcements.value = all.slice(0, 20)
+      } catch (err: any) {
+        // If 401 (unauthorized), try public endpoint
+        if (err?.response?.status === 401) {
+          const all = await announcementsAPI.listPublic()
+          announcements.value = all.slice(0, 20)
+        } else {
+          throw err
+        }
+      }
       enqueueNewPopups()
     } catch (err: any) {
       // Revert throttle timestamp on failure so retry is allowed
@@ -93,7 +104,10 @@ export const useAnnouncementStore = defineStore('announcements', () => {
         ann.read_at = new Date().toISOString()
       }
     } catch (err: any) {
-      console.error('Failed to mark announcement as read:', err)
+      // Silently fail for unauthenticated users
+      if (err?.response?.status !== 401) {
+        console.error('Failed to mark announcement as read:', err)
+      }
     }
   }
 

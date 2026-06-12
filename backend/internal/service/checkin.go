@@ -132,7 +132,7 @@ func (s *CheckinService) Claim(ctx context.Context, userID int64, userTZ string)
 		LastCheckinAt:   &record.CreatedAt,
 		StreakDays:      streak,
 		Balance:         &record.BalanceAfter,
-		Message:         "daily check-in completed",
+		Message:         "签到成功",
 		AwardedAmount:   &awarded,
 		NewBalance:      &newBalance,
 		Record:          record,

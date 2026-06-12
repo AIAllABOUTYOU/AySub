@@ -15,11 +15,24 @@
   <div v-else class="home-shell min-h-screen overflow-hidden text-slate-100" :class="isDark ? 'home-dark' : 'home-light'">
     <div class="home-grid" aria-hidden="true"></div>
 
-    <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl">
-      <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <a href="#top" class="flex min-w-0 items-center gap-3" @click="handleHomeLink($event, '#top')">
+    <!-- Scroll Progress Bar (优化1) -->
+    <div class="fixed left-0 top-0 z-50 h-1 bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-300"
+         :style="{ width: scrollProgress + '%' }"></div>
+
+    <!-- Loading Skeleton (优化1) -->
+    <div v-if="loading" class="fixed inset-0 z-40 flex items-center justify-center bg-[#08090f]">
+      <div class="flex flex-col items-center gap-4">
+        <div class="h-12 w-12 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent"></div>
+        <p class="text-sm text-slate-400">{{ t('common.loading') || '加载中...' }}</p>
+      </div>
+    </div>
+
+    <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl"
+            :class="{ 'shadow-lg shadow-black/20': scrollY > 50 }">
+      <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="主导航">
+        <a href="#top" class="flex min-w-0 items-center gap-3" @click="handleHomeLink($event, '#top')" aria-label="返回顶部">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/25 bg-white/8 shadow-lg shadow-cyan-500/10">
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" />
+            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" loading="lazy" />
           </span>
           <span class="min-w-0">
             <span class="block truncate text-sm font-semibold text-white">{{ siteName }}</span>
@@ -32,7 +45,8 @@
             v-for="item in visibleNavItems"
             :key="`${item.label}-${item.url}`"
             :href="item.url"
-            class="rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white"
+            class="relative rounded-md px-3 py-2 text-sm font-medium transition hover:bg-white/8 hover:text-white"
+            :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300'"
             :target="linkTarget(item.url)"
             :rel="linkRel(item.url)"
             @click="handleHomeLink($event, item.url)"
@@ -50,12 +64,14 @@
             rel="noopener noreferrer"
             class="home-icon-button"
             :title="t('home.viewDocs')"
+            aria-label="查看文档"
           >
             <Icon name="book" size="md" />
           </a>
           <button
             class="home-icon-button"
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
             @click="toggleTheme"
           >
             <Icon v-if="isDark" name="sun" size="md" />
@@ -68,8 +84,44 @@
           >
             {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
           </a>
+          <!-- Mobile Menu Button (优化2) -->
+          <button
+            class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/8 hover:text-white"
+            @click="mobileMenuOpen = !mobileMenuOpen"
+            :aria-label="mobileMenuOpen ? '关闭菜单' : '打开菜单'"
+            :aria-expanded="mobileMenuOpen"
+          >
+            <Icon :name="mobileMenuOpen ? 'x' : 'menu'" size="md" />
+          </button>
         </div>
       </nav>
+
+      <!-- Mobile Menu (优化2) -->
+      <Transition name="slide-down">
+        <div v-if="mobileMenuOpen" class="md:hidden border-t border-white/10 bg-[#08090f]/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#08090f]/95">
+          <nav class="mx-auto max-w-7xl space-y-1 px-4 py-3" aria-label="移动端导航">
+            <a
+              v-for="item in visibleNavItems"
+              :key="`mobile-${item.label}-${item.url}`"
+              :href="item.url"
+              class="relative block rounded-md px-3 py-2 text-sm font-medium transition"
+              :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300 hover:bg-white/8 hover:text-white'"
+              :target="linkTarget(item.url)"
+              :rel="linkRel(item.url)"
+              @click="handleMobileNavClick($event, item.url)"
+            >
+              {{ item.label }}
+            </a>
+            <a
+              :href="isAuthenticated ? dashboardPath : '/login'"
+              class="block rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:hidden"
+              @click="handleMobileNavClick($event, isAuthenticated ? dashboardPath : '/login')"
+            >
+              {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
+            </a>
+          </nav>
+        </div>
+      </Transition>
     </header>
 
     <main id="top" class="relative">
@@ -110,9 +162,10 @@
 
           <div class="mt-10 grid gap-3 sm:grid-cols-3">
             <div
-              v-for="stat in visibleStats"
+              v-for="(stat, index) in visibleStats"
               :key="`${stat.value}-${stat.label}`"
-              class="rounded-lg border border-white/10 bg-white/[0.045] p-4 backdrop-blur"
+              class="animate-on-scroll rounded-lg border border-white/10 bg-white/[0.045] p-4 backdrop-blur"
+              :style="{ animationDelay: `${index * 100}ms` }"
             >
               <div class="text-2xl font-semibold text-white">{{ stat.value }}</div>
               <div class="mt-1 text-sm text-slate-400">{{ stat.label }}</div>
@@ -148,9 +201,10 @@
 
           <div class="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <article
-              v-for="feature in visibleFeatures"
+              v-for="(feature, index) in visibleFeatures"
               :key="feature.title"
-              class="home-card rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-white/[0.07]"
+              class="animate-on-scroll home-card rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-white/[0.07]"
+              :style="{ animationDelay: `${index * 100}ms` }"
             >
               <div class="mb-4 flex items-center justify-between gap-3">
                 <span class="flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">
@@ -339,11 +393,23 @@
         </div>
       </div>
     </footer>
+
+    <!-- Back to Top Button (优化2) -->
+    <Transition name="fade">
+      <button
+        v-show="showBackToTop"
+        @click="scrollToTop"
+        class="fixed bottom-8 right-8 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500 text-white shadow-lg transition hover:bg-cyan-400 hover:shadow-xl"
+        aria-label="返回顶部"
+      >
+        <Icon name="arrowUp" size="md" />
+      </button>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
@@ -395,6 +461,14 @@ const isHomeContentUrl = computed(() => {
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const githubUrl = 'https://github.com/AIAllABOUTYOU/AySub'
+
+// 新增状态 (优化1-10)
+const loading = ref(true)
+const scrollY = ref(0)
+const scrollProgress = ref(0)
+const showBackToTop = ref(false)
+const mobileMenuOpen = ref(false)
+const activeSection = ref('')
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
@@ -508,6 +582,33 @@ const visibleInfoItems = computed(() => visibleItems(resolvedHome.value.info_ite
 const visibleCustomSections = computed(() => visibleItems(resolvedHome.value.custom_sections))
 const terminalLines = computed(() => resolvedHome.value.terminal_lines.filter((line) => line.trim().length > 0))
 const primaryActionUrl = computed(() => resolvedHome.value.primary_cta_url || (isAuthenticated.value ? dashboardPath.value : '/login'))
+
+// SEO优化 (优化10) - 使用原生方式
+function updateMetaTags() {
+  // 更新页面标题
+  document.title = `${siteName.value} - ${siteSubtitle.value}`
+
+  // 更新或创建meta标签
+  const updateMeta = (name: string, content: string, isProperty = false) => {
+    const attribute = isProperty ? 'property' : 'name'
+    let meta = document.querySelector(`meta[${attribute}="${name}"]`) as HTMLMetaElement
+    if (!meta) {
+      meta = document.createElement('meta')
+      meta.setAttribute(attribute, name)
+      document.head.appendChild(meta)
+    }
+    meta.content = content
+  }
+
+  updateMeta('description', resolvedHome.value.hero_description)
+  updateMeta('og:title', `${siteName.value} - ${siteSubtitle.value}`, true)
+  updateMeta('og:description', resolvedHome.value.hero_description, true)
+  updateMeta('og:image', siteLogo.value || '/logo.png', true)
+  updateMeta('og:type', 'website', true)
+  updateMeta('twitter:card', 'summary_large_image')
+  updateMeta('twitter:title', `${siteName.value} - ${siteSubtitle.value}`)
+  updateMeta('twitter:description', resolvedHome.value.hero_description)
+}
 
 function mergeHomeConfig(base: ResolvedHomeConfig, custom: HomeConfig | null | undefined): ResolvedHomeConfig {
   const source = custom || {}
@@ -687,6 +788,70 @@ function handleHomeLink(event: MouseEvent, url: string) {
   }
 }
 
+function handleMobileNavClick(event: MouseEvent, url: string) {
+  mobileMenuOpen.value = false
+  handleHomeLink(event, url)
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function isActiveNavItem(url: string): boolean {
+  if (url.startsWith('#')) {
+    const section = url.substring(1)
+    // 特殊处理首页/顶部
+    if (section === 'top') {
+      return activeSection.value === 'top' || activeSection.value === '' || scrollY.value < 100
+    }
+    return activeSection.value === section
+  }
+  // 处理 /models 等外部链接
+  if (url.startsWith('/')) {
+    return window.location.pathname === url
+  }
+  return false
+}
+
+function handleScroll() {
+  scrollY.value = window.scrollY
+  const windowHeight = window.innerHeight
+  const documentHeight = document.documentElement.scrollHeight
+  const scrolled = window.scrollY
+  const maxScroll = documentHeight - windowHeight
+  scrollProgress.value = (scrolled / maxScroll) * 100
+  showBackToTop.value = scrollY.value > 300
+
+  // 检测当前激活的section
+  const sections = ['top', 'features', 'models', 'pricing', 'info']
+  for (const section of sections) {
+    const element = document.getElementById(section)
+    if (element) {
+      const rect = element.getBoundingClientRect()
+      if (rect.top <= 100 && rect.bottom >= 100) {
+        activeSection.value = section
+        break
+      }
+    }
+  }
+}
+
+function setupScrollAnimations() {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible')
+        }
+      })
+    },
+    { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
+  )
+
+  const animatedElements = document.querySelectorAll('.animate-on-scroll')
+  animatedElements.forEach((el) => observer.observe(el))
+}
+
 function toggleTheme() {
   isDark.value = !isDark.value
   document.documentElement.classList.toggle('dark', isDark.value)
@@ -708,7 +873,33 @@ onMounted(() => {
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }
+
+  // 更新SEO meta标签
+  updateMetaTags()
+
+  // 模拟加载完成
+  setTimeout(() => {
+    loading.value = false
+  }, 500)
+
+  // 添加滚动监听
+  window.addEventListener('scroll', handleScroll, { passive: true })
+
+  // 设置滚动动画
+  setTimeout(() => {
+    setupScrollAnimations()
+  }, 600)
+
+  // 清理
+  return () => {
+    window.removeEventListener('scroll', handleScroll)
+  }
 })
+
+// 监听配置变化，更新SEO标签
+watch([siteName, siteSubtitle, resolvedHome], () => {
+  updateMetaTags()
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -800,21 +991,22 @@ onMounted(() => {
 .home-light {
   color: rgb(51 65 85);
   background:
-    radial-gradient(circle at 14% 5%, rgba(8, 145, 178, 0.12), transparent 31rem),
-    radial-gradient(circle at 86% 28%, rgba(56, 189, 248, 0.1), transparent 30rem),
-    linear-gradient(180deg, #f8fafc, #eef6fb 46rem, #ffffff);
+    radial-gradient(circle at 14% 5%, rgba(8, 145, 178, 0.08), transparent 31rem),
+    radial-gradient(circle at 86% 28%, rgba(56, 189, 248, 0.06), transparent 30rem),
+    linear-gradient(180deg, #ffffff, #f8fafc 46rem, #ffffff);
 }
 
 .home-light .home-grid {
   background-image:
-    linear-gradient(rgba(15, 23, 42, 0.065) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.065) 1px, transparent 1px);
-  opacity: 0.65;
+    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  opacity: 0.5;
 }
 
 .home-light header {
-  border-bottom-color: rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
 }
 
 .home-light h1,
@@ -825,11 +1017,11 @@ onMounted(() => {
 }
 
 .home-light .text-slate-500 {
-  color: rgb(100 116 139);
+  color: rgb(71 85 105);
 }
 
 .home-light .text-slate-400 {
-  color: rgb(71 85 105);
+  color: rgb(100 116 139);
 }
 
 .home-light .text-slate-300,
@@ -839,16 +1031,18 @@ onMounted(() => {
 
 .home-light .text-cyan-200 {
   color: rgb(8 145 178);
+  font-weight: 600;
 }
 
 .home-light .text-cyan-100,
 .home-light .text-emerald-100,
 .home-light .text-amber-100 {
-  color: rgb(14 116 144);
+  color: rgb(6 95 120);
+  font-weight: 600;
 }
 
 .home-light .text-cyan-50\/75 {
-  color: rgba(236, 254, 255, 0.9);
+  color: rgba(8, 47, 73, 0.85);
 }
 
 .home-light .text-slate-950 {
@@ -875,27 +1069,32 @@ onMounted(() => {
 .home-light .bg-white\/\[0\.035\],
 .home-light .bg-white\/\[0\.04\],
 .home-light .bg-white\/\[0\.045\] {
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .home-light .bg-cyan-300\/10 {
   background-color: rgba(8, 145, 178, 0.08);
+  border: 1px solid rgba(8, 145, 178, 0.15);
 }
 
 .home-light .bg-emerald-300\/10 {
-  background-color: rgba(16, 185, 129, 0.1);
+  background-color: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
 }
 
 .home-light .bg-amber-200\/10 {
-  background-color: rgba(217, 119, 6, 0.1);
+  background-color: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.15);
 }
 
 .home-light .home-icon-button {
-  color: rgb(71 85 105);
+  color: rgb(51 65 85);
+  background: transparent;
 }
 
 .home-light .home-icon-button:hover {
-  background: rgba(15, 23, 42, 0.06);
+  background: rgba(15, 23, 42, 0.08);
   color: rgb(15 23 42);
 }
 
@@ -908,18 +1107,169 @@ onMounted(() => {
 }
 
 .home-light .home-card {
-  box-shadow: 0 16px 45px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 4px 16px rgba(8, 145, 178, 0.08);
+}
+
+.home-light .home-card:hover {
+  border-color: rgba(8, 145, 178, 0.3);
+  box-shadow: 0 8px 24px rgba(8, 145, 178, 0.12);
 }
 
 .home-light .home-terminal {
-  border-color: rgba(15, 23, 42, 0.12);
+  border-color: rgba(15, 23, 42, 0.15);
   background: #ffffff;
-  box-shadow: 0 22px 60px rgba(14, 116, 144, 0.16);
+  box-shadow: 0 12px 40px rgba(8, 145, 178, 0.12);
 }
 
 .home-light .home-terminal .border-white\/10 {
-  border-color: rgba(15, 23, 42, 0.08);
+  border-color: rgba(15, 23, 42, 0.1);
 }
+
+.home-light .home-terminal-line {
+  color: rgb(51 65 85);
+}
+
+.home-light .home-cta {
+  background:
+    radial-gradient(circle at 25% 35%, rgba(255, 255, 255, 0.5), transparent 35%),
+    linear-gradient(135deg, rgba(8, 145, 178, 0.12), rgba(14, 165, 233, 0.1), rgba(56, 189, 248, 0.08));
+  border: 1px solid rgba(8, 145, 178, 0.2);
+}
+
+/* 日间模式 - CTA区块内文字 */
+.home-light .home-cta h2 {
+  color: rgb(15 23 42);
+}
+
+.home-light .home-cta p {
+  color: rgb(51 65 85);
+}
+
+.home-light .home-cta a {
+  color: rgb(8 47 73);
+  background: rgba(8, 145, 178, 0.15);
+  border: 1px solid rgba(8, 145, 178, 0.3);
+}
+
+.home-light .home-cta a:hover {
+  background: rgba(8, 145, 178, 0.25);
+}
+
+/* 日间模式 - info区块小标签文字 */
+.home-light .text-slate-500,
+.home-light .rounded-lg .text-slate-500 {
+  color: rgb(100 116 139);
+}
+
+/* 日间模式 - info区块描述文字 */
+.home-light .text-slate-400,
+.home-light .rounded-lg .text-slate-400 {
+  color: rgb(71 85 105);
+}
+
+
+/* 新增动画样式 (优化4) */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.animate-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 滑动下拉动画 (优化2) */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-down-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 淡入淡出动画 (优化2) */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+/* 响应式优化 (优化7) */
+@media (min-width: 1536px) {
+  .home-shell > main > section {
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .home-shell > main > section {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+}
+
+/* 导航选中效果 - 参考模型页面 */
+.home-nav-active {
+  background: rgba(8, 145, 178, 0.1);
+  color: rgb(103 232 249);
+}
+
+.home-nav-active::after {
+  content: '';
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.28rem;
+  left: 0.7rem;
+  height: 2px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+/* 日间模式导航选中效果 */
+.home-light .home-nav-active {
+  border: 1px solid rgba(8, 145, 178, 0.18);
+  background: rgba(240, 249, 255, 0.9);
+  color: rgb(14 116 144);
+  box-shadow: 0 6px 18px rgba(8, 145, 178, 0.08);
+}
+
+.home-light .home-nav-active::after {
+  opacity: 1;
+}
+
+/* 日间模式移动端菜单 */
+.home-light .md\:hidden.border-t {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+}
+
+.home-light .md\:hidden nav a {
+  color: rgb(51 65 85);
+}
+
+.home-light .md\:hidden nav a:hover {
+  background: rgba(8, 145, 178, 0.08);
+  color: rgb(15 23 42);
+}
+
 
 .home-light .home-terminal-line,
 .home-light .home-terminal .text-slate-300 {
