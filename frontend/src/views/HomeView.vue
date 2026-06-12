@@ -27,103 +27,8 @@
       </div>
     </div>
 
-    <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl"
-            :class="{ 'shadow-lg shadow-black/20': scrollY > 50 }">
-      <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8" aria-label="主导航">
-        <a href="#top" class="flex min-w-0 items-center gap-3" @click="handleHomeLink($event, '#top')" aria-label="返回顶部">
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/25 bg-white/8 shadow-lg shadow-cyan-500/10">
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" loading="lazy" />
-          </span>
-          <span class="min-w-0">
-            <span class="block truncate text-sm font-semibold text-white">{{ siteName }}</span>
-            <span class="hidden truncate text-xs text-slate-400 sm:block">{{ siteSubtitle }}</span>
-          </span>
-        </a>
-
-        <div class="hidden items-center gap-1 md:flex">
-          <a
-            v-for="item in visibleNavItems"
-            :key="`${item.label}-${item.url}`"
-            :href="item.url"
-            class="relative rounded-md px-3 py-2 text-sm font-medium transition hover:bg-white/8 hover:text-white"
-            :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300'"
-            :target="linkTarget(item.url)"
-            :rel="linkRel(item.url)"
-            @click="handleHomeLink($event, item.url)"
-          >
-            {{ item.label }}
-          </a>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <AnnouncementBell />
-          <LocaleSwitcher />
-          <a
-            v-if="docUrl"
-            :href="docUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="home-icon-button"
-            :title="t('home.viewDocs')"
-            aria-label="查看文档"
-          >
-            <Icon name="book" size="md" />
-          </a>
-          <button
-            class="home-icon-button"
-            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
-            @click="toggleTheme"
-          >
-            <Icon v-if="isDark" name="sun" size="md" />
-            <Icon v-else name="moon" size="md" />
-          </button>
-          <a
-            :href="isAuthenticated ? dashboardPath : '/login'"
-            class="hidden rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:inline-flex"
-            @click="handleHomeLink($event, isAuthenticated ? dashboardPath : '/login')"
-          >
-            {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
-          </a>
-          <!-- Mobile Menu Button (优化2) -->
-          <button
-            class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/8 hover:text-white"
-            @click="mobileMenuOpen = !mobileMenuOpen"
-            :aria-label="mobileMenuOpen ? '关闭菜单' : '打开菜单'"
-            :aria-expanded="mobileMenuOpen"
-          >
-            <Icon :name="mobileMenuOpen ? 'x' : 'menu'" size="md" />
-          </button>
-        </div>
-      </nav>
-
-      <!-- Mobile Menu (优化2) -->
-      <Transition name="slide-down">
-        <div v-if="mobileMenuOpen" class="md:hidden border-t border-white/10 bg-[#08090f]/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#08090f]/95">
-          <nav class="mx-auto max-w-7xl space-y-1 px-4 py-3" aria-label="移动端导航">
-            <a
-              v-for="item in visibleNavItems"
-              :key="`mobile-${item.label}-${item.url}`"
-              :href="item.url"
-              class="relative block rounded-md px-3 py-2 text-sm font-medium transition"
-              :class="isActiveNavItem(item.url) ? 'home-nav-active' : 'text-slate-300 hover:bg-white/8 hover:text-white'"
-              :target="linkTarget(item.url)"
-              :rel="linkRel(item.url)"
-              @click="handleMobileNavClick($event, item.url)"
-            >
-              {{ item.label }}
-            </a>
-            <a
-              :href="isAuthenticated ? dashboardPath : '/login'"
-              class="block rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:hidden"
-              @click="handleMobileNavClick($event, isAuthenticated ? dashboardPath : '/login')"
-            >
-              {{ isAuthenticated ? t('home.dashboard') : t('home.login') }}
-            </a>
-          </nav>
-        </div>
-      </Transition>
-    </header>
+    <!-- Public Header -->
+    <PublicHeader :current-path="currentPath" home-url="#top" :dashboard-url="dashboardPath" />
 
     <!-- Announcement Banner -->
     <AnnouncementBanner />
@@ -417,9 +322,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
-import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import PublicHeader from '@/components/layout/PublicHeader.vue'
 import AnnouncementBanner from '@/components/common/AnnouncementBanner.vue'
-import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { isDefaultHomeText } from '@/utils/homeConfigDefaults'
 import type {
@@ -460,12 +364,14 @@ const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 const homeConfig = computed<HomeConfig>(() => appStore.cachedPublicSettings?.home_config || {})
 
+// Theme state - read from DOM since PublicHeader manages theme
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
+
 const isHomeContentUrl = computed(() => {
   const content = homeContent.value.trim()
   return content.startsWith('http://') || content.startsWith('https://')
 })
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
 const githubUrl = 'https://github.com/AIAllABOUTYOU/AySub'
 
 // 新增状态 (优化1-10)
@@ -473,12 +379,12 @@ const loading = ref(true)
 const scrollY = ref(0)
 const scrollProgress = ref(0)
 const showBackToTop = ref(false)
-const mobileMenuOpen = ref(false)
 const activeSection = ref('')
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
+const currentPath = computed(() => '/home')
 const currentYear = computed(() => new Date().getFullYear())
 
 const defaultHomeConfig = computed<ResolvedHomeConfig>(() => {
@@ -579,7 +485,6 @@ const defaultHomeConfig = computed<ResolvedHomeConfig>(() => {
 })
 
 const resolvedHome = computed<ResolvedHomeConfig>(() => mergeHomeConfig(defaultHomeConfig.value, homeConfig.value))
-const visibleNavItems = computed(() => visibleItems(resolvedHome.value.nav_items))
 const visibleStats = computed(() => visibleItems(resolvedHome.value.stats))
 const visibleFeatures = computed(() => visibleItems(resolvedHome.value.features))
 const visibleModels = computed(() => visibleItems(resolvedHome.value.models))
@@ -794,29 +699,8 @@ function handleHomeLink(event: MouseEvent, url: string) {
   }
 }
 
-function handleMobileNavClick(event: MouseEvent, url: string) {
-  mobileMenuOpen.value = false
-  handleHomeLink(event, url)
-}
-
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function isActiveNavItem(url: string): boolean {
-  if (url.startsWith('#')) {
-    const section = url.substring(1)
-    // 特殊处理首页/顶部
-    if (section === 'top') {
-      return activeSection.value === 'top' || activeSection.value === '' || scrollY.value < 100
-    }
-    return activeSection.value === section
-  }
-  // 处理 /models 等外部链接
-  if (url.startsWith('/')) {
-    return window.location.pathname === url
-  }
-  return false
 }
 
 function handleScroll() {
@@ -858,23 +742,7 @@ function setupScrollAnimations() {
   animatedElements.forEach((el) => observer.observe(el))
 }
 
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
-
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  isDark.value = shouldUseDark
-  document.documentElement.classList.toggle('dark', shouldUseDark)
-}
-
 onMounted(() => {
-  initTheme()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()

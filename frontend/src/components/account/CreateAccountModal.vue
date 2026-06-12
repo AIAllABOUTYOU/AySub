@@ -2591,9 +2591,9 @@
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
           <div>
-            <label class="input-label mb-0">请求头</label>
+            <label class="input-label mb-0">{{ t('admin.accounts.customHeaders') }}</label>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              为此账号的所有请求添加自定义 HTTP 请求头
+              {{ t('admin.accounts.customHeadersDesc') }}
             </p>
           </div>
           <button
@@ -2606,7 +2606,7 @@
               size="sm"
               :stroke-width="2"
             />
-            <span>{{ customHeadersExpanded ? '收起' : '展开' }}</span>
+            <span>{{ customHeadersExpanded ? t('admin.accounts.customHeadersCollapse') : t('admin.accounts.customHeadersExpand') }}</span>
           </button>
         </div>
 
@@ -2621,13 +2621,13 @@
                 v-model="header.key"
                 type="text"
                 class="input flex-1"
-                placeholder="X-Custom-Header"
+                :placeholder="t('admin.accounts.customHeadersKeyPlaceholder')"
               />
               <input
                 v-model="header.value"
                 type="text"
                 class="input flex-1"
-                placeholder="value"
+                :placeholder="t('admin.accounts.customHeadersValuePlaceholder')"
               />
               <button
                 type="button"
@@ -2645,7 +2645,7 @@
             class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
           >
             <Icon name="plus" size="sm" class="mr-1 inline" />
-            添加请求头
+            {{ t('admin.accounts.customHeadersAdd') }}
           </button>
         </div>
       </div>

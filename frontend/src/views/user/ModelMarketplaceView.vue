@@ -3,100 +3,8 @@
     <template v-if="!isAuthenticated">
       <div class="home-grid" aria-hidden="true"></div>
 
-      <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl">
-        <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <a href="/home" class="flex min-w-0 items-center gap-3" @click="handlePublicLink($event, '/home')">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/25 bg-white/8 shadow-lg shadow-cyan-500/10">
-              <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" />
-            </span>
-            <span class="min-w-0">
-              <span class="block truncate text-sm font-semibold text-white">{{ siteName }}</span>
-              <span class="hidden truncate text-xs text-slate-400 sm:block">{{ siteSubtitle }}</span>
-            </span>
-          </a>
-
-          <div class="hidden items-center gap-1 md:flex">
-            <a
-              v-for="item in publicNavItems"
-              :key="`${item.label}-${item.url}`"
-              :href="publicNavUrl(item.url)"
-              class="marketplace-public-nav-link rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white"
-              :class="publicNavUrl(item.url) === '/models' ? 'marketplace-public-nav-active' : ''"
-              :target="linkTarget(publicNavUrl(item.url))"
-              :rel="linkRel(publicNavUrl(item.url))"
-              @click="handlePublicLink($event, publicNavUrl(item.url))"
-            >
-              {{ item.label }}
-            </a>
-          </div>
-
-          <div class="relative z-50 flex items-center gap-2">
-            <AnnouncementBell />
-            <LocaleSwitcher />
-            <a
-              v-if="docUrl"
-              :href="docUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="home-icon-button"
-              :title="t('home.viewDocs')"
-            >
-              <Icon name="book" size="md" />
-            </a>
-            <button
-              class="home-icon-button"
-              :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-              @click="toggleTheme"
-            >
-              <Icon v-if="isDark" name="sun" size="md" />
-              <Icon v-else name="moon" size="md" />
-            </button>
-            <a
-              href="/login"
-              class="hidden rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:inline-flex"
-              @click="handlePublicLink($event, '/login')"
-            >
-              {{ t('home.login') }}
-            </a>
-            <!-- Mobile Menu Button -->
-            <button
-              class="md:hidden rounded-md p-2 text-slate-300 hover:bg-white/8 hover:text-white"
-              @click="mobileMenuOpen = !mobileMenuOpen"
-              :aria-label="mobileMenuOpen ? '关闭菜单' : '打开菜单'"
-              :aria-expanded="mobileMenuOpen"
-            >
-              <Icon :name="mobileMenuOpen ? 'x' : 'menu'" size="md" />
-            </button>
-          </div>
-        </nav>
-
-        <!-- Mobile Menu -->
-        <Transition name="slide-down">
-          <div v-if="mobileMenuOpen" class="md:hidden border-t border-white/10 bg-[#08090f]/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#08090f]/95">
-            <nav class="mx-auto max-w-7xl space-y-1 px-4 py-3">
-              <a
-                v-for="item in publicNavItems"
-                :key="`mobile-${item.label}-${item.url}`"
-                :href="publicNavUrl(item.url)"
-                class="relative block rounded-md px-3 py-2 text-sm font-medium transition"
-                :class="publicNavUrl(item.url) === '/models' ? 'marketplace-public-nav-active' : 'text-slate-300 hover:bg-white/8 hover:text-white'"
-                :target="linkTarget(publicNavUrl(item.url))"
-                :rel="linkRel(publicNavUrl(item.url))"
-                @click="handleMobileNavClick($event, publicNavUrl(item.url))"
-              >
-                {{ item.label }}
-              </a>
-              <a
-                href="/login"
-                class="block rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/16 sm:hidden"
-                @click="handleMobileNavClick($event, '/login')"
-              >
-                {{ t('home.login') }}
-              </a>
-            </nav>
-          </div>
-        </Transition>
-      </header>
+      <!-- Public Header -->
+      <PublicHeader :current-path="currentPath" home-url="/home" dashboard-url="/console" />
     </template>
 
     <main :id="!isAuthenticated ? 'top' : undefined" :class="mainShellClass">
@@ -593,7 +501,7 @@
                   <a
                     href="/experience"
                     class="inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border border-cyan-300/50 bg-cyan-50 px-3 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100 dark:border-cyan-700/50 dark:bg-cyan-950/40 dark:text-cyan-200 dark:hover:bg-cyan-900/50"
-                    @click.stop="handlePublicLink($event, '/experience')"
+                    @click.stop="(e: MouseEvent) => { e.preventDefault(); router.push('/experience') }"
                   >
                     <Icon name="bolt" size="xs" />
                     {{ t('modelMarketplace.actions.tryNow', '立即体验') }}
@@ -821,8 +729,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
-import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
+import PublicHeader from '@/components/layout/PublicHeader.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -837,7 +744,7 @@ import { BILLING_MODE_IMAGE, BILLING_MODE_PER_REQUEST, BILLING_MODE_TOKEN, type 
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import type { GroupPlatform, HomeNavItem, SubscriptionType } from '@/types'
+import type { GroupPlatform, SubscriptionType } from '@/types'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { formatScaled } from '@/utils/pricing'
@@ -899,8 +806,6 @@ const densityMode = ref<'m' | 'k'>('m')
 const showMultiplier = ref(false)
 const selectedRow = ref<ModelMarketplaceRow | null>(null)
 const calculatorOpen = ref(false)
-const mobileMenuOpen = ref(false)
-const isDark = ref(document.documentElement.classList.contains('dark'))
 const calculatorForm = reactive({
   modelKey: '',
   groupId: 0,
@@ -914,11 +819,12 @@ const calculatorForm = reactive({
   requestCount: 1,
 })
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const currentPath = computed(() => '/models')
 const pageShell = computed(() => (isAuthenticated.value ? AppLayout : 'div'))
 const publicShellClass = computed(() => (
   isAuthenticated.value
     ? ''
-    : ['home-shell min-h-screen overflow-hidden text-slate-100', isDark.value ? 'home-dark' : 'home-light'].join(' ')
+    : 'home-shell min-h-screen overflow-hidden text-slate-100'
 ))
 const mainShellClass = computed(() => (isAuthenticated.value ? '' : 'relative'))
 const marketplaceContainerClass = computed(() => (
@@ -926,24 +832,6 @@ const marketplaceContainerClass = computed(() => (
     ? 'w-full max-w-none space-y-5'
     : 'w-full max-w-none space-y-5 px-0 py-6 lg:py-8'
 ))
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub')
-const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
-const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'All Your AI Sub Hub')
-const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
-const defaultPublicNavItems = computed<HomeNavItem[]>(() => [
-  { label: t('home.nav.home'), url: '/home', visible: true },
-  { label: t('home.nav.features'), url: '#features', visible: true },
-  { label: t('home.nav.models'), url: '/models', visible: true },
-  { label: t('home.nav.pricing'), url: '#pricing', visible: true },
-  { label: t('home.nav.info'), url: '#info', visible: true },
-])
-const publicNavItems = computed(() => {
-  const configured = appStore.cachedPublicSettings?.home_config?.nav_items
-  // Check if configured items have valid labels, otherwise use defaults
-  const hasValidLabels = Array.isArray(configured) && configured.some(item => item.label && item.label.trim())
-  return (hasValidLabels ? configured : defaultPublicNavItems.value)
-    .filter((item) => item.visible !== false)
-})
 const hasActiveFilters = computed(() =>
   Boolean(selectedPlatform.value || selectedModelType.value || selectedGroupName.value || selectedTag.value || searchQuery.value.trim()),
 )
@@ -1448,50 +1336,6 @@ function resetCalculatorInputs() {
   calculatorForm.requestCount = 1
 }
 
-function publicNavUrl(url: string): string {
-  if (!url) return '/home'
-  if (url.startsWith('#')) return `/home${url}`
-  return url
-}
-
-function isInternalURL(url: string): boolean {
-  return url.startsWith('/') || url.startsWith('#')
-}
-
-function linkTarget(url: string): string | undefined {
-  return url && !isInternalURL(url) ? '_blank' : undefined
-}
-
-function linkRel(url: string): string | undefined {
-  return url && !isInternalURL(url) ? 'noopener noreferrer' : undefined
-}
-
-function handlePublicLink(event: MouseEvent, url: string) {
-  if (!url || !isInternalURL(url)) return
-  event.preventDefault()
-  router.push(url)
-}
-
-function handleMobileNavClick(event: MouseEvent, url: string) {
-  mobileMenuOpen.value = false
-  handlePublicLink(event, url)
-}
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
-
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  isDark.value = shouldUseDark
-  document.documentElement.classList.toggle('dark', shouldUseDark)
-}
-
 function syncCalculatorDefaults() {
   if (!calculatorForm.modelKey && modelRows.value.length > 0) {
     calculatorForm.modelKey = modelRows.value[0].key
@@ -1539,7 +1383,6 @@ watch([modelRows, calculatorGroups, calculatorBillingModeOptions, calculatorChan
 watch(isAuthenticated, loadChannels)
 
 onMounted(() => {
-  initTheme()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
