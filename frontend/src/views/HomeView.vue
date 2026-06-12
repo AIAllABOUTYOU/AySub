@@ -56,6 +56,7 @@
         </div>
 
         <div class="flex items-center gap-2">
+          <AnnouncementBell />
           <LocaleSwitcher />
           <a
             v-if="docUrl"
@@ -123,6 +124,9 @@
         </div>
       </Transition>
     </header>
+
+    <!-- Announcement Banner -->
+    <AnnouncementBanner />
 
     <main id="top" class="relative">
       <section class="mx-auto grid min-h-[calc(100vh-64px)] max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_500px] lg:px-8 lg:py-16">
@@ -414,6 +418,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import AnnouncementBanner from '@/components/common/AnnouncementBanner.vue'
+import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { isDefaultHomeText } from '@/utils/homeConfigDefaults'
 import type {

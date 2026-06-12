@@ -1360,6 +1360,69 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <!-- Custom Request Headers -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">请求头</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              为此账号的所有请求添加自定义 HTTP 请求头
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="customHeadersExpanded = !customHeadersExpanded"
+            class="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <Icon
+              :name="customHeadersExpanded ? 'chevronUp' : 'chevronDown'"
+              size="sm"
+              :stroke-width="2"
+            />
+            <span>{{ customHeadersExpanded ? '收起' : '展开' }}</span>
+          </button>
+        </div>
+
+        <div v-if="customHeadersExpanded" class="space-y-3">
+          <div v-if="customHeaders.length > 0" class="space-y-2">
+            <div
+              v-for="(header, index) in customHeaders"
+              :key="getCustomHeaderKey(header)"
+              class="flex items-center gap-2"
+            >
+              <input
+                v-model="header.key"
+                type="text"
+                class="input flex-1"
+                placeholder="X-Custom-Header"
+              />
+              <input
+                v-model="header.value"
+                type="text"
+                class="input flex-1"
+                placeholder="value"
+              />
+              <button
+                type="button"
+                @click="removeCustomHeader(index)"
+                class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+              >
+                <Icon name="x" size="sm" :stroke-width="2" />
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            @click="addCustomHeader"
+            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+          >
+            <Icon name="plus" size="sm" class="mr-1 inline" />
+            添加请求头
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
@@ -2603,6 +2666,16 @@ const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(false)
+
+// Custom Headers
+interface CustomHeader {
+  key: string
+  value: string
+}
+const customHeadersExpanded = ref(false)
+const customHeaders = ref<CustomHeader[]>([])
+const getCustomHeaderKey = createStableObjectKeyResolver<CustomHeader>('edit-custom-header')
+
 const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
@@ -3031,6 +3104,17 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	autoPause5hDisabled.value = extra?.auto_pause_5h_disabled === true
 	autoPause7dDisabled.value = extra?.auto_pause_7d_disabled === true
 
+  // Load custom headers
+  customHeaders.value = []
+  customHeadersExpanded.value = false
+  const customHeadersObj = extra?.custom_headers as Record<string, string> | undefined
+  if (customHeadersObj && typeof customHeadersObj === 'object') {
+    customHeaders.value = Object.entries(customHeadersObj).map(([key, value]) => ({ key, value }))
+    if (customHeaders.value.length > 0) {
+      customHeadersExpanded.value = true
+    }
+  }
+
   // Load OpenAI passthrough toggle (OpenAI OAuth/API Key)
   openaiPassthroughEnabled.value = false
   openAICompactMode.value = 'auto'
@@ -3332,6 +3416,18 @@ const removeOpenAICompactModelMapping = (index: number) => {
 
 const removeAntigravityModelMapping = (index: number) => {
   antigravityModelMappings.value.splice(index, 1)
+}
+
+// Custom Headers management
+const addCustomHeader = () => {
+  customHeaders.value.push({
+    key: '',
+    value: ''
+  })
+}
+
+const removeCustomHeader = (index: number) => {
+  customHeaders.value.splice(index, 1)
 }
 
 const addAntigravityPresetMapping = (from: string, to: string) => {
@@ -4328,6 +4424,31 @@ const handleSubmit = async () => {
       // Quota notify config
       writeQuotaNotifyToExtra(newExtra, 'update')
       updatePayload.extra = newExtra
+    }
+
+    // Add custom headers to extra (applies to all platforms and types)
+    if (customHeaders.value.length > 0) {
+      const validHeaders = customHeaders.value.filter(h => h.key.trim() && h.value.trim())
+      if (validHeaders.length > 0) {
+        const currentExtra = (updatePayload.extra as Record<string, unknown>) ||
+          (props.account.extra as Record<string, unknown>) || {}
+        const newExtra: Record<string, unknown> = { ...currentExtra }
+        const headersObj: Record<string, string> = {}
+        validHeaders.forEach(h => {
+          headersObj[h.key.trim()] = h.value.trim()
+        })
+        newExtra.custom_headers = headersObj
+        updatePayload.extra = newExtra
+      }
+    } else {
+      // Remove custom_headers if no headers configured
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) ||
+        (props.account.extra as Record<string, unknown>) || {}
+      if (currentExtra.custom_headers) {
+        const newExtra: Record<string, unknown> = { ...currentExtra }
+        delete newExtra.custom_headers
+        updatePayload.extra = newExtra
+      }
     }
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {

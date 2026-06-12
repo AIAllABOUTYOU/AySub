@@ -2587,6 +2587,69 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <!-- Custom Request Headers -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">请求头</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              为此账号的所有请求添加自定义 HTTP 请求头
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="customHeadersExpanded = !customHeadersExpanded"
+            class="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <Icon
+              :name="customHeadersExpanded ? 'chevronUp' : 'chevronDown'"
+              size="sm"
+              :stroke-width="2"
+            />
+            <span>{{ customHeadersExpanded ? '收起' : '展开' }}</span>
+          </button>
+        </div>
+
+        <div v-if="customHeadersExpanded" class="space-y-3">
+          <div v-if="customHeaders.length > 0" class="space-y-2">
+            <div
+              v-for="(header, index) in customHeaders"
+              :key="getCustomHeaderKey(header)"
+              class="flex items-center gap-2"
+            >
+              <input
+                v-model="header.key"
+                type="text"
+                class="input flex-1"
+                placeholder="X-Custom-Header"
+              />
+              <input
+                v-model="header.value"
+                type="text"
+                class="input flex-1"
+                placeholder="value"
+              />
+              <button
+                type="button"
+                @click="removeCustomHeader(index)"
+                class="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+              >
+                <Icon name="x" size="sm" :stroke-width="2" />
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            @click="addCustomHeader"
+            class="w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-dark-500 dark:text-gray-400 dark:hover:border-dark-400 dark:hover:text-gray-300"
+          >
+            <Icon name="plus" size="sm" class="mr-1 inline" />
+            添加请求头
+          </button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
@@ -3537,6 +3600,15 @@ const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
+
+// Custom Headers
+interface CustomHeader {
+  key: string
+  value: string
+}
+const customHeadersExpanded = ref(false)
+const customHeaders = ref<CustomHeader[]>([])
+const getCustomHeaderKey = createStableObjectKeyResolver<CustomHeader>('create-custom-header')
 const autoPauseOnExpired = ref(true)
 const openaiPassthroughEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
@@ -4148,6 +4220,18 @@ const removeErrorCode = (code: number) => {
   }
 }
 
+// Custom Headers management
+const addCustomHeader = () => {
+  customHeaders.value.push({
+    key: '',
+    value: ''
+  })
+}
+
+const removeCustomHeader = (index: number) => {
+  customHeaders.value.splice(index, 1)
+}
+
 const addTempUnschedRule = (preset?: TempUnschedRuleForm) => {
   if (preset) {
     tempUnschedRules.value.push({ ...preset })
@@ -4380,6 +4464,8 @@ const resetForm = () => {
   customErrorCodesEnabled.value = false
   selectedErrorCodes.value = []
   customErrorCodeInput.value = null
+  customHeaders.value = []
+  customHeadersExpanded.value = false
   interceptWarmupRequests.value = false
   autoPauseOnExpired.value = true
   openaiPassthroughEnabled.value = false
@@ -4932,6 +5018,19 @@ const createAccountAndFinish = async (
       finalExtra = quotaExtra
     }
   }
+
+  // Add custom headers to extra
+  if (customHeaders.value.length > 0) {
+    const validHeaders = customHeaders.value.filter(h => h.key.trim() && h.value.trim())
+    if (validHeaders.length > 0) {
+      const headersObj: Record<string, string> = {}
+      validHeaders.forEach(h => {
+        headersObj[h.key.trim()] = h.value.trim()
+      })
+      finalExtra = { ...(finalExtra || {}), custom_headers: headersObj }
+    }
+  }
+
   if (platform === 'openai') {
     if (type === 'apikey') {
       applyOpenAIEndpointCapabilities(credentials)

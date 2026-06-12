@@ -31,6 +31,7 @@
           </div>
 
           <div class="relative z-50 flex items-center gap-2">
+            <AnnouncementBell />
             <LocaleSwitcher />
             <a
               v-if="docUrl"
@@ -821,6 +822,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
@@ -937,7 +939,9 @@ const defaultPublicNavItems = computed<HomeNavItem[]>(() => [
 ])
 const publicNavItems = computed(() => {
   const configured = appStore.cachedPublicSettings?.home_config?.nav_items
-  return (Array.isArray(configured) && configured.length > 0 ? configured : defaultPublicNavItems.value)
+  // Check if configured items have valid labels, otherwise use defaults
+  const hasValidLabels = Array.isArray(configured) && configured.some(item => item.label && item.label.trim())
+  return (hasValidLabels ? configured : defaultPublicNavItems.value)
     .filter((item) => item.visible !== false)
 })
 const hasActiveFilters = computed(() =>
