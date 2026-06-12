@@ -44,6 +44,7 @@ var XAIDefaultModels = []Model{
 	{ID: "grok-4.20-expert", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert"},
 	{ID: "grok-4.20-heavy", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Heavy"},
 	{ID: "grok-4.3-fast", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Fast"},
+	{ID: "grok-4.3-beta", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Beta"},
 	{ID: "grok-4.3-console", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Console"},
 	{ID: "grok-4.3-low", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Low"},
 	{ID: "grok-4.3-medium", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.3 Medium"},

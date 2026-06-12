@@ -83,6 +83,7 @@ func TestGrokDynamicStatsigAccountOverrideForRateLimits(t *testing.T) {
 
 func TestResolveGrokWebModeIDPrefersFastForGrok43Fast(t *testing.T) {
 	require.Equal(t, "fast", resolveGrokWebModeID(nil, "grok-4.3-fast"))
+	require.Equal(t, "grok-420-computer-use-sa", resolveGrokWebModeID(nil, "grok-4.3-beta"))
 	require.Equal(t, "grok-420-computer-use-sa", resolveGrokWebModeID(nil, "grok-4.3-high"))
 }
 

@@ -293,7 +293,7 @@ const openAITestModeOptions = computed(() => [
 ])
 const previewImageUrl = ref('')
 const prioritizedGeminiModels = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview', 'gemini-2.0-flash']
-const prioritizedXaiModels = ['grok-4.20-auto', 'grok-4.20-0309', 'grok-4.3-fast', 'grok-4.3-high', 'grok-4.3-medium', 'grok-4.3-low', 'grok-4.3-console', 'grok-4', 'grok-4-0709', 'grok-3-beta', 'grok-3-fast-beta', 'grok-3-mini-beta', 'grok-2', 'grok-beta']
+const prioritizedXaiModels = ['grok-4.20-auto', 'grok-4.20-0309', 'grok-4.3-fast', 'grok-4.3-beta', 'grok-4.3-high', 'grok-4.3-medium', 'grok-4.3-low', 'grok-4.3-console', 'grok-4', 'grok-4-0709', 'grok-3-beta', 'grok-3-fast-beta', 'grok-3-mini-beta', 'grok-2', 'grok-beta']
 const supportsGeminiImageTest = computed(() => {
   const modelID = selectedModelId.value.toLowerCase()
   if (!modelID.startsWith('gemini-') || !modelID.includes('-image')) return false

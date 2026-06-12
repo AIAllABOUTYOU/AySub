@@ -4,7 +4,7 @@
       <div class="home-grid" aria-hidden="true"></div>
 
       <header class="sticky top-0 z-30 border-b border-white/10 bg-[#08090f]/88 backdrop-blur-xl">
-        <nav class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <nav class="mx-auto flex h-16 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
           <a href="/home" class="flex min-w-0 items-center gap-3" @click="handlePublicLink($event, '/home')">
             <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-cyan-300/25 bg-white/8 shadow-lg shadow-cyan-500/10">
               <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-cover" />
@@ -885,7 +885,7 @@ const mainShellClass = computed(() => (isAuthenticated.value ? '' : 'relative'))
 const marketplaceContainerClass = computed(() => (
   isAuthenticated.value
     ? 'w-full max-w-none space-y-5'
-    : 'w-full max-w-none space-y-5 px-0 py-6 lg:py-8'
+    : 'w-full max-w-none space-y-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8'
 ))
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
