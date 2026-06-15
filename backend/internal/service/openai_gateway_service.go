@@ -129,9 +129,7 @@ func normalizeCodexFiveHourUsedPercent(raw *float64) *float64 {
 	if raw == nil {
 		return nil
 	}
-	// OpenAI's 5h Codex quota header is remaining%, despite the upstream header
-	// name saying "used"; the canonical codex_5h_used_percent field stores used%.
-	used := 100 - *raw
+	used := *raw
 	if used < 0 {
 		used = 0
 	}
