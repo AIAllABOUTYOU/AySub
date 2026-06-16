@@ -1,9 +1,11 @@
 const DEFAULT_HOME_TEXTS = new Set([
-  '首页', '功能', '模型', '价格', '扩展', '资料', 'Home', 'Features', 'Models', 'Pricing', 'Extensions', 'Info',
+  // Navigation items should NOT be in this list - users should be able to set them freely
+  // Removed: '首页', '功能', '模型', '价格', '扩展', '资料', 'Home', 'Features', 'Models', 'Pricing', 'Extensions', 'Info'
+  // Button labels should also be freely settable
+  // Removed: '立即开始', 'Get Started', '进入控制台', 'Go to Dashboard', '了解能力', 'Explore Features'
   '稳定运行中', 'Operational', 'AI 能力', 'AI Access', '一站接入', 'One Gateway',
-  '聚合 Claude、GPT、Gemini、Grok 等主流大模型，统一 API 接口，按量计费，智能调度账号与渠道。',
+  '聚合 Claude、GPT、Gemini、Grok 等主流大模型,统一 API 接口，按量计费，智能调度账号与渠道。',
   'Aggregate Claude, GPT, Gemini, Grok and other mainstream models behind one API, with usage-based billing and smart account routing.',
-  '立即开始', 'Get Started', '进入控制台', 'Go to Dashboard', '了解能力', 'Explore Features',
   '可配置模型', 'Configurable models', '目标可用性', 'Target availability', '调度响应', 'Routing latency',
   '核心能力', 'Capabilities', '模型支持', '资料信息', 'Information',
   '把多模型接入、账号调度和用量管理放到一个入口',
