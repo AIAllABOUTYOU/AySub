@@ -357,6 +357,9 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 		req.Header.Set("x-api-key", authToken)
 	}
 
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
+
 	// Get proxy URL
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -429,6 +432,9 @@ func (s *AccountTestService) testClaudeVertexServiceAccountConnection(c *gin.Con
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -515,6 +521,9 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to sign request: %s", err.Error()))
 		}
 	}
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -660,6 +669,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		}
 	}
 
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
+
 	// Get proxy URL
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -721,6 +733,9 @@ func (s *AccountTestService) testXAICookieAccountConnection(c *gin.Context, acco
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to create Grok request: %s", err.Error()))
 	}
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -803,6 +818,9 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -899,6 +917,9 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
 	}
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1134,6 +1155,9 @@ func (s *AccountTestService) buildGeminiAPIKeyRequest(ctx context.Context, accou
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-goog-api-key", apiKey)
 
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
+
 	return req, nil
 }
 
@@ -1168,11 +1192,13 @@ func (s *AccountTestService) buildGeminiOAuthRequest(ctx context.Context, accoun
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+accessToken)
+		// Apply custom headers from account configuration
+		s.applyCustomHeaders(req, account)
 		return req, nil
 	}
 
 	// Code Assist mode (with project_id)
-	return s.buildCodeAssistRequest(ctx, accessToken, projectID, modelID, payload)
+	return s.buildCodeAssistRequest(ctx, account, accessToken, projectID, modelID, payload)
 }
 
 func (s *AccountTestService) buildGeminiServiceAccountRequest(ctx context.Context, account *Account, modelID string, payload []byte) (*http.Request, error) {
@@ -1193,11 +1219,13 @@ func (s *AccountTestService) buildGeminiServiceAccountRequest(ctx context.Contex
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 	return req, nil
 }
 
 // buildCodeAssistRequest builds request for Google Code Assist API (used by Gemini CLI and Antigravity)
-func (s *AccountTestService) buildCodeAssistRequest(ctx context.Context, accessToken, projectID, modelID string, payload []byte) (*http.Request, error) {
+func (s *AccountTestService) buildCodeAssistRequest(ctx context.Context, account *Account, accessToken, projectID, modelID string, payload []byte) (*http.Request, error) {
 	var inner map[string]any
 	if err := json.Unmarshal(payload, &inner); err != nil {
 		return nil, err
@@ -1224,6 +1252,9 @@ func (s *AccountTestService) buildCodeAssistRequest(ctx context.Context, accessT
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	return req, nil
 }
@@ -1706,6 +1737,9 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
+
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -1807,6 +1841,9 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
 
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
+
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -1872,6 +1909,25 @@ func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) er
 	log.Printf("Account test error: %s", errorMsg)
 	s.sendEvent(c, TestEvent{Type: "error", Error: errorMsg})
 	return fmt.Errorf("%s", errorMsg)
+}
+
+// applyCustomHeaders applies custom HTTP headers from account configuration to the request.
+// Custom headers are stored in account.extra.custom_headers and are applied after all other headers.
+func (s *AccountTestService) applyCustomHeaders(req *http.Request, account *Account) {
+	if req == nil || account == nil {
+		return
+	}
+
+	customHeaders := account.GetCustomHeaders()
+	if len(customHeaders) == 0 {
+		return
+	}
+
+	for key, value := range customHeaders {
+		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			req.Header.Set(key, value)
+		}
+	}
 }
 
 // RunTestBackground executes an account test in-memory (no real HTTP client),
@@ -1946,6 +2002,9 @@ func (s *AccountTestService) ProbeCodexUsage(ctx context.Context, accountID int6
 	if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
+
+	// Apply custom headers from account configuration
+	s.applyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

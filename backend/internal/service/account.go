@@ -1137,6 +1137,37 @@ func (a *Account) GetChatGPTAccountID() string {
 	return a.GetCredential("chatgpt_account_id")
 }
 
+// GetCustomHeaders returns the custom HTTP headers configured for this account.
+// Returns nil if no custom headers are configured.
+func (a *Account) GetCustomHeaders() map[string]string {
+	if a == nil || a.Extra == nil {
+		return nil
+	}
+
+	headersRaw, ok := a.Extra["custom_headers"]
+	if !ok {
+		return nil
+	}
+
+	headersMap, ok := headersRaw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]string, len(headersMap))
+	for key, value := range headersMap {
+		if strValue, ok := value.(string); ok && strings.TrimSpace(strValue) != "" {
+			result[key] = strValue
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
+}
+
 func (a *Account) GetOpenAIDeviceID() string {
 	if !a.IsOpenAIOAuth() {
 		return ""
