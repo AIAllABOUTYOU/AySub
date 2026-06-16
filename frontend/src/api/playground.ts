@@ -48,6 +48,7 @@ export interface ChatCompletionRequest {
   model: string
   messages: ChatMessage[]
   temperature: number
+  platform?: string
   signal?: AbortSignal
 }
 
@@ -230,7 +231,14 @@ function extractText(response: ChatCompletionResponse): string {
 
 export async function createChatCompletion(request: ChatCompletionRequest): Promise<string> {
   const baseUrl = normalizeGatewayBaseUrl(request.baseUrl)
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const platform = request.platform?.toLowerCase() || ''
+
+  // Determine endpoint based on platform
+  const endpoint = platform.includes('anthropic') || platform.includes('claude')
+    ? '/v1/messages'
+    : '/v1/chat/completions'
+
+  const res = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

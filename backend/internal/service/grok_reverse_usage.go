@@ -50,6 +50,7 @@ var grokQuotaModes = []grokQuotaMode{
 	{Key: "expert", DefaultWindowSeconds: 7200},
 	{Key: "heavy", DefaultWindowSeconds: 7200},
 	{Key: "grok-420-computer-use-sa", DefaultWindowSeconds: 7200},
+	{Key: "console", DefaultWindowSeconds: 1800}, // 30 分钟窗口，用于 Grok Console 模式
 }
 
 func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {

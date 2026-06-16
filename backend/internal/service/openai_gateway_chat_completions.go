@@ -183,6 +183,23 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	}
 	logger.L().Debug("openai chat_completions: model mapping applied", logFields...)
 
+	if account.Type == AccountTypeAPIKey {
+		// 为 API Key 账号注入 prompt_cache_key 到请求体
+		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
+			var reqBody map[string]any
+			if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
+				return nil, fmt.Errorf("unmarshal for prompt cache key injection: %w", err)
+			}
+			if existing, ok := reqBody["prompt_cache_key"].(string); !ok || strings.TrimSpace(existing) == "" {
+				reqBody["prompt_cache_key"] = trimmedKey
+				responsesBody, err = json.Marshal(reqBody)
+				if err != nil {
+					return nil, fmt.Errorf("remarshal after prompt cache key injection: %w", err)
+				}
+			}
+		}
+	}
+
 	if account.Type == AccountTypeOAuth {
 		var reqBody map[string]any
 		if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
@@ -230,7 +247,13 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	}
 
 	if promptCacheKey != "" {
-		upstreamReq.Header.Set("session_id", generateSessionUUID(promptCacheKey))
+		sessionIDSeed := promptCacheKey
+		// 为 API Key 账号隔离 session_id，防止不同用户的缓存冲突
+		if account.Type == AccountTypeAPIKey {
+			apiKeyID := getAPIKeyIDFromContext(c)
+			sessionIDSeed = isolateOpenAISessionID(apiKeyID, promptCacheKey)
+		}
+		upstreamReq.Header.Set("session_id", generateSessionUUID(sessionIDSeed))
 	}
 
 	// 7. Send request

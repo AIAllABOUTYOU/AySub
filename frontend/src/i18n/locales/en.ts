@@ -1526,7 +1526,8 @@ export default {
     },
     chat: {
       empty: 'Send a message to start',
-      placeholder: 'Enter a message for the model...'
+      placeholder: 'Enter a message for the model...',
+      thinking: 'Thinking..'
     },
     sessions: {
       title: 'Sessions',

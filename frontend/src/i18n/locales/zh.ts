@@ -1529,7 +1529,8 @@ export default {
     },
     chat: {
       empty: '发送一条消息开始体验',
-      placeholder: '输入要发送给模型的内容...'
+      placeholder: '输入要发送给模型的内容...',
+      thinking: '思考中..'
     },
     sessions: {
       title: '会话记录',

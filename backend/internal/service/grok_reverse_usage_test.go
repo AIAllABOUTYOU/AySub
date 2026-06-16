@@ -125,7 +125,7 @@ func TestAccountUsageServiceGetGrokUsageFetchesQuotasAndPersists(t *testing.T) {
 	usage, err := svc.GetUsage(context.Background(), account.ID, true)
 	require.NoError(t, err)
 	require.NotNil(t, usage)
-	require.Len(t, usage.GrokQuota, 5)
+	require.Len(t, usage.GrokQuota, 6)
 	require.Equal(t, 75, usage.GrokQuota["fast"].Utilization)
 	require.Equal(t, 5, usage.GrokQuota["fast"].RemainingQueries)
 	require.Equal(t, 20, usage.GrokQuota["fast"].TotalQueries)
@@ -137,6 +137,7 @@ func TestAccountUsageServiceGetGrokUsageFetchesQuotasAndPersists(t *testing.T) {
 	require.Equal(t, 1, seen["expert"])
 	require.Equal(t, 1, seen["heavy"])
 	require.Equal(t, 1, seen["grok-420-computer-use-sa"])
+	require.Equal(t, 1, seen["console"])
 	mu.Unlock()
 
 	select {

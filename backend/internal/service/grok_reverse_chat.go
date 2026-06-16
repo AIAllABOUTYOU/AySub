@@ -952,6 +952,14 @@ func (s *OpenAIGatewayService) streamGrokWebChatCompletions(c *gin.Context, resp
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
 
+	// 发送心跳以防止在上游思考期间连接超时
+	if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+		return nil, fmt.Errorf("write initial heartbeat: %w", err)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+
 	var output strings.Builder
 	var reasoning strings.Builder
 	firstTokenMs := 0
@@ -1101,6 +1109,14 @@ func (s *OpenAIGatewayService) streamGrokWebAnthropicMessages(c *gin.Context, re
 	c.Header("Connection", "keep-alive")
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
+
+	// 发送心跳以防止在上游思考期间连接超时
+	if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+		return nil, fmt.Errorf("write initial heartbeat: %w", err)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
 
 	writeEvent := func(evt apicompat.AnthropicStreamEvent) error {
 		sse, err := apicompat.ResponsesAnthropicEventToSSE(evt)
@@ -1311,6 +1327,14 @@ func (s *OpenAIGatewayService) streamGrokWebResponses(c *gin.Context, resp *http
 	c.Header("Connection", "keep-alive")
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
+
+	// 发送心跳以防止在上游思考期间连接超时
+	if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+		return nil, fmt.Errorf("write initial heartbeat: %w", err)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
 
 	writeEvent := func(v any) error {
 		if err := writeGrokSSEJSON(c.Writer, v); err != nil {

@@ -277,6 +277,20 @@
                     <div v-else class="experience-chat-markdown" v-html="renderMarkdown(message.content)"></div>
                   </div>
                 </div>
+
+                <!-- AI thinking indicator -->
+                <div v-if="submitting" class="flex justify-start">
+                  <div class="max-w-[82%] rounded-xl bg-gray-100 px-3 py-2 text-sm leading-6 dark:bg-dark-700">
+                    <div class="flex items-center gap-2">
+                      <div class="flex gap-1">
+                        <span class="ai-thinking-dot"></span>
+                        <span class="ai-thinking-dot ai-thinking-dot-delay-1"></span>
+                        <span class="ai-thinking-dot ai-thinking-dot-delay-2"></span>
+                      </div>
+                      <span class="text-gray-600 dark:text-gray-300">{{ t('experienceCenter.chat.thinking') }}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -556,6 +570,11 @@ const availableModels = computed(() => {
   return rows
 })
 
+const selectedModelPlatform = computed(() => {
+  const model = availableModels.value.find((m) => m.name === selectedModel.value)
+  return model?.platform || ''
+})
+
 function modelMatchesActiveTab(model: { name: string; billingMode?: string | null }): boolean {
   const name = model.name.toLowerCase()
   if (activeTab.value === 'image') {
@@ -780,6 +799,7 @@ async function sendChat() {
       model: selectedModel.value,
       temperature: temperature.value,
       messages: messages.value,
+      platform: selectedModelPlatform.value,
     })
     const assistantMessage: ChatMessage = { role: 'assistant', content: reply }
     messages.value.push(assistantMessage)
@@ -1117,5 +1137,38 @@ onBeforeUnmount(() => {
 .dark .experience-chat-markdown :deep(th),
 .dark .experience-chat-markdown :deep(td) {
   border-color: rgb(71 85 105);
+}
+
+/* AI thinking animation */
+.ai-thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: rgb(107 114 128);
+  animation: ai-thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.dark .ai-thinking-dot {
+  background-color: rgb(156 163 175);
+}
+
+.ai-thinking-dot-delay-1 {
+  animation-delay: -0.32s;
+}
+
+.ai-thinking-dot-delay-2 {
+  animation-delay: -0.16s;
+}
+
+@keyframes ai-thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
 }
 </style>

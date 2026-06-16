@@ -585,6 +585,14 @@ func (s *OpenAIGatewayService) streamGrokConsoleChatCompletions(c *gin.Context, 
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
 
+	// 发送心跳以防止在上游思考期间连接超时
+	if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+		return nil, fmt.Errorf("write initial heartbeat: %w", err)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+
 	var output strings.Builder
 	firstTokenMs := 0
 	seenFirst := false
@@ -692,6 +700,15 @@ func (s *OpenAIGatewayService) streamGrokConsoleResponses(c *gin.Context, resp *
 	c.Header("Connection", "keep-alive")
 	c.Status(http.StatusOK)
 	flusher, _ := c.Writer.(http.Flusher)
+
+	// 发送心跳以防止在上游思考期间连接超时
+	if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+		return nil, fmt.Errorf("write initial heartbeat: %w", err)
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+
 	writeEvent := func(v any) error {
 		if err := writeGrokSSEJSON(c.Writer, v); err != nil {
 			return err
