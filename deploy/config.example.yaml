@@ -320,6 +320,9 @@ gateway:
       queue: 0.7
       error_rate: 0.8
       ttft: 0.5
+      # use-it-or-lose-it：倾向「会话窗口最早重置」的账号，剩余重置时间越短得分越高。
+      # 0 表示关闭（默认，不改变原有行为）；调大可让即将重置的账号被优先用尽。
+      reset: 0.0
   # OpenAI HTTP upstream protocol strategy.
   # OpenAI HTTP 上游协议策略（默认 HTTP/2；代理明确不兼容时可临时回退 HTTP/1.1）。
   openai_http2:
@@ -413,6 +416,9 @@ gateway:
     # Fallback max waiting queue size
     # 兜底最大排队长度
     fallback_max_waiting: 100
+    # Prefer the account whose session window resets soonest (use-it-or-lose-it).
+    # 负载感知选择时优先用尽「会话窗口最早重置」的账号；false 保持原有行为。
+    prefer_soonest_reset: false
     # Enable batch load calculation for scheduling
     # 启用调度批量负载计算
     load_batch_enabled: true

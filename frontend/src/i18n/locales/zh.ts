@@ -3667,6 +3667,8 @@ export default {
         groupNamePlaceholder: '可选，用于在用户视图中聚合显示',
         intervalSeconds: '检测间隔 (秒)',
         intervalSecondsHint: '范围：15 - 3600 秒',
+        jitterSeconds: '随机抖动 (± 秒)',
+        jitterSecondsHint: '可选，范围：0 - {max} 秒；每轮检测会围绕检测间隔随机偏移。',
         enabled: '启用监控',
         kindRequired: '请选择供应商'
       },
@@ -4236,6 +4238,17 @@ export default {
         claude: 'Claude',
         passiveSampled: '被动采样',
         activeQuery: '查询'
+      },
+      openaiQuotaReset: {
+        count: '次数',
+        reset: '重置',
+        countTooltipLoad: '点击查询剩余上游重置次数',
+        countTooltipRefresh: '点击刷新剩余上游重置次数',
+        resetTooltipReady: '消耗 1 次上游重置次数以立即恢复 Codex 窗口',
+        resetTooltipNeedQuery: '先点击「次数」加载剩余重置次数',
+        resetTooltipNoCredits: '没有可用的上游重置次数',
+        noCreditsAvailable: '没有可用的上游重置次数',
+        resetSuccess: '已重置 {windows} 个上游窗口'
       },
       tier: {
         free: 'Free',

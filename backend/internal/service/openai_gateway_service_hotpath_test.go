@@ -592,6 +592,13 @@ func TestExtractOpenAIReasoningEffortFromBody(t *testing.T) {
 			wantValue: "xhigh",
 		},
 		{
+			name:      "兼容 max reasoning_effort",
+			body:      []byte(`{"reasoning_effort":"max"}`),
+			model:     "",
+			wantNil:   false,
+			wantValue: "xhigh",
+		},
+		{
 			name:    "minimal 归一化为空",
 			body:    []byte(`{"reasoning":{"effort":"minimal"}}`),
 			model:   "gpt-5-high",

@@ -172,6 +172,52 @@ func TestSchedule_InvalidIntervalSkipped(t *testing.T) {
 	r.Stop()
 }
 
+// TestSchedule_StoresJitter 验证 Schedule 会把配置的 jitter_seconds 转成运行时 duration。
+func TestSchedule_StoresJitter(t *testing.T) {
+	svc := &stubMonitorSvc{runCalled: make(chan int64, 4)}
+	r := newRunnerForTest(svc)
+	r.Start()
+
+	r.Schedule(&ChannelMonitor{ID: 11, Enabled: true, IntervalSeconds: 60, JitterSeconds: 10})
+
+	task := runnerTaskPtr(r, 11)
+	if task == nil {
+		t.Fatal("schedule did not register task")
+	}
+	if task.jitter != 10*time.Second {
+		t.Fatalf("expected jitter=10s, got %s", task.jitter)
+	}
+
+	stoppedWithin(t, r, 3*time.Second)
+}
+
+// TestScheduledMonitorNextDelay_WithJitterWithinBounds 验证 interval±jitter 的随机延迟边界。
+func TestScheduledMonitorNextDelay_WithJitterWithinBounds(t *testing.T) {
+	task := &scheduledMonitor{interval: 60 * time.Second, jitter: 10 * time.Second}
+
+	for i := 0; i < 100; i++ {
+		delay := task.nextDelay()
+		if delay < 50*time.Second || delay > 70*time.Second {
+			t.Fatalf("nextDelay out of bounds: got %s, want [50s, 70s]", delay)
+		}
+	}
+}
+
+// TestScheduledMonitorNextDelay_ClampsToMinInterval 验证抖动后不会低于全局最小检测间隔。
+func TestScheduledMonitorNextDelay_ClampsToMinInterval(t *testing.T) {
+	task := &scheduledMonitor{interval: 20 * time.Second, jitter: 10 * time.Second}
+
+	for i := 0; i < 100; i++ {
+		delay := task.nextDelay()
+		if delay < monitorMinIntervalSeconds*time.Second {
+			t.Fatalf("nextDelay below minimum interval: got %s", delay)
+		}
+		if delay > 30*time.Second {
+			t.Fatalf("nextDelay above jitter upper bound: got %s", delay)
+		}
+	}
+}
+
 // TestSchedule_BeforeStartIsNoOp 验证 Start 之前调用 Schedule 不会注册任务。
 func TestSchedule_BeforeStartIsNoOp(t *testing.T) {
 	svc := &stubMonitorSvc{}

@@ -549,9 +549,82 @@ func openAIImagesUpstreamErrorFromSSEPayload(payload []byte) *OpenAIImagesUpstre
 	case "response.failed":
 		response := gjson.GetBytes(payload, "response")
 		return openAIImagesUpstreamErrorFromGJSON(response.Get("error"), response.Get("id").String())
+	case "response.incomplete":
+		return openAIImagesIncompleteUpstreamError(gjson.GetBytes(payload, "response"))
 	default:
 		return nil
 	}
+}
+
+func summarizeOpenAIImagesNoOutputBody(body []byte) string {
+	var lastType, status, incompleteReason string
+	forEachOpenAISSEDataPayload(string(body), func(payload []byte) {
+		if !gjson.ValidBytes(payload) {
+			return
+		}
+		if t := strings.TrimSpace(gjson.GetBytes(payload, "type").String()); t != "" {
+			lastType = t
+		}
+		if resp := gjson.GetBytes(payload, "response"); resp.Exists() {
+			if s := strings.TrimSpace(resp.Get("status").String()); s != "" {
+				status = s
+			}
+			if r := strings.TrimSpace(resp.Get("incomplete_details.reason").String()); r != "" {
+				incompleteReason = r
+			}
+		}
+	})
+
+	var b strings.Builder
+	_, _ = b.WriteString("no_image_output")
+	if lastType != "" {
+		fmt.Fprintf(&b, " last_event=%s", lastType)
+	}
+	if status != "" {
+		fmt.Fprintf(&b, " status=%s", status)
+	}
+	if incompleteReason != "" {
+		fmt.Fprintf(&b, " incomplete_reason=%s", incompleteReason)
+	}
+
+	snippet := strings.TrimSpace(string(body))
+	const maxSnippet = 1024
+	if len(snippet) > maxSnippet {
+		snippet = snippet[:maxSnippet] + "...(truncated)"
+	}
+	if snippet != "" {
+		fmt.Fprintf(&b, " body=%s", snippet)
+	}
+	return b.String()
+}
+
+func openAIImagesIncompleteUpstreamError(response gjson.Result) *OpenAIImagesUpstreamError {
+	if !response.Exists() {
+		return nil
+	}
+	reason := strings.TrimSpace(response.Get("incomplete_details.reason").String())
+	statusCode := http.StatusBadGateway
+	errType := "incomplete_error"
+	if strings.Contains(strings.ToLower(reason), "content_filter") ||
+		strings.Contains(strings.ToLower(reason), "moderation") {
+		statusCode = http.StatusBadRequest
+		errType = "image_generation_user_error"
+	}
+	message := "Upstream did not complete image generation"
+	if reason != "" {
+		message = fmt.Sprintf("Upstream image generation incomplete: %s", reason)
+	}
+	return &OpenAIImagesUpstreamError{
+		StatusCode:        statusCode,
+		ErrorType:         errType,
+		Code:              "response_incomplete",
+		Message:           sanitizeUpstreamErrorMessage(message),
+		UpstreamRequestID: strings.TrimSpace(response.Get("id").String()),
+	}
+}
+
+func IsOpenAIImagesRetryableUpstreamError(err *OpenAIImagesUpstreamError) bool {
+	return err != nil && err.clientStatusCode() >= http.StatusInternalServerError
 }
 
 func openAIImagesUpstreamErrorFromGJSON(errorObj gjson.Result, upstreamRequestID string) *OpenAIImagesUpstreamError {
@@ -739,10 +812,22 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 	if len(results) == 0 {
 		if upstreamErr := extractOpenAIImagesUpstreamError(body); upstreamErr != nil {
 			setOpsUpstreamError(c, upstreamErr.clientStatusCode(), upstreamErr.clientMessage(), "")
+			if IsOpenAIImagesRetryableUpstreamError(upstreamErr) {
+				return OpenAIUsage{}, 0, nil, &UpstreamFailoverError{
+					StatusCode:             upstreamErr.clientStatusCode(),
+					ResponseBody:           body,
+					RetryableOnSameAccount: true,
+				}
+			}
 			writeOpenAIImagesUpstreamErrorResponse(c, upstreamErr)
 			return OpenAIUsage{}, 0, nil, upstreamErr
 		}
-		return OpenAIUsage{}, 0, nil, fmt.Errorf("upstream did not return image output")
+		setOpsUpstreamError(c, http.StatusBadGateway, "upstream did not return image output", summarizeOpenAIImagesNoOutputBody(body))
+		return OpenAIUsage{}, 0, nil, &UpstreamFailoverError{
+			StatusCode:             http.StatusBadGateway,
+			ResponseBody:           body,
+			RetryableOnSameAccount: true,
+		}
 	}
 	if strings.TrimSpace(firstMeta.Model) == "" {
 		firstMeta.Model = strings.TrimSpace(fallbackModel)
@@ -878,6 +963,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
 			}
 			if len(finalResults) == 0 {
 				outputErr := fmt.Errorf("upstream did not return image output")
+				setOpsUpstreamError(c, http.StatusBadGateway, "upstream did not return image output", summarizeOpenAIImagesNoOutputBody(dataBytes))
 				s.tryWriteOpenAIImagesStreamEvent(c, flusher, &clientDisconnected, &lastDownstreamWriteAt, "error", buildOpenAIImagesStreamErrorBody(outputErr.Error()))
 				processDataErr = outputErr
 				processDataDone = true
@@ -896,7 +982,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthStreamingResponse(
 			imageCount = len(emitted)
 			imageOutputSizes = openAIResponsesImageResultSizes(finalResults)
 			processDataDone = true
-		case "error", "response.failed":
+		case "error", "response.failed", "response.incomplete":
 			if upstreamErr := openAIImagesUpstreamErrorFromSSEPayload(dataBytes); upstreamErr != nil {
 				if !clientDisconnected {
 					s.tryWriteOpenAIImagesStreamEvent(c, flusher, &clientDisconnected, &lastDownstreamWriteAt, "error", buildOpenAIImagesStreamErrorBodyFromUpstream(upstreamErr))

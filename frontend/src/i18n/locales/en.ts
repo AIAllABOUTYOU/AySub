@@ -3591,6 +3591,8 @@ export default {
         groupNamePlaceholder: 'Optional, used to group rows in user view',
         intervalSeconds: 'Interval (seconds)',
         intervalSecondsHint: 'Range: 15 - 3600 seconds',
+        jitterSeconds: 'Random jitter (± seconds)',
+        jitterSecondsHint: 'Optional. Range: 0 - {max} seconds; each run is randomly offset around the interval.',
         enabled: 'Enable monitor',
         kindRequired: 'Please select a provider'
       },
@@ -4973,6 +4975,17 @@ export default {
         claude: 'Claude',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
+      },
+      openaiQuotaReset: {
+        count: 'Credits',
+        reset: 'Reset',
+        countTooltipLoad: 'Click to load upstream reset-credit count',
+        countTooltipRefresh: 'Click to refresh upstream reset-credit count',
+        resetTooltipReady: 'Consume 1 upstream reset credit to restore the Codex window',
+        resetTooltipNeedQuery: 'Click Credits first to load the available count',
+        resetTooltipNoCredits: 'No upstream reset credits available',
+        noCreditsAvailable: 'No upstream reset credits available',
+        resetSuccess: 'Reset {windows} upstream window(s)'
       },
       tier: {
         free: 'Free',

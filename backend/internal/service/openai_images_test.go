@@ -1524,6 +1524,62 @@ func TestCollectOpenAIImagesFromResponsesBody_MultilineSSE(t *testing.T) {
 	require.JSONEq(t, `{"images":1}`, string(usageRaw))
 }
 
+func TestExtractOpenAIImagesUpstreamError_IncompleteRetryability(t *testing.T) {
+	body := []byte("data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp_1\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"}}}\n\n")
+	got := extractOpenAIImagesUpstreamError(body)
+	require.NotNil(t, got)
+	require.Equal(t, http.StatusBadGateway, got.StatusCode)
+	require.True(t, IsOpenAIImagesRetryableUpstreamError(got))
+	require.Equal(t, "response_incomplete", got.Code)
+	require.Contains(t, got.Message, "max_output_tokens")
+}
+
+func TestExtractOpenAIImagesUpstreamError_IncompleteContentFilterNotRetryable(t *testing.T) {
+	body := []byte("data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"resp_1\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"content_filter\"}}}\n\n")
+	got := extractOpenAIImagesUpstreamError(body)
+	require.NotNil(t, got)
+	require.Equal(t, http.StatusBadRequest, got.StatusCode)
+	require.False(t, IsOpenAIImagesRetryableUpstreamError(got))
+}
+
+func TestSummarizeOpenAIImagesNoOutputBody(t *testing.T) {
+	body := []byte("data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n" +
+		"data: {\"type\":\"response.incomplete\",\"response\":{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"junk\":\"" + strings.Repeat("x", 2000) + "\"}}\n\n")
+	summary := summarizeOpenAIImagesNoOutputBody(body)
+	require.Contains(t, summary, "no_image_output")
+	require.Contains(t, summary, "last_event=response.incomplete")
+	require.Contains(t, summary, "status=incomplete")
+	require.Contains(t, summary, "incomplete_reason=max_output_tokens")
+	require.Contains(t, summary, "truncated")
+}
+
+func TestOpenAIImagesOAuthNonStreaming_NoImageTriggersSameAccountRetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstreamSSE := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_x\",\"status\":\"in_progress\",\"model\":\"gpt-5.4-mini\",\"output\":[]}}\n\n" +
+		"event: response.completed\n" +
+		"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_x\",\"status\":\"completed\",\"model\":\"gpt-5.4-mini\",\"output\":[]}}\n\n"
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+	}
+
+	svc := &OpenAIGatewayService{}
+	_, _, _, err := svc.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, "b64_json", "gpt-image-2")
+	require.Error(t, err)
+
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.Equal(t, http.StatusBadGateway, failoverErr.StatusCode)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+}
+
 func TestOpenAIGatewayServiceForwardImages_OAuthStreamingHandlesOutputItemDoneFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","stream":true,"response_format":"url"}`)
