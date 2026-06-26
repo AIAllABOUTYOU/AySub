@@ -13,9 +13,13 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+var (
+	chatGPTUsageURL                 = "https://chatgpt.com/backend-api/wham/usage"
+	chatGPTRateLimitResetCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+	chatGPTRateLimitResetURL        = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+)
+
 const (
-	chatGPTUsageURL            = "https://chatgpt.com/backend-api/wham/usage"
-	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout = 20 * time.Second
 	openaiQuotaCodexOriginator = "Codex Desktop"
 	openaiQuotaCodexLanguage   = "zh-CN"
@@ -64,12 +68,23 @@ type OpenAIQuotaResetCredit struct {
 	ExpiresAt       string `json:"expires_at,omitempty"`
 	RedeemStartedAt string `json:"redeem_started_at,omitempty"`
 	RedeemedAt      string `json:"redeemed_at,omitempty"`
+	ProfileImageURL string `json:"profile_image_url,omitempty"`
+	ProfileUserID   string `json:"profile_user_id,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Description     string `json:"description,omitempty"`
 }
 
 type OpenAIQuotaResetResult struct {
 	Code         string                  `json:"code"`
 	Credit       *OpenAIQuotaResetCredit `json:"credit,omitempty"`
 	WindowsReset int                     `json:"windows_reset"`
+}
+
+type OpenAIQuotaResetCreditsDetail struct {
+	Credits          []OpenAIQuotaResetCredit `json:"credits,omitempty"`
+	AvailableCount   int                      `json:"available_count"`
+	TotalEarnedCount int                      `json:"total_earned_count,omitempty"`
+	FetchedAt        int64                    `json:"fetched_at"`
 }
 
 // OpenAIQuotaService queries and consumes ChatGPT/Codex rate-limit reset credits.
@@ -128,10 +143,26 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	return &payload, nil
 }
 
+func (s *OpenAIQuotaService) QueryResetCredits(ctx context.Context, accountID int64) (*OpenAIQuotaResetCreditsDetail, error) {
+	accessToken, chatGPTAccountID, proxyURL, err := s.prepareUpstreamCall(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	return s.queryResetCreditsWithPreparedAccount(ctx, accessToken, chatGPTAccountID, proxyURL, accountID)
+}
+
 func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (*OpenAIQuotaResetResult, error) {
 	accessToken, chatGPTAccountID, proxyURL, err := s.prepareUpstreamCall(ctx, accountID)
 	if err != nil {
 		return nil, err
+	}
+
+	credits, err := s.queryResetCreditsWithPreparedAccount(ctx, accessToken, chatGPTAccountID, proxyURL, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if credits.AvailableCount <= 0 {
+		return nil, infraerrors.New(http.StatusConflict, "OPENAI_QUOTA_NO_RESET_CREDITS", "no available OpenAI/Codex reset credits")
 	}
 
 	redeemRequestID, err := generateRedeemRequestID()
@@ -168,6 +199,35 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 	}
 
 	slog.Info("openai_quota_reset_success", "account_id", accountID, "code", payload.Code, "windows_reset", payload.WindowsReset)
+	return &payload, nil
+}
+
+func (s *OpenAIQuotaService) queryResetCreditsWithPreparedAccount(ctx context.Context, accessToken, chatGPTAccountID, proxyURL string, accountID int64) (*OpenAIQuotaResetCreditsDetail, error) {
+	client, err := s.privacyClientFactory(proxyURL)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, openaiQuotaUpstreamTimeout)
+	defer cancel()
+
+	var payload OpenAIQuotaResetCreditsDetail
+	resp, err := client.R().
+		SetContext(callCtx).
+		SetHeaders(buildCodexCommonHeaders(accessToken, chatGPTAccountID)).
+		SetSuccessResult(&payload).
+		Get(chatGPTRateLimitResetCreditsURL)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_RESET_CREDITS_REQUEST_FAILED", "upstream request failed: %v", err)
+	}
+	if !resp.IsSuccessState() {
+		status := resp.StatusCode
+		body := truncate(resp.String(), 240)
+		slog.Warn("openai_quota_reset_credits_failed", "account_id", accountID, "status", status, "body", body)
+		return nil, infraerrors.Newf(mapOpenAIQuotaUpstreamStatus(status), "OPENAI_QUOTA_RESET_CREDITS_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
+	}
+
+	payload.FetchedAt = time.Now().Unix()
 	return &payload, nil
 }
 

@@ -289,6 +289,26 @@ func (h *OpenAIOAuthHandler) QueryQuota(c *gin.Context) {
 	response.Success(c, usage)
 }
 
+// QueryResetCredits queries available OpenAI/Codex rate-limit reset credits.
+// GET /api/v1/admin/openai/accounts/:id/reset-credits
+func (h *OpenAIOAuthHandler) QueryResetCredits(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if h.quotaService == nil {
+		response.BadRequest(c, "openai quota service is not enabled")
+		return
+	}
+	credits, err := h.quotaService.QueryResetCredits(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, credits)
+}
+
 // ResetQuota consumes one rate-limit reset credit for an OpenAI account.
 // POST /api/v1/admin/openai/accounts/:id/reset-quota
 func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -21,6 +22,17 @@ import (
 const (
 	grokConsoleBaseURL = "https://console.x.ai"
 	grokConsolePath    = "/v1/responses"
+)
+
+const (
+	grokConsole429CountKey          = "grok_console_429_count"
+	grokConsole429LastAtKey         = "grok_console_429_last_at"
+	grokConsole429LastModelKey      = "grok_console_429_last_model"
+	grokConsole429ReasonKey         = "grok_console_429_reason"
+	grokConsole429Threshold         = 3
+	grokConsole429SlidingWindow     = 12 * time.Hour
+	grokConsole429ThresholdCooldown = time.Hour
+	grokConsole429ThresholdReason   = "grok_console_429_threshold_exceeded"
 )
 
 var grokConsoleModelMap = map[string]string{
@@ -420,6 +432,9 @@ func (s *OpenAIGatewayService) handleGrokConsoleError(ctx context.Context, c *gi
 		upstreamMsg = http.StatusText(resp.StatusCode)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, truncateString(string(respBody), 2048))
+	if resp.StatusCode == http.StatusTooManyRequests {
+		s.recordGrokConsole429(ctx, account, upstreamModel, respBody)
+	}
 	if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
@@ -440,6 +455,99 @@ func (s *OpenAIGatewayService) handleGrokConsoleError(ctx context.Context, c *gi
 	}
 	writeErr(c, resp.StatusCode, "upstream_error", upstreamMsg)
 	return true, fmt.Errorf("grok console upstream returned %d: %s", resp.StatusCode, upstreamMsg)
+}
+
+func (s *OpenAIGatewayService) recordGrokConsole429(ctx context.Context, account *Account, upstreamModel string, responseBody []byte) {
+	if s == nil || account == nil || s.accountRepo == nil || account.ID <= 0 {
+		return
+	}
+
+	stateCtx, cancel := openAIAccountStateContext(ctx)
+	defer cancel()
+
+	extra := account.Extra
+	if latest, err := s.accountRepo.GetByID(stateCtx, account.ID); err == nil && latest != nil {
+		extra = latest.Extra
+	}
+	if extra == nil {
+		extra = map[string]any{}
+	}
+
+	now := time.Now().UTC()
+	lastAt := parseGrokConsole429Unix(extra[grokConsole429LastAtKey])
+	count := parseExtraInt(extra[grokConsole429CountKey])
+	reason, _ := extra[grokConsole429ReasonKey].(string)
+	if lastAt.IsZero() || now.Sub(lastAt) > grokConsole429SlidingWindow ||
+		(reason == grokConsole429ThresholdReason && now.Sub(lastAt) >= grokConsole429ThresholdCooldown) {
+		count = 0
+	}
+	count++
+
+	updates := map[string]any{
+		grokConsole429CountKey:     count,
+		grokConsole429LastAtKey:    now.Unix(),
+		grokConsole429LastModelKey: upstreamModel,
+		grokConsole429ReasonKey:    "",
+	}
+
+	if count >= grokConsole429Threshold {
+		until := now.Add(grokConsole429ThresholdCooldown)
+		updates[grokConsole429ReasonKey] = grokConsole429ThresholdReason
+		reason := buildGrokConsole429TempUnschedReason(until, now, responseBody)
+		if s.rateLimitService != nil {
+			s.rateLimitService.notifyAccountSchedulingBlocked(account, until, grokConsole429ThresholdReason)
+		}
+		if err := s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, until, reason); err != nil {
+			slog.Warn("grok_console_429_temp_unsched_set_failed", "account_id", account.ID, "error", err)
+		} else if s.rateLimitService != nil && s.rateLimitService.tempUnschedCache != nil {
+			state := &TempUnschedState{
+				UntilUnix:       until.Unix(),
+				TriggeredAtUnix: now.Unix(),
+				StatusCode:      http.StatusTooManyRequests,
+				MatchedKeyword:  grokConsole429ThresholdReason,
+				RuleIndex:       -1,
+				ErrorMessage:    truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
+			}
+			if err := s.rateLimitService.tempUnschedCache.SetTempUnsched(stateCtx, account.ID, state); err != nil {
+				slog.Warn("grok_console_429_temp_unsched_cache_set_failed", "account_id", account.ID, "error", err)
+			}
+		}
+		slog.Warn("grok_console_429_threshold_exceeded", "account_id", account.ID, "count", count, "until", until)
+	}
+
+	if err := s.accountRepo.UpdateExtra(stateCtx, account.ID, updates); err != nil {
+		slog.Warn("grok_console_429_extra_update_failed", "account_id", account.ID, "error", err)
+		return
+	}
+	if account.Extra == nil {
+		account.Extra = map[string]any{}
+	}
+	for key, value := range updates {
+		account.Extra[key] = value
+	}
+}
+
+func buildGrokConsole429TempUnschedReason(until, triggeredAt time.Time, responseBody []byte) string {
+	state := &TempUnschedState{
+		UntilUnix:       until.Unix(),
+		TriggeredAtUnix: triggeredAt.Unix(),
+		StatusCode:      http.StatusTooManyRequests,
+		MatchedKeyword:  grokConsole429ThresholdReason,
+		RuleIndex:       -1,
+		ErrorMessage:    truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
+	}
+	if raw, err := json.Marshal(state); err == nil {
+		return string(raw)
+	}
+	return grokConsole429ThresholdReason
+}
+
+func parseGrokConsole429Unix(value any) time.Time {
+	seconds := parseExtraInt(value)
+	if seconds <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(int64(seconds), 0).UTC()
 }
 
 type grokConsoleCollectedResponse struct {

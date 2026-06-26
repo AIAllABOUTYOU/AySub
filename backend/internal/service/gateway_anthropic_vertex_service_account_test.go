@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -129,4 +130,40 @@ func TestGatewayService_BuildAnthropicVertexServiceAccount_PreservesContextManag
 	outBeta := getHeaderRaw(req.Header, "anthropic-beta")
 	require.True(t, anthropicBetaTokensContains(outBeta, "context-management-2025-06-27"),
 		"与 body 对称：outgoing anthropic-beta header 同步含 context-management beta")
+}
+
+func TestGatewayService_BuildAnthropicVertexServiceAccount_FiltersUnsupportedBetaTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	c.Request.Header.Set("Anthropic-Beta", strings.Join([]string{
+		"interleaved-thinking-2025-05-14",
+		"advisor-tool-2026-03-01",
+		"prompt-caching-scope-2026-01-05",
+		"thinking-token-count-2026-05-13",
+		"context-management-2025-06-27",
+	}, ","))
+
+	account := &Account{
+		ID:          304,
+		Platform:    PlatformAnthropic,
+		Type:        AccountTypeServiceAccount,
+		Credentials: map[string]any{"project_id": "vertex-proj", "location": "us-east5"},
+	}
+	body := []byte(`{"model":"claude-sonnet-4-6","context_management":{"edits":[{"type":"clear_thinking_20251015"}]},"messages":[]}`)
+
+	svc := &GatewayService{}
+	req, _, err := svc.buildUpstreamRequest(
+		context.Background(), c, account, body,
+		"vertex-token", "service_account", "claude-sonnet-4-6@20260218", false, false,
+	)
+	require.NoError(t, err)
+
+	outBeta := getHeaderRaw(req.Header, "anthropic-beta")
+	require.True(t, anthropicBetaTokensContains(outBeta, "interleaved-thinking-2025-05-14"))
+	require.True(t, anthropicBetaTokensContains(outBeta, "context-management-2025-06-27"))
+	require.False(t, anthropicBetaTokensContains(outBeta, "advisor-tool-2026-03-01"))
+	require.False(t, anthropicBetaTokensContains(outBeta, "prompt-caching-scope-2026-01-05"))
+	require.False(t, anthropicBetaTokensContains(outBeta, "thinking-token-count-2026-05-13"))
 }

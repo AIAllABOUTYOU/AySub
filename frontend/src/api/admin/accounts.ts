@@ -883,6 +883,10 @@ export interface OpenAIQuotaResetCredit {
   expires_at?: string
   redeem_started_at?: string
   redeemed_at?: string
+  profile_image_url?: string
+  profile_user_id?: string
+  title?: string
+  description?: string
 }
 
 export interface OpenAIQuotaResetResult {
@@ -891,8 +895,20 @@ export interface OpenAIQuotaResetResult {
   windows_reset: number
 }
 
+export interface OpenAIQuotaResetCreditsDetail {
+  credits?: OpenAIQuotaResetCredit[]
+  available_count: number
+  total_earned_count?: number
+  fetched_at: number
+}
+
 export async function queryOpenAIQuota(id: number): Promise<OpenAIQuotaUsage> {
   const { data } = await apiClient.get<OpenAIQuotaUsage>(`/admin/openai/accounts/${id}/quota`)
+  return data
+}
+
+export async function queryOpenAIResetCredits(id: number): Promise<OpenAIQuotaResetCreditsDetail> {
+  const { data } = await apiClient.get<OpenAIQuotaResetCreditsDetail>(`/admin/openai/accounts/${id}/reset-credits`)
   return data
 }
 
@@ -947,6 +963,7 @@ export const accountsAPI = {
   batchRefresh,
   setPrivacy,
   queryOpenAIQuota,
+  queryOpenAIResetCredits,
   resetOpenAIQuota
 }
 

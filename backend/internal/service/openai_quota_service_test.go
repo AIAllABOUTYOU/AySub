@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
+	"sync/atomic"
 	"testing"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -134,6 +136,83 @@ func TestMapOpenAIQuotaUpstreamStatus(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, mapOpenAIQuotaUpstreamStatus(http.StatusInternalServerError))
 }
 
+func TestOpenAIQuotaServiceQueryResetCredits(t *testing.T) {
+	account := &Account{
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":       "access-token",
+			"chatgpt_account_id": "account-id",
+		},
+	}
+	service := newOpenAIQuotaServiceForTest(account)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/backend-api/wham/rate-limit-reset-credits" {
+			t.Errorf("path = %q, want /backend-api/wham/rate-limit-reset-credits", r.URL.Path)
+		}
+		assertRequestHeader(t, r, "Authorization", "Bearer access-token")
+		assertRequestHeader(t, r, "chatgpt-account-id", "account-id")
+		assertRequestHeader(t, r, "originator", openaiQuotaCodexOriginator)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"available_count":1,"total_earned_count":2,"credits":[{"id":"credit_1","status":"available","title":"Invite reset"}]}`))
+	}))
+	defer server.Close()
+	restore := overrideOpenAIQuotaURLsForTest(t, server.URL)
+	defer restore()
+
+	credits, err := service.QueryResetCredits(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, credits.AvailableCount)
+	require.Equal(t, 2, credits.TotalEarnedCount)
+	require.Len(t, credits.Credits, 1)
+	require.Equal(t, "credit_1", credits.Credits[0].ID)
+	require.NotZero(t, credits.FetchedAt)
+}
+
+func assertRequestHeader(t *testing.T, r *http.Request, key, want string) {
+	t.Helper()
+	if got := r.Header.Get(key); got != want {
+		t.Errorf("header %s = %q, want %q", key, got, want)
+	}
+}
+
+func TestOpenAIQuotaServiceResetCreditBlocksWhenNoCredits(t *testing.T) {
+	account := &Account{
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":       "access-token",
+			"chatgpt_account_id": "account-id",
+		},
+	}
+	service := newOpenAIQuotaServiceForTest(account)
+
+	var consumeCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/backend-api/wham/rate-limit-reset-credits":
+			_, _ = w.Write([]byte(`{"available_count":0,"total_earned_count":0,"credits":[]}`))
+		case "/backend-api/wham/rate-limit-reset-credits/consume":
+			consumeCalls.Add(1)
+			_, _ = w.Write([]byte(`{"code":"ok","windows_reset":1}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	restore := overrideOpenAIQuotaURLsForTest(t, server.URL)
+	defer restore()
+
+	_, err := service.ResetCredit(context.Background(), account.ID)
+	require.Error(t, err)
+	require.Equal(t, "OPENAI_QUOTA_NO_RESET_CREDITS", infraerrors.Reason(err))
+	require.Equal(t, int32(0), consumeCalls.Load())
+}
+
 func newOpenAIQuotaServiceForTest(account *Account) *OpenAIQuotaService {
 	accountRepo := &mockAccountRepoForGemini{
 		accountsByID: map[int64]*Account{account.ID: account},
@@ -144,4 +223,19 @@ func newOpenAIQuotaServiceForTest(account *Account) *OpenAIQuotaService {
 		NewOpenAITokenProvider(accountRepo, nil, nil),
 		func(string) (*req.Client, error) { return req.C(), nil },
 	)
+}
+
+func overrideOpenAIQuotaURLsForTest(t *testing.T, baseURL string) func() {
+	t.Helper()
+	oldUsageURL := chatGPTUsageURL
+	oldResetCreditsURL := chatGPTRateLimitResetCreditsURL
+	oldResetURL := chatGPTRateLimitResetURL
+	chatGPTUsageURL = baseURL + "/backend-api/wham/usage"
+	chatGPTRateLimitResetCreditsURL = baseURL + "/backend-api/wham/rate-limit-reset-credits"
+	chatGPTRateLimitResetURL = baseURL + "/backend-api/wham/rate-limit-reset-credits/consume"
+	return func() {
+		chatGPTUsageURL = oldUsageURL
+		chatGPTRateLimitResetCreditsURL = oldResetCreditsURL
+		chatGPTRateLimitResetURL = oldResetURL
+	}
 }
