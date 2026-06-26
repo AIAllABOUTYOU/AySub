@@ -1831,6 +1831,8 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	c.Request.Header.Set("X-Codex-Beta-Features", "compact-beta")
 
 	svc := &OpenAIGatewayService{}
 	account := &Account{Type: AccountTypeOAuth}
@@ -1838,8 +1840,10 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	req, err := svc.buildUpstreamRequestOpenAIPassthrough(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token")
 	require.NoError(t, err)
 	require.Equal(t, chatgptCodexURL+"/compact", req.URL.String())
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
+	require.Equal(t, "compact-beta", req.Header.Get("X-Codex-Beta-Features"))
 	require.NotEmpty(t, req.Header.Get("Session_Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
@@ -1849,6 +1853,8 @@ func TestOpenAIBuildUpstreamRequestCompactForcesJSONAcceptForOAuth(t *testing.T)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	c.Request.Header.Set("X-Codex-Beta-Features", "compact-beta")
 
 	svc := &OpenAIGatewayService{}
 	account := &Account{
@@ -1859,8 +1865,10 @@ func TestOpenAIBuildUpstreamRequestCompactForcesJSONAcceptForOAuth(t *testing.T)
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", true)
 	require.NoError(t, err)
 	require.Equal(t, chatgptCodexURL+"/compact", req.URL.String())
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
+	require.Equal(t, "compact-beta", req.Header.Get("X-Codex-Beta-Features"))
 	require.NotEmpty(t, req.Header.Get("Session_Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
@@ -1893,6 +1901,7 @@ func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testi
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/responses/compact", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	svc := &OpenAIGatewayService{cfg: &config.Config{
 		Security: config.SecurityConfig{
@@ -1908,6 +1917,7 @@ func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testi
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", false)
 	require.NoError(t, err)
 	require.Equal(t, "https://example.com/v1/responses/compact", req.URL.String())
+	require.Equal(t, "application/json; charset=utf-8", req.Header.Get("Content-Type"))
 }
 
 func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t *testing.T) {

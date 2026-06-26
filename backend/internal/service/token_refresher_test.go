@@ -260,3 +260,88 @@ func TestOpenAITokenRefresher_CanRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAITokenRefresher_NeedsRefresh(t *testing.T) {
+	refresher := &OpenAITokenRefresher{}
+	refreshWindow := 30 * time.Minute
+
+	tests := []struct {
+		name        string
+		credentials map[string]any
+		rateLimited bool
+		wantRefresh bool
+	}{
+		{
+			name: "missing expires_at with refresh token refreshes",
+			credentials: map[string]any{
+				"refresh_token": "rt",
+			},
+			wantRefresh: true,
+		},
+		{
+			name: "invalid expires_at with refresh token refreshes",
+			credentials: map[string]any{
+				"refresh_token": "rt",
+				"expires_at":    "not-a-time",
+			},
+			wantRefresh: true,
+		},
+		{
+			name: "nil expires_at with refresh token refreshes",
+			credentials: map[string]any{
+				"refresh_token": "rt",
+				"expires_at":    nil,
+			},
+			wantRefresh: true,
+		},
+		{
+			name: "missing expires_at without refresh token does not refresh",
+			credentials: map[string]any{
+				"access_token": "at",
+			},
+			rateLimited: false,
+			wantRefresh: false,
+		},
+		{
+			name: "missing expires_at without refresh token still does not refresh when rate limited",
+			credentials: map[string]any{
+				"access_token": "at",
+			},
+			rateLimited: true,
+			wantRefresh: false,
+		},
+		{
+			name: "far future expires_at does not refresh",
+			credentials: map[string]any{
+				"refresh_token": "rt",
+				"expires_at":    time.Now().Add(2 * time.Hour).Format(time.RFC3339),
+			},
+			wantRefresh: false,
+		},
+		{
+			name: "within refresh window refreshes",
+			credentials: map[string]any{
+				"refresh_token": "rt",
+				"expires_at":    time.Now().Add(10 * time.Minute).Format(time.RFC3339),
+			},
+			wantRefresh: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			account := &Account{
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeOAuth,
+				Credentials: tt.credentials,
+			}
+			if tt.rateLimited {
+				resetAt := time.Now().Add(time.Hour)
+				account.RateLimitResetAt = &resetAt
+			}
+
+			got := refresher.NeedsRefresh(account, refreshWindow)
+			require.Equal(t, tt.wantRefresh, got)
+		})
+	}
+}

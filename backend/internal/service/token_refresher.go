@@ -94,14 +94,15 @@ func (r *OpenAITokenRefresher) CanRefresh(account *Account) bool {
 }
 
 // NeedsRefresh 检查token是否需要刷新
-// expires_at 缺失且处于限流状态时需要刷新，防止限流期间 token 静默过期
+// OpenAI/Codex OAuth 导入或旧账号可能缺少 expires_at；只要存在 refresh_token，
+// 后台刷新应补齐过期时间，避免等待请求路径命中后才发现 token 已过期。
 func (r *OpenAITokenRefresher) NeedsRefresh(account *Account, refreshWindow time.Duration) bool {
 	if strings.TrimSpace(account.GetOpenAIRefreshToken()) == "" {
 		return false
 	}
 	expiresAt := account.GetCredentialAsTime("expires_at")
 	if expiresAt == nil {
-		return account.IsRateLimited()
+		return true
 	}
 
 	return time.Until(*expiresAt) < refreshWindow
