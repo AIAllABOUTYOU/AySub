@@ -24,6 +24,13 @@ describe('useModelWhitelist', () => {
     expect(models.indexOf('gpt-image-1-mini')).toBeLessThan(models.indexOf('gpt-image-1.5'))
   })
 
+  it('openai 模型列表包含 GPT-5 Search API', () => {
+    const models = getModelsByPlatform('openai')
+
+    expect(models).toContain('gpt-5-search-api')
+    expect(models).toContain('gpt-5-search-api-2025-10-14')
+  })
+
   it('openai 模型列表不再暴露已下线的 ChatGPT 登录 Codex 模型', () => {
     const models = getModelsByPlatform('openai')
 
