@@ -28,5 +28,8 @@ COMMENT ON COLUMN user_checkins.balance_after IS 'User balance after reward gran
 INSERT INTO settings (key, value)
 VALUES
 	('checkin_enabled', 'false'),
-	('checkin_reward_amount', '0')
+	('checkin_reward_amount', '0'),
+	('checkin_reward_mode', 'fixed'),
+	('checkin_reward_min_amount', '0'),
+	('checkin_reward_max_amount', '0')
 ON CONFLICT (key) DO NOTHING;

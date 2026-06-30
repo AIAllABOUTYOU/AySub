@@ -32,7 +32,7 @@
                   {{ t('checkin.reward') }}
                 </p>
                 <p class="mt-1 text-2xl font-bold">
-                  {{ formatAmount(rewardAmount) }}
+                  {{ rewardAmountLabel }}
                 </p>
               </div>
             </div>
@@ -271,6 +271,15 @@ const currentMonth = ref(formatMonth(new Date()))
 const rewardAmount = computed(
   () => status.value?.reward_amount ?? appStore.cachedPublicSettings?.checkin_reward_amount ?? 0,
 )
+const rewardAmountLabel = computed(() => {
+  const mode = status.value?.reward_mode ?? appStore.cachedPublicSettings?.checkin_reward_mode
+  if (mode !== 'random') return formatAmount(rewardAmount.value)
+  const minAmount =
+    status.value?.reward_min_amount ?? appStore.cachedPublicSettings?.checkin_reward_min_amount ?? 0
+  const maxAmount =
+    status.value?.reward_max_amount ?? appStore.cachedPublicSettings?.checkin_reward_max_amount ?? 0
+  return `${formatAmount(minAmount)} - ${formatAmount(maxAmount)}`
+})
 const checkedInToday = computed(() => status.value?.checked_in_today === true)
 const monthlyRecords = computed(() => status.value?.stats?.records ?? [])
 const monthRewardTotal = computed(() =>

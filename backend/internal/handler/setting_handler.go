@@ -101,8 +101,11 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		RiskControlEnabled: settings.RiskControlEnabled,
 
-		CheckinEnabled:      settings.CheckinEnabled,
-		CheckinRewardAmount: settings.CheckinRewardAmount,
+		CheckinEnabled:         settings.CheckinEnabled,
+		CheckinRewardAmount:    settings.CheckinRewardAmount,
+		CheckinRewardMode:      settings.CheckinRewardMode,
+		CheckinRewardMinAmount: settings.CheckinRewardMinAmount,
+		CheckinRewardMaxAmount: settings.CheckinRewardMaxAmount,
 	})
 }
 

@@ -410,8 +410,11 @@ const (
 
 	// Daily check-in reward feature. The backend enforces this switch; frontend
 	// visibility is only a convenience.
-	SettingKeyCheckinEnabled      = "checkin_enabled"
-	SettingKeyCheckinRewardAmount = "checkin_reward_amount"
+	SettingKeyCheckinEnabled         = "checkin_enabled"
+	SettingKeyCheckinRewardAmount    = "checkin_reward_amount"
+	SettingKeyCheckinRewardMode      = "checkin_reward_mode"
+	SettingKeyCheckinRewardMinAmount = "checkin_reward_min_amount"
+	SettingKeyCheckinRewardMaxAmount = "checkin_reward_max_amount"
 
 	// =========================
 	// Overload Cooldown (529)

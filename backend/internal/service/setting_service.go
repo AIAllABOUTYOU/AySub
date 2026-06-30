@@ -765,6 +765,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyRiskControlEnabled,
 		SettingKeyCheckinEnabled,
 		SettingKeyCheckinRewardAmount,
+		SettingKeyCheckinRewardMode,
+		SettingKeyCheckinRewardMinAmount,
+		SettingKeyCheckinRewardMaxAmount,
 	}
 
 	settings, err := s.settingRepo.GetMultiple(ctx, keys)
@@ -880,8 +883,11 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 
 		RiskControlEnabled: settings[SettingKeyRiskControlEnabled] == "true",
 
-		CheckinEnabled:      settings[SettingKeyCheckinEnabled] == "true",
-		CheckinRewardAmount: parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardAmount]),
+		CheckinEnabled:         settings[SettingKeyCheckinEnabled] == "true",
+		CheckinRewardAmount:    parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardAmount]),
+		CheckinRewardMode:      normalizeCheckinRewardMode(settings[SettingKeyCheckinRewardMode]),
+		CheckinRewardMinAmount: parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardMinAmount]),
+		CheckinRewardMaxAmount: parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardMaxAmount]),
 	}, nil
 }
 
@@ -909,6 +915,15 @@ func parseNonNegativeFloatSetting(raw string) float64 {
 		return 0
 	}
 	return v
+}
+
+func normalizeCheckinRewardMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "random":
+		return "random"
+	default:
+		return "fixed"
+	}
 }
 
 // clampChannelMonitorInterval clamps v to the allowed range. 0 means "not provided".
@@ -1201,6 +1216,9 @@ type PublicSettingsInjectionPayload struct {
 	CustomEndpoints                          json.RawMessage          `json:"custom_endpoints"`
 	CheckinEnabled                           bool                     `json:"checkin_enabled"`
 	CheckinRewardAmount                      float64                  `json:"checkin_reward_amount"`
+	CheckinRewardMode                        string                   `json:"checkin_reward_mode"`
+	CheckinRewardMinAmount                   float64                  `json:"checkin_reward_min_amount"`
+	CheckinRewardMaxAmount                   float64                  `json:"checkin_reward_max_amount"`
 	LinuxDoOAuthEnabled                      bool                     `json:"linuxdo_oauth_enabled"`
 	DingTalkOAuthEnabled                     bool                     `json:"dingtalk_oauth_enabled"`
 	WeChatOAuthEnabled                       bool                     `json:"wechat_oauth_enabled"`
@@ -1270,6 +1288,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		CustomEndpoints:                          safeRawJSONArray(settings.CustomEndpoints),
 		CheckinEnabled:                           settings.CheckinEnabled,
 		CheckinRewardAmount:                      settings.CheckinRewardAmount,
+		CheckinRewardMode:                        settings.CheckinRewardMode,
+		CheckinRewardMinAmount:                   settings.CheckinRewardMinAmount,
+		CheckinRewardMaxAmount:                   settings.CheckinRewardMaxAmount,
 		LinuxDoOAuthEnabled:                      settings.LinuxDoOAuthEnabled,
 		DingTalkOAuthEnabled:                     settings.DingTalkOAuthEnabled,
 		WeChatOAuthEnabled:                       settings.WeChatOAuthEnabled,
@@ -1978,6 +1999,19 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		settings.CheckinRewardAmount = 0
 	}
 	updates[SettingKeyCheckinRewardAmount] = strconv.FormatFloat(settings.CheckinRewardAmount, 'f', 8, 64)
+	settings.CheckinRewardMode = normalizeCheckinRewardMode(settings.CheckinRewardMode)
+	if settings.CheckinRewardMinAmount < 0 {
+		settings.CheckinRewardMinAmount = 0
+	}
+	if settings.CheckinRewardMaxAmount < 0 {
+		settings.CheckinRewardMaxAmount = 0
+	}
+	if settings.CheckinRewardMaxAmount < settings.CheckinRewardMinAmount {
+		settings.CheckinRewardMaxAmount = settings.CheckinRewardMinAmount
+	}
+	updates[SettingKeyCheckinRewardMode] = settings.CheckinRewardMode
+	updates[SettingKeyCheckinRewardMinAmount] = strconv.FormatFloat(settings.CheckinRewardMinAmount, 'f', 8, 64)
+	updates[SettingKeyCheckinRewardMaxAmount] = strconv.FormatFloat(settings.CheckinRewardMaxAmount, 'f', 8, 64)
 
 	// Claude Code version check
 	updates[SettingKeyMinClaudeCodeVersion] = settings.MinClaudeCodeVersion
@@ -2930,8 +2964,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyRiskControlEnabled: "false",
 
 		// Daily check-in reward feature (default disabled; reward defaults to 0)
-		SettingKeyCheckinEnabled:      "false",
-		SettingKeyCheckinRewardAmount: "0",
+		SettingKeyCheckinEnabled:         "false",
+		SettingKeyCheckinRewardAmount:    "0",
+		SettingKeyCheckinRewardMode:      "fixed",
+		SettingKeyCheckinRewardMinAmount: "0",
+		SettingKeyCheckinRewardMaxAmount: "0",
 
 		// Claude Code version check (default: empty = disabled)
 		SettingKeyMinClaudeCodeVersion: "",
@@ -3452,6 +3489,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// Daily check-in reward feature（默认关闭；奖励金额小于 0 时归零）
 	result.CheckinEnabled = settings[SettingKeyCheckinEnabled] == "true"
 	result.CheckinRewardAmount = parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardAmount])
+	result.CheckinRewardMode = normalizeCheckinRewardMode(settings[SettingKeyCheckinRewardMode])
+	result.CheckinRewardMinAmount = parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardMinAmount])
+	result.CheckinRewardMaxAmount = parseNonNegativeFloatSetting(settings[SettingKeyCheckinRewardMaxAmount])
+	if result.CheckinRewardMaxAmount < result.CheckinRewardMinAmount {
+		result.CheckinRewardMaxAmount = result.CheckinRewardMinAmount
+	}
 
 	// Claude Code version check
 	result.MinClaudeCodeVersion = settings[SettingKeyMinClaudeCodeVersion]

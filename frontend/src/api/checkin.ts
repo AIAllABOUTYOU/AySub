@@ -22,6 +22,9 @@ export interface CheckinStatus {
   enabled?: boolean
   checked_in_today: boolean
   reward_amount: number
+  reward_mode?: 'fixed' | 'random'
+  reward_min_amount?: number
+  reward_max_amount?: number
   checkin_date?: string
   last_checkin_at?: string | null
   next_checkin_at?: string | null

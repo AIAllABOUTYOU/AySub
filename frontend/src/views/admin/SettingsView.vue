@@ -5336,24 +5336,96 @@
               <Toggle v-model="form.checkin_enabled" />
             </div>
 
-            <div v-if="form.checkin_enabled" class="max-w-sm">
-              <label class="input-label">
-                {{ t('admin.settings.features.checkin.rewardAmount') }}
-              </label>
-              <div class="relative">
-                <input
-                  v-model.number="form.checkin_reward_amount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  class="input pl-7"
-                  placeholder="0"
-                />
-                <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+            <div v-if="form.checkin_enabled" class="space-y-4">
+              <div class="max-w-sm">
+                <label class="input-label">
+                  {{ t('admin.settings.features.checkin.rewardMode') }}
+                </label>
+                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-dark-700 dark:bg-dark-800">
+                  <button
+                    type="button"
+                    :class="[
+                      'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                      form.checkin_reward_mode === 'fixed'
+                        ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-dark-400 dark:hover:text-white',
+                    ]"
+                    @click="form.checkin_reward_mode = 'fixed'"
+                  >
+                    {{ t('admin.settings.features.checkin.rewardModeFixed') }}
+                  </button>
+                  <button
+                    type="button"
+                    :class="[
+                      'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                      form.checkin_reward_mode === 'random'
+                        ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-dark-400 dark:hover:text-white',
+                    ]"
+                    @click="form.checkin_reward_mode = 'random'"
+                  >
+                    {{ t('admin.settings.features.checkin.rewardModeRandom') }}
+                  </button>
+                </div>
               </div>
-              <p class="mt-1 text-xs text-gray-400">
-                {{ t('admin.settings.features.checkin.rewardAmountHint') }}
-              </p>
+
+              <div v-if="form.checkin_reward_mode === 'fixed'" class="max-w-sm">
+                <label class="input-label">
+                  {{ t('admin.settings.features.checkin.rewardAmount') }}
+                </label>
+                <div class="relative">
+                  <input
+                    v-model.number="form.checkin_reward_amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="input pl-7"
+                    placeholder="0"
+                  />
+                  <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                </div>
+                <p class="mt-1 text-xs text-gray-400">
+                  {{ t('admin.settings.features.checkin.rewardAmountHint') }}
+                </p>
+              </div>
+
+              <div v-else class="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="input-label">
+                    {{ t('admin.settings.features.checkin.rewardMinAmount') }}
+                  </label>
+                  <div class="relative">
+                    <input
+                      v-model.number="form.checkin_reward_min_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input pl-7"
+                      placeholder="0"
+                    />
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  </div>
+                </div>
+                <div>
+                  <label class="input-label">
+                    {{ t('admin.settings.features.checkin.rewardMaxAmount') }}
+                  </label>
+                  <div class="relative">
+                    <input
+                      v-model.number="form.checkin_reward_max_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input pl-7"
+                      placeholder="0"
+                    />
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-400 sm:col-span-2">
+                  {{ t('admin.settings.features.checkin.rewardRangeHint') }}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -7214,6 +7286,9 @@ const form = reactive<SettingsForm>({
   hide_ccs_import_button: false,
   checkin_enabled: false,
   checkin_reward_amount: 0,
+  checkin_reward_mode: 'fixed' as 'fixed' | 'random',
+  checkin_reward_min_amount: 0,
+  checkin_reward_max_amount: 0,
   payment_enabled: false,
   risk_control_enabled: false,
   payment_min_amount: 1,
@@ -8452,6 +8527,15 @@ async function saveSettings() {
       checkin_reward_amount: Math.max(
         0,
         Number(form.checkin_reward_amount) || 0,
+      ),
+      checkin_reward_mode: form.checkin_reward_mode === 'random' ? 'random' : 'fixed',
+      checkin_reward_min_amount: Math.max(
+        0,
+        Number(form.checkin_reward_min_amount) || 0,
+      ),
+      checkin_reward_max_amount: Math.max(
+        Math.max(0, Number(form.checkin_reward_min_amount) || 0),
+        Number(form.checkin_reward_max_amount) || 0,
       ),
       table_default_page_size: form.table_default_page_size,
       table_page_size_options: form.table_page_size_options,

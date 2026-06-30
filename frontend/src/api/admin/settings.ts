@@ -439,6 +439,9 @@ export interface SystemSettings {
   hide_ccs_import_button: boolean;
   checkin_enabled: boolean;
   checkin_reward_amount: number;
+  checkin_reward_mode: 'fixed' | 'random';
+  checkin_reward_min_amount: number;
+  checkin_reward_max_amount: number;
   table_default_page_size: number;
   table_page_size_options: number[];
   backend_mode_enabled: boolean;
@@ -705,6 +708,9 @@ export interface UpdateSettingsRequest {
   hide_ccs_import_button?: boolean;
   checkin_enabled?: boolean;
   checkin_reward_amount?: number;
+  checkin_reward_mode?: 'fixed' | 'random';
+  checkin_reward_min_amount?: number;
+  checkin_reward_max_amount?: number;
   table_default_page_size?: number;
   table_page_size_options?: number[];
   backend_mode_enabled?: boolean;

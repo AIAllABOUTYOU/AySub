@@ -187,8 +187,11 @@ type SystemSettings struct {
 	PublicStatusShowRecentIncidents bool `json:"public_status_show_recent_incidents"`
 
 	// Daily check-in reward feature
-	CheckinEnabled      bool    `json:"checkin_enabled"`
-	CheckinRewardAmount float64 `json:"checkin_reward_amount"`
+	CheckinEnabled         bool    `json:"checkin_enabled"`
+	CheckinRewardAmount    float64 `json:"checkin_reward_amount"`
+	CheckinRewardMode      string  `json:"checkin_reward_mode"`
+	CheckinRewardMinAmount float64 `json:"checkin_reward_min_amount"`
+	CheckinRewardMaxAmount float64 `json:"checkin_reward_max_amount"`
 
 	// Claude Code version check
 	MinClaudeCodeVersion string
@@ -310,8 +313,11 @@ type PublicSettings struct {
 	RiskControlEnabled bool `json:"risk_control_enabled"`
 
 	// Daily check-in reward feature
-	CheckinEnabled      bool    `json:"checkin_enabled"`
-	CheckinRewardAmount float64 `json:"checkin_reward_amount"`
+	CheckinEnabled         bool    `json:"checkin_enabled"`
+	CheckinRewardAmount    float64 `json:"checkin_reward_amount"`
+	CheckinRewardMode      string  `json:"checkin_reward_mode"`
+	CheckinRewardMinAmount float64 `json:"checkin_reward_min_amount"`
+	CheckinRewardMaxAmount float64 `json:"checkin_reward_max_amount"`
 }
 
 type LoginAgreementDocument struct {

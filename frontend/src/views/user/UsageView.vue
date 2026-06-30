@@ -1,93 +1,12 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <TablePageLayout flow>
       <template #actions>
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <!-- Total Requests -->
-          <div class="card p-4">
-          <div class="flex items-center gap-3">
-            <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
-              <Icon name="document" size="md" class="text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                {{ t('usage.totalRequests') }}
-              </p>
-              <p class="text-xl font-bold text-gray-900 dark:text-white">
-                {{ usageStats?.total_requests?.toLocaleString() || '0' }}
-              </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('usage.inSelectedRange') }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Total Tokens -->
-        <div class="card p-4">
-          <div class="flex items-center gap-3">
-            <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
-              <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                {{ t('usage.totalTokens') }}
-              </p>
-              <p class="text-xl font-bold text-gray-900 dark:text-white">
-                {{ formatTokens(usageStats?.total_tokens || 0) }}
-              </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('usage.in') }}: {{ formatTokens(usageStats?.total_input_tokens || 0) }} /
-                {{ t('usage.out') }}: {{ formatTokens(usageStats?.total_output_tokens || 0) }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Total Cost -->
-        <div class="card p-4">
-          <div class="flex items-center gap-3">
-            <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
-              <Icon name="dollar" size="md" class="text-green-600 dark:text-green-400" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                {{ t('usage.totalCost') }}
-              </p>
-              <p class="text-xl font-bold text-green-600 dark:text-green-400">
-                ${{ (usageStats?.total_actual_cost || 0).toFixed(4) }}
-              </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('usage.actualCost') }} /
-                <span class="line-through">${{ (usageStats?.total_cost || 0).toFixed(4) }}</span>
-                {{ t('usage.standardCost') }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Average Duration -->
-        <div class="card p-4">
-          <div class="flex items-center gap-3">
-            <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
-              <Icon name="clock" size="md" class="text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                {{ t('usage.avgDuration') }}
-              </p>
-              <p class="text-xl font-bold text-gray-900 dark:text-white">
-                {{ formatDuration(usageStats?.average_duration_ms || 0) }}
-              </p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.perRequest') }}</p>
-            </div>
-          </div>
-        </div>
-        </div>
+        <UsageStatsCards :stats="usageStats" />
       </template>
 
       <template #filters>
-        <div class="card">
+        <div class="card mb-6">
           <div class="px-6 py-4">
           <div class="flex flex-wrap items-end gap-4">
             <!-- API Key Filter -->
@@ -145,6 +64,42 @@
             </div>
           </div>
         </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ModelDistributionChart
+            v-model:source="modelDistributionSource"
+            v-model:metric="modelDistributionMetric"
+            :model-stats="requestedModelStats"
+            :upstream-model-stats="upstreamModelStats"
+            :mapping-model-stats="mappingModelStats"
+            :loading="modelStatsLoading"
+            :show-source-toggle="true"
+            :show-metric-toggle="true"
+            :show-breakdown="false"
+          />
+          <GroupDistributionChart
+            v-model:metric="groupDistributionMetric"
+            :group-stats="groupStats"
+            :loading="chartsLoading"
+            :show-metric-toggle="true"
+            :show-breakdown="false"
+          />
+        </div>
+        <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <EndpointDistributionChart
+            v-model:source="endpointDistributionSource"
+            v-model:metric="endpointDistributionMetric"
+            :endpoint-stats="inboundEndpointStats"
+            :upstream-endpoint-stats="upstreamEndpointStats"
+            :endpoint-path-stats="endpointPathStats"
+            :loading="endpointStatsLoading"
+            :show-source-toggle="true"
+            :show-metric-toggle="true"
+            :show-breakdown="false"
+            :title="t('usage.endpointDistribution')"
+          />
+          <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </template>
 
@@ -538,7 +493,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { usageAPI, keysAPI } from '@/api'
@@ -550,7 +505,13 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { UsageLog, ApiKey, UsageQueryParams, UsageStatsResponse } from '@/types'
+import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
+import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
+import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
+import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
+import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
+import type { UsageLog, ApiKey, UsageQueryParams, TrendDataPoint, ModelStat, GroupStat, EndpointStat } from '@/types'
+import type { UserUsageStatsResponse } from '@/api/usage'
 import type { Column } from '@/components/common/types'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
@@ -576,6 +537,9 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 let abortController: AbortController | null = null
+let statsReqSeq = 0
+let modelStatsReqSeq = 0
+let chartReqSeq = 0
 
 // Tooltip state
 const tooltipVisible = ref(false)
@@ -588,7 +552,33 @@ const tokenTooltipPosition = ref({ x: 0, y: 0 })
 const tokenTooltipData = ref<UsageLog | null>(null)
 
 // Usage stats from API
-const usageStats = ref<UsageStatsResponse | null>(null)
+const usageStats = ref<UserUsageStatsResponse | null>(null)
+const trendData = ref<TrendDataPoint[]>([])
+const requestedModelStats = ref<ModelStat[]>([])
+const upstreamModelStats = ref<ModelStat[]>([])
+const mappingModelStats = ref<ModelStat[]>([])
+const groupStats = ref<GroupStat[]>([])
+const inboundEndpointStats = ref<EndpointStat[]>([])
+const upstreamEndpointStats = ref<EndpointStat[]>([])
+const endpointPathStats = ref<EndpointStat[]>([])
+const chartsLoading = ref(false)
+const modelStatsLoading = ref(false)
+const endpointStatsLoading = ref(false)
+type DistributionMetric = 'tokens' | 'actual_cost'
+type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
+type EndpointSource = 'inbound' | 'upstream' | 'path'
+const modelDistributionMetric = ref<DistributionMetric>('tokens')
+const groupDistributionMetric = ref<DistributionMetric>('tokens')
+const endpointDistributionMetric = ref<DistributionMetric>('tokens')
+const modelDistributionSource = ref<ModelDistributionSource>('requested')
+const endpointDistributionSource = ref<EndpointSource>('inbound')
+const granularity = ref<'day' | 'hour'>('day')
+
+const loadedModelSources = reactive<Record<ModelDistributionSource, boolean>>({
+  requested: false,
+  upstream: false,
+  mapping: false
+})
 
 const columns = computed<Column[]>(() => [
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
@@ -652,6 +642,7 @@ const onDateRangeChange = (range: {
 }) => {
   filters.value.start_date = range.startDate
   filters.value.end_date = range.endDate
+  granularity.value = getGranularityForRange(range.startDate, range.endDate)
   applyFilters()
 }
 
@@ -739,6 +730,26 @@ type UsageTableQueryParams = UsageQueryParams & {
   sort_order?: 'asc' | 'desc'
 }
 
+const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
+  const startTime = new Date(`${start}T00:00:00`).getTime()
+  const endTime = new Date(`${end}T00:00:00`).getTime()
+  const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24))
+  return daysDiff <= 1 ? 'hour' : 'day'
+}
+
+granularity.value = getGranularityForRange(startDate.value, endDate.value)
+
+const buildUsageAnalyticsParams = () => ({
+  start_date: filters.value.start_date || startDate.value,
+  end_date: filters.value.end_date || endDate.value,
+  api_key_id: filters.value.api_key_id ? Number(filters.value.api_key_id) : undefined,
+  model: filters.value.model,
+  request_type: filters.value.request_type,
+  stream: filters.value.stream,
+  billing_type: filters.value.billing_type,
+  billing_mode: filters.value.billing_mode
+})
+
 const buildUsageQueryParams = (page: number, pageSize: number): UsageTableQueryParams => ({
   page,
   page_size: pageSize,
@@ -792,23 +803,98 @@ const loadApiKeys = async () => {
 }
 
 const loadUsageStats = async () => {
+  const seq = ++statsReqSeq
+  endpointStatsLoading.value = true
   try {
-    const apiKeyId = filters.value.api_key_id ? Number(filters.value.api_key_id) : undefined
-    const stats = await usageAPI.getStatsByDateRange(
-      filters.value.start_date || startDate.value,
-      filters.value.end_date || endDate.value,
-      apiKeyId
-    )
+    const stats = await usageAPI.getStatsWithFilters(buildUsageAnalyticsParams())
+    if (seq !== statsReqSeq) return
     usageStats.value = stats
+    inboundEndpointStats.value = stats.endpoints || []
+    upstreamEndpointStats.value = stats.upstream_endpoints || []
+    endpointPathStats.value = stats.endpoint_paths || []
   } catch (error) {
+    if (seq !== statsReqSeq) return
     console.error('Failed to load usage stats:', error)
+    inboundEndpointStats.value = []
+    upstreamEndpointStats.value = []
+    endpointPathStats.value = []
+  } finally {
+    if (seq === statsReqSeq) endpointStatsLoading.value = false
+  }
+}
+
+const invalidateModelStatsCache = () => {
+  loadedModelSources.requested = false
+  loadedModelSources.upstream = false
+  loadedModelSources.mapping = false
+}
+
+const loadModelStats = async (source: ModelDistributionSource, force = false) => {
+  if (!force && loadedModelSources[source]) return
+  const seq = ++modelStatsReqSeq
+  modelStatsLoading.value = true
+  try {
+    const response = await usageAPI.getDashboardModels({
+      ...buildUsageAnalyticsParams(),
+      model_source: source
+    })
+    if (seq !== modelStatsReqSeq) return
+    if (source === 'requested') {
+      requestedModelStats.value = response.models || []
+    } else if (source === 'upstream') {
+      upstreamModelStats.value = response.models || []
+    } else {
+      mappingModelStats.value = response.models || []
+    }
+    loadedModelSources[source] = true
+  } catch (error) {
+    if (seq !== modelStatsReqSeq) return
+    console.error('Failed to load model stats:', error)
+    if (source === 'requested') {
+      requestedModelStats.value = []
+    } else if (source === 'upstream') {
+      upstreamModelStats.value = []
+    } else {
+      mappingModelStats.value = []
+    }
+    loadedModelSources[source] = false
+  } finally {
+    if (seq === modelStatsReqSeq) modelStatsLoading.value = false
+  }
+}
+
+const loadChartData = async () => {
+  const seq = ++chartReqSeq
+  chartsLoading.value = true
+  try {
+    const params = buildUsageAnalyticsParams()
+    const [trend, groups] = await Promise.all([
+      usageAPI.getDashboardTrend({
+        ...params,
+        granularity: granularity.value
+      }),
+      usageAPI.getDashboardGroups(params)
+    ])
+    if (seq !== chartReqSeq) return
+    trendData.value = trend.trend || []
+    groupStats.value = groups.groups || []
+  } catch (error) {
+    if (seq !== chartReqSeq) return
+    console.error('Failed to load usage charts:', error)
+    trendData.value = []
+    groupStats.value = []
+  } finally {
+    if (seq === chartReqSeq) chartsLoading.value = false
   }
 }
 
 const applyFilters = () => {
   pagination.page = 1
+  invalidateModelStatsCache()
   loadUsageLogs()
   loadUsageStats()
+  loadModelStats(modelDistributionSource.value, true)
+  loadChartData()
 }
 
 const resetFilters = () => {
@@ -825,9 +911,13 @@ const resetFilters = () => {
   endDate.value = formatLocalDate(now)
   filters.value.start_date = startDate.value
   filters.value.end_date = endDate.value
+  granularity.value = getGranularityForRange(startDate.value, endDate.value)
   pagination.page = 1
   loadUsageLogs()
   loadUsageStats()
+  invalidateModelStatsCache()
+  loadModelStats(modelDistributionSource.value, true)
+  loadChartData()
 }
 
 const handlePageChange = (page: number) => {
@@ -992,5 +1082,11 @@ onMounted(() => {
   loadApiKeys()
   loadUsageLogs()
   loadUsageStats()
+  loadModelStats(modelDistributionSource.value, true)
+  loadChartData()
+})
+
+watch(modelDistributionSource, (source) => {
+  void loadModelStats(source)
 })
 </script>

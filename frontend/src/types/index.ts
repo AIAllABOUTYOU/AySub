@@ -300,6 +300,9 @@ export interface PublicSettings {
   hide_ccs_import_button: boolean
   checkin_enabled: boolean
   checkin_reward_amount: number
+  checkin_reward_mode: 'fixed' | 'random'
+  checkin_reward_min_amount: number
+  checkin_reward_max_amount: number
   payment_enabled: boolean
   risk_control_enabled: boolean
   table_default_page_size: number
@@ -1577,6 +1580,7 @@ export interface UsageStatsResponse {
   total_tokens: number
   total_cost: number // 标准计费
   total_actual_cost: number // 实际扣除
+  total_account_cost?: number // 账号成本
   average_duration_ms: number
   models?: Record<string, number>
 }

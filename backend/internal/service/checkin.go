@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	crand "crypto/rand"
+	"math"
+	"math/big"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -40,6 +43,9 @@ type CheckinStats struct {
 type CheckinStatus struct {
 	Enabled         bool          `json:"enabled"`
 	RewardAmount    float64       `json:"reward_amount"`
+	RewardMode      string        `json:"reward_mode"`
+	RewardMinAmount float64       `json:"reward_min_amount"`
+	RewardMaxAmount float64       `json:"reward_max_amount"`
 	CheckedIn       bool          `json:"checked_in"`
 	CheckedInToday  bool          `json:"checked_in_today"`
 	CheckinDate     string        `json:"checkin_date"`
@@ -88,6 +94,9 @@ func (s *CheckinService) Status(ctx context.Context, userID int64, userTZ string
 	status := &CheckinStatus{
 		Enabled:         settings.CheckinEnabled,
 		RewardAmount:    settings.CheckinRewardAmount,
+		RewardMode:      settings.CheckinRewardMode,
+		RewardMinAmount: settings.CheckinRewardMinAmount,
+		RewardMaxAmount: settings.CheckinRewardMaxAmount,
 		CheckinDate:     checkinDate,
 		NextAvailableAt: nextAvailableAt,
 		NextCheckinAt:   nextAvailableAt,
@@ -132,7 +141,11 @@ func (s *CheckinService) Claim(ctx context.Context, userID int64, userTZ string)
 		return nil, ErrCheckinDisabled
 	}
 	checkinDate, nextAvailableAt := checkinDateWindow(userTZ)
-	record, err := s.repo.Claim(ctx, userID, checkinDate, settings.CheckinRewardAmount)
+	rewardAmount, err := resolveCheckinRewardAmount(settings)
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.repo.Claim(ctx, userID, checkinDate, rewardAmount)
 	if err != nil {
 		return nil, err
 	}
@@ -141,11 +154,14 @@ func (s *CheckinService) Claim(ctx context.Context, userID int64, userTZ string)
 	if err != nil {
 		return nil, err
 	}
-	awarded := settings.CheckinRewardAmount
+	awarded := rewardAmount
 	newBalance := record.BalanceAfter
 	return &CheckinStatus{
 		Enabled:         true,
 		RewardAmount:    settings.CheckinRewardAmount,
+		RewardMode:      settings.CheckinRewardMode,
+		RewardMinAmount: settings.CheckinRewardMinAmount,
+		RewardMaxAmount: settings.CheckinRewardMaxAmount,
 		CheckedIn:       true,
 		CheckedInToday:  true,
 		CheckinDate:     checkinDate,
@@ -159,6 +175,37 @@ func (s *CheckinService) Claim(ctx context.Context, userID int64, userTZ string)
 		NewBalance:      &newBalance,
 		Record:          record,
 	}, nil
+}
+
+func resolveCheckinRewardAmount(settings *PublicSettings) (float64, error) {
+	if settings == nil {
+		return 0, nil
+	}
+	if normalizeCheckinRewardMode(settings.CheckinRewardMode) != "random" {
+		return roundCurrencyAmount(settings.CheckinRewardAmount), nil
+	}
+	minAmount := math.Max(0, settings.CheckinRewardMinAmount)
+	maxAmount := math.Max(0, settings.CheckinRewardMaxAmount)
+	if maxAmount < minAmount {
+		maxAmount = minAmount
+	}
+	minCents := int64(math.Round(minAmount * 100))
+	maxCents := int64(math.Round(maxAmount * 100))
+	if maxCents <= minCents {
+		return float64(minCents) / 100, nil
+	}
+	n, err := crand.Int(crand.Reader, big.NewInt(maxCents-minCents+1))
+	if err != nil {
+		return 0, err
+	}
+	return float64(minCents+n.Int64()) / 100, nil
+}
+
+func roundCurrencyAmount(amount float64) float64 {
+	if amount <= 0 {
+		return 0
+	}
+	return math.Round(amount*100) / 100
 }
 
 func (s *CheckinService) stats(ctx context.Context, userID int64, month string, currentCheckinDate string, checkedInToday bool) (*CheckinStats, error) {

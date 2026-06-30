@@ -664,8 +664,11 @@ type UpdateSettingsRequest struct {
 	RiskControlEnabled *bool `json:"risk_control_enabled"`
 
 	// Daily check-in reward feature switch
-	CheckinEnabled      *bool    `json:"checkin_enabled"`
-	CheckinRewardAmount *float64 `json:"checkin_reward_amount"`
+	CheckinEnabled         *bool    `json:"checkin_enabled"`
+	CheckinRewardAmount    *float64 `json:"checkin_reward_amount"`
+	CheckinRewardMode      *string  `json:"checkin_reward_mode"`
+	CheckinRewardMinAmount *float64 `json:"checkin_reward_min_amount"`
+	CheckinRewardMaxAmount *float64 `json:"checkin_reward_max_amount"`
 
 	// OpenAI fast/flex policy (optional, only updated when provided)
 	OpenAIFastPolicySettings *dto.OpenAIFastPolicySettings `json:"openai_fast_policy_settings,omitempty"`
@@ -1844,6 +1847,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.CheckinRewardAmount
 		}(),
+		CheckinRewardMode: func() string {
+			if req.CheckinRewardMode != nil {
+				return *req.CheckinRewardMode
+			}
+			return previousSettings.CheckinRewardMode
+		}(),
+		CheckinRewardMinAmount: func() float64 {
+			if req.CheckinRewardMinAmount != nil {
+				if *req.CheckinRewardMinAmount < 0 {
+					return 0
+				}
+				return *req.CheckinRewardMinAmount
+			}
+			return previousSettings.CheckinRewardMinAmount
+		}(),
+		CheckinRewardMaxAmount: func() float64 {
+			if req.CheckinRewardMaxAmount != nil {
+				if *req.CheckinRewardMaxAmount < 0 {
+					return 0
+				}
+				return *req.CheckinRewardMaxAmount
+			}
+			return previousSettings.CheckinRewardMaxAmount
+		}(),
 	}
 
 	// req.AuthSourceXxxPlatformQuotas 为 nil 表示本次请求未包含该 source 的 quota 配置（保留 previousAuthSourceDefaults 中的值）；
@@ -2175,8 +2202,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		RiskControlEnabled: updatedSettings.RiskControlEnabled,
 
-		CheckinEnabled:      updatedSettings.CheckinEnabled,
-		CheckinRewardAmount: updatedSettings.CheckinRewardAmount,
+		CheckinEnabled:         updatedSettings.CheckinEnabled,
+		CheckinRewardAmount:    updatedSettings.CheckinRewardAmount,
+		CheckinRewardMode:      updatedSettings.CheckinRewardMode,
+		CheckinRewardMinAmount: updatedSettings.CheckinRewardMinAmount,
+		CheckinRewardMaxAmount: updatedSettings.CheckinRewardMaxAmount,
 	}
 	if fastPolicy, err := h.settingService.GetOpenAIFastPolicySettings(c.Request.Context()); err != nil {
 		slog.Error("openai_fast_policy_settings_get_failed", "error", err)

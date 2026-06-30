@@ -10,7 +10,10 @@ import type {
   UsageStatsResponse,
   PaginatedResponse,
   TrendDataPoint,
-  ModelStat
+  ModelStat,
+  GroupStat,
+  EndpointStat,
+  UsageRequestType
 } from '@/types'
 import type { OpsRequestDetail, OpsRequestDetailsParams } from '@/api/admin/ops'
 
@@ -55,6 +58,13 @@ export interface TrendParams {
   start_date?: string
   end_date?: string
   granularity?: 'day' | 'hour'
+  api_key_id?: number
+  group_id?: number
+  model?: string
+  request_type?: UsageRequestType
+  stream?: boolean
+  billing_type?: number | null
+  billing_mode?: string
 }
 
 export interface TrendResponse {
@@ -66,6 +76,26 @@ export interface TrendResponse {
 
 export interface ModelStatsResponse {
   models: ModelStat[]
+  start_date: string
+  end_date: string
+}
+
+export interface UserUsageStatsResponse extends UsageStatsResponse {
+  endpoints?: EndpointStat[]
+  upstream_endpoints?: EndpointStat[]
+  endpoint_paths?: EndpointStat[]
+}
+
+export interface UserUsageStatsParams extends Omit<TrendParams, 'granularity'> {
+  period?: string
+}
+
+export interface UserModelStatsParams extends Omit<TrendParams, 'granularity'> {
+  model_source?: 'requested' | 'upstream' | 'mapping'
+}
+
+export interface GroupStatsResponse {
+  groups: GroupStat[]
   start_date: string
   end_date: string
 }
@@ -172,6 +202,11 @@ export async function getStats(
   const { data } = await apiClient.get<UsageStatsResponse>('/usage/stats', {
     params
   })
+  return data
+}
+
+export async function getStatsWithFilters(params: UserUsageStatsParams): Promise<UserUsageStatsResponse> {
+  const { data } = await apiClient.get<UserUsageStatsResponse>('/usage/stats', { params })
   return data
 }
 
@@ -285,8 +320,21 @@ export async function getDashboardTrend(params?: TrendParams): Promise<TrendResp
 export async function getDashboardModels(params?: {
   start_date?: string
   end_date?: string
+  api_key_id?: number
+  group_id?: number
+  model?: string
+  model_source?: 'requested' | 'upstream' | 'mapping'
+  request_type?: UsageRequestType
+  stream?: boolean
+  billing_type?: number | null
+  billing_mode?: string
 }): Promise<ModelStatsResponse> {
   const { data } = await apiClient.get<ModelStatsResponse>('/usage/dashboard/models', { params })
+  return data
+}
+
+export async function getDashboardGroups(params?: Omit<TrendParams, 'granularity'>): Promise<GroupStatsResponse> {
+  const { data } = await apiClient.get<GroupStatsResponse>('/usage/dashboard/groups', { params })
   return data
 }
 
@@ -353,6 +401,8 @@ export const usageAPI = {
   getDashboardStats,
   getDashboardTrend,
   getDashboardModels,
+  getDashboardGroups,
+  getStatsWithFilters,
   getMyApiKeyDailyUsage,
   getDashboardApiKeysUsage
 }
