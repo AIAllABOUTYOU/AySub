@@ -67,9 +67,15 @@ func RegisterGatewayRoutes(
 			}
 			h.Gateway.Messages(c)
 		})
-		// /v1/messages/count_tokens: OpenAI groups get 404
+		// /v1/messages/count_tokens: OpenAI groups bridge to Responses input_tokens.
 		gateway.POST("/messages/count_tokens", func(c *gin.Context) {
-			if openAICompatiblePlatform(c) != "" {
+			platform := openAICompatiblePlatform(c)
+			if platform == service.PlatformOpenAI {
+				withOpenAICompatiblePlatform(c, platform)
+				h.OpenAIGateway.CountTokens(c)
+				return
+			}
+			if platform != "" {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 				c.JSON(http.StatusNotFound, gin.H{
 					"type": "error",

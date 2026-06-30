@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -31,9 +32,28 @@ func isOpenAIAccount(account *Account) bool {
 	return account != nil && account.Platform == PlatformOpenAI
 }
 
+func isOpenAIContextWindowError(message string, body []byte) bool {
+	combined := strings.ToLower(strings.TrimSpace(message))
+	if extracted := strings.ToLower(strings.TrimSpace(extractUpstreamErrorMessage(body))); extracted != "" {
+		if combined != "" {
+			combined += " "
+		}
+		combined += extracted
+	}
+	if combined == "" && len(body) > 0 {
+		combined = strings.ToLower(string(body))
+	}
+	return (strings.Contains(combined, "exceeds") || strings.Contains(combined, "exceed")) &&
+		(strings.Contains(combined, "context window") || strings.Contains(combined, "maximum context") || strings.Contains(combined, "context length"))
+}
+
 func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) bool {
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
+
+	if account != nil && account.Platform == PlatformOpenAI && isOpenAIContextWindowError("", responseBody) {
+		return false
+	}
 
 	if statusCode == http.StatusTooManyRequests {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)

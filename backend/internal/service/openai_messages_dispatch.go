@@ -64,6 +64,13 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 		return ""
 	}
 
+	if g.Platform == PlatformXAI {
+		if claudeMessagesDispatchFamily(requestedModel) != "" {
+			return "grok-4.3"
+		}
+		return ""
+	}
+
 	cfg := normalizeOpenAIMessagesDispatchModelConfig(g.MessagesDispatchModelConfig)
 	if mappedModel := strings.TrimSpace(cfg.ExactModelMappings[requestedModel]); mappedModel != "" {
 		return mappedModel

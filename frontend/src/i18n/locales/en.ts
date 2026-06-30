@@ -797,6 +797,13 @@ export default {
     failed: 'Check-in failed',
     loadFailed: 'Failed to load check-in status',
     newBalance: 'Current balance',
+    history: 'Check-in history',
+    historyHint: 'View check-in records and rewards by month.',
+    historyEmpty: 'No check-ins this month',
+    totalCheckins: 'Total check-ins',
+    monthCheckins: 'This month',
+    totalRewards: 'Total rewards',
+    monthRewards: 'Monthly rewards',
   },
 
   // Groups (shared)
@@ -4979,6 +4986,8 @@ export default {
       openaiQuotaReset: {
         count: 'Credits',
         reset: 'Reset',
+        confirmTitle: 'Confirm Reset',
+        confirmMessage: 'Consume 1 upstream reset credit now? Remaining credits: {count}.',
         countTooltipLoad: 'Click to load upstream reset-credit count',
         countTooltipRefresh: 'Click to refresh upstream reset-credit count',
         resetTooltipReady: 'Consume 1 upstream reset credit to restore the Codex window',

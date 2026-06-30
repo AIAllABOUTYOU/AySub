@@ -222,6 +222,49 @@ data: [DONE]
 	require.Equal(t, "Bearer xai-key", upstream.requests[0].Header.Get("Authorization"))
 }
 
+func TestAccountTestService_OpenAIAPIKeyTestAppliesCustomHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	resp := newJSONResponse(http.StatusOK, `data: {"type":"response.output_text.delta","delta":"ok"}
+data: {"type":"response.completed"}
+
+`)
+	account := &Account{
+		ID:          79,
+		Name:        "openai apikey",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-test",
+			"base_url": "https://new.sharedchat.cc/codex",
+		},
+		Extra: map[string]any{
+			"custom_headers": map[string]any{
+				"User-Agent": "Codex Desktop/0.142.3 (Mac OS 26.2.0; arm64)",
+				"X-Test-UA":  "custom-header-applied",
+			},
+		},
+	}
+	repo := &openAIAccountTestRepo{
+		mockAccountRepoForGemini: mockAccountRepoForGemini{
+			accountsByID: map[int64]*Account{account.ID: account},
+		},
+	}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: &config.Config{}}
+
+	err := svc.TestAccountConnection(ctx, account.ID, "gpt-5.5", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "https://new.sharedchat.cc/codex/v1/responses", upstream.requests[0].URL.String())
+	require.Equal(t, "Codex Desktop/0.142.3 (Mac OS 26.2.0; arm64)", upstream.requests[0].Header.Get("User-Agent"))
+	require.Equal(t, "custom-header-applied", upstream.requests[0].Header.Get("X-Test-UA"))
+	require.Contains(t, recorder.Body.String(), `"type":"content","text":"ok"`)
+	require.Contains(t, recorder.Body.String(), `"success":true`)
+}
+
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

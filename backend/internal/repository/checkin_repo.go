@@ -46,6 +46,62 @@ func (r *checkinRepository) GetByUserAndDate(ctx context.Context, userID int64, 
 	return &record, nil
 }
 
+func (r *checkinRepository) ListByUserAndDateRange(ctx context.Context, userID int64, startDate string, endDate string) ([]*service.UserCheckin, error) {
+	if r == nil || r.db == nil {
+		return []*service.UserCheckin{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, user_id, checkin_date::text, reward_amount, balance_after, source, created_at
+		FROM user_checkins
+		WHERE user_id = $1
+		  AND checkin_date >= $2::date
+		  AND checkin_date <= $3::date
+		ORDER BY checkin_date DESC, id DESC
+	`, userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]*service.UserCheckin, 0)
+	for rows.Next() {
+		var record service.UserCheckin
+		if err := rows.Scan(
+			&record.ID,
+			&record.UserID,
+			&record.CheckinDate,
+			&record.RewardAmount,
+			&record.BalanceAfter,
+			&record.Source,
+			&record.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, &record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func (r *checkinRepository) CountAndSumByUser(ctx context.Context, userID int64) (int64, float64, error) {
+	if r == nil || r.db == nil {
+		return 0, 0, nil
+	}
+	var totalCheckins int64
+	var totalReward float64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(reward_amount), 0)
+		FROM user_checkins
+		WHERE user_id = $1
+	`, userID).Scan(&totalCheckins, &totalReward)
+	if err != nil {
+		return 0, 0, err
+	}
+	return totalCheckins, totalReward, nil
+}
+
 func (r *checkinRepository) CountCurrentStreak(ctx context.Context, userID int64, startDate string) (int, error) {
 	if r == nil || r.db == nil {
 		return 0, nil

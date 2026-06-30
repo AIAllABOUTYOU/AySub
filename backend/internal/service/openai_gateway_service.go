@@ -39,9 +39,10 @@ const (
 	// ChatGPT internal API for OAuth accounts
 	chatgptCodexURL = "https://chatgpt.com/backend-api/codex/responses"
 	// OpenAI Platform API for API Key accounts (fallback)
-	openaiPlatformAPIURL   = "https://api.openai.com/v1/responses"
-	openaiStickySessionTTL = time.Hour // 粘性会话TTL
-	codexCLIUserAgent      = "codex_cli_rs/0.125.0"
+	openaiPlatformAPIURL            = "https://api.openai.com/v1/responses"
+	openaiPlatformAPIInputTokensURL = "https://api.openai.com/v1/responses/input_tokens"
+	openaiStickySessionTTL          = time.Hour // 粘性会话TTL
+	codexCLIUserAgent               = "codex_cli_rs/0.125.0"
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -4464,7 +4465,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	default:
 		statusCode = http.StatusBadGateway
 		errType = "upstream_error"
-		errMsg = "Upstream request failed"
+		if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
+			errMsg = upstreamMsg
+		} else {
+			errMsg = "Upstream request failed"
+		}
 	}
 
 	c.JSON(statusCode, gin.H{

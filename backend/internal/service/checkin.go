@@ -23,25 +23,42 @@ type UserCheckin struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+type CheckinRecord struct {
+	CheckinDate  string  `json:"checkin_date"`
+	QuotaAwarded float64 `json:"quota_awarded"`
+	RewardAmount float64 `json:"reward_amount"`
+}
+
+type CheckinStats struct {
+	TotalQuota     float64          `json:"total_quota"`
+	TotalCheckins  int64            `json:"total_checkins"`
+	CheckinCount   int              `json:"checkin_count"`
+	CheckedInToday bool             `json:"checked_in_today"`
+	Records        []*CheckinRecord `json:"records"`
+}
+
 type CheckinStatus struct {
-	Enabled         bool         `json:"enabled"`
-	RewardAmount    float64      `json:"reward_amount"`
-	CheckedIn       bool         `json:"checked_in"`
-	CheckedInToday  bool         `json:"checked_in_today"`
-	CheckinDate     string       `json:"checkin_date"`
-	NextAvailableAt time.Time    `json:"next_available_at"`
-	NextCheckinAt   time.Time    `json:"next_checkin_at"`
-	LastCheckinAt   *time.Time   `json:"last_checkin_at,omitempty"`
-	StreakDays      int          `json:"streak_days"`
-	Balance         *float64     `json:"balance,omitempty"`
-	Message         string       `json:"message,omitempty"`
-	AwardedAmount   *float64     `json:"awarded_amount,omitempty"`
-	NewBalance      *float64     `json:"new_balance,omitempty"`
-	Record          *UserCheckin `json:"record,omitempty"`
+	Enabled         bool          `json:"enabled"`
+	RewardAmount    float64       `json:"reward_amount"`
+	CheckedIn       bool          `json:"checked_in"`
+	CheckedInToday  bool          `json:"checked_in_today"`
+	CheckinDate     string        `json:"checkin_date"`
+	NextAvailableAt time.Time     `json:"next_available_at"`
+	NextCheckinAt   time.Time     `json:"next_checkin_at"`
+	LastCheckinAt   *time.Time    `json:"last_checkin_at,omitempty"`
+	StreakDays      int           `json:"streak_days"`
+	Balance         *float64      `json:"balance,omitempty"`
+	Message         string        `json:"message,omitempty"`
+	AwardedAmount   *float64      `json:"awarded_amount,omitempty"`
+	NewBalance      *float64      `json:"new_balance,omitempty"`
+	Record          *UserCheckin  `json:"record,omitempty"`
+	Stats           *CheckinStats `json:"stats,omitempty"`
 }
 
 type CheckinRepository interface {
 	GetByUserAndDate(ctx context.Context, userID int64, checkinDate string) (*UserCheckin, error)
+	ListByUserAndDateRange(ctx context.Context, userID int64, startDate string, endDate string) ([]*UserCheckin, error)
+	CountAndSumByUser(ctx context.Context, userID int64) (int64, float64, error)
 	CountCurrentStreak(ctx context.Context, userID int64, startDate string) (int, error)
 	Claim(ctx context.Context, userID int64, checkinDate string, rewardAmount float64) (*UserCheckin, error)
 }
@@ -62,7 +79,7 @@ func NewCheckinService(repo CheckinRepository, settingService *SettingService, a
 	}
 }
 
-func (s *CheckinService) Status(ctx context.Context, userID int64, userTZ string) (*CheckinStatus, error) {
+func (s *CheckinService) Status(ctx context.Context, userID int64, userTZ string, month string) (*CheckinStatus, error) {
 	settings, err := s.settingService.GetPublicSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -98,6 +115,11 @@ func (s *CheckinService) Status(ctx context.Context, userID int64, userTZ string
 		return nil, err
 	}
 	status.StreakDays = streak
+	stats, err := s.stats(ctx, userID, month, checkinDate, record != nil)
+	if err != nil {
+		return nil, err
+	}
+	status.Stats = stats
 	return status, nil
 }
 
@@ -139,6 +161,39 @@ func (s *CheckinService) Claim(ctx context.Context, userID int64, userTZ string)
 	}, nil
 }
 
+func (s *CheckinService) stats(ctx context.Context, userID int64, month string, currentCheckinDate string, checkedInToday bool) (*CheckinStats, error) {
+	if month == "" {
+		month = currentCheckinDate[:7]
+	}
+	startDate, endDate, err := checkinMonthRange(month)
+	if err != nil {
+		return nil, err
+	}
+	records, err := s.repo.ListByUserAndDateRange(ctx, userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	checkinRecords := make([]*CheckinRecord, 0, len(records))
+	for _, record := range records {
+		checkinRecords = append(checkinRecords, &CheckinRecord{
+			CheckinDate:  record.CheckinDate,
+			QuotaAwarded: record.RewardAmount,
+			RewardAmount: record.RewardAmount,
+		})
+	}
+	totalCheckins, totalQuota, err := s.repo.CountAndSumByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &CheckinStats{
+		TotalQuota:     totalQuota,
+		TotalCheckins:  totalCheckins,
+		CheckinCount:   len(checkinRecords),
+		CheckedInToday: checkedInToday,
+		Records:        checkinRecords,
+	}, nil
+}
+
 func (s *CheckinService) invalidateUserBalance(ctx context.Context, userID int64) {
 	if s.authInvalidator != nil {
 		s.authInvalidator.InvalidateAuthCacheByUserID(ctx, userID)
@@ -166,4 +221,14 @@ func previousCheckinDate(checkinDate string) string {
 		return checkinDate
 	}
 	return t.AddDate(0, 0, -1).Format("2006-01-02")
+}
+
+func checkinMonthRange(month string) (string, string, error) {
+	t, err := time.Parse("2006-01", month)
+	if err != nil {
+		return "", "", infraerrors.BadRequest("INVALID_CHECKIN_MONTH", "invalid check-in month")
+	}
+	start := t.Format("2006-01-02")
+	end := t.AddDate(0, 1, -1).Format("2006-01-02")
+	return start, end, nil
 }

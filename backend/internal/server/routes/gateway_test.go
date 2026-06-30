@@ -185,3 +185,63 @@ func TestGatewayRoutesXAIUsesOpenAICompatibleHandlers(t *testing.T) {
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI-compatible handler for xAI", path)
 	}
 }
+
+func TestGatewayRoutesXAIMessagesIgnoresDispatchSwitch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	RegisterGatewayRoutes(
+		router,
+		&handler.Handlers{
+			Gateway:       &handler.GatewayHandler{},
+			OpenAIGateway: &handler.OpenAIGatewayHandler{},
+		},
+		servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
+			groupID := int64(1)
+			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+				GroupID: &groupID,
+				Group: &service.Group{
+					Platform:              service.PlatformXAI,
+					AllowMessagesDispatch: false,
+				},
+			})
+			c.Next()
+		}),
+		nil,
+		nil,
+		nil,
+		nil,
+		&config.Config{},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+	require.NotEqual(t, http.StatusForbidden, w.Code)
+	require.NotContains(t, w.Body.String(), "does not allow /v1/messages dispatch")
+}
+
+func TestGatewayRoutesXAIStillRejectsCountTokens(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformXAI)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", strings.NewReader(`{"model":"grok-4","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "Token counting is not supported for this platform")
+}
+
+func TestGatewayRoutesOpenAICountTokensPathIsRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformOpenAI)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", strings.NewReader(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+	require.NotEqual(t, http.StatusNotFound, w.Code)
+}

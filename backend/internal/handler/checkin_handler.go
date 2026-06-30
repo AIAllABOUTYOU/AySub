@@ -29,7 +29,7 @@ func (h *CheckinHandler) Status(c *gin.Context) {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
-	status, err := h.checkinService.Status(c.Request.Context(), subject.UserID, c.Query("timezone"))
+	status, err := h.checkinService.Status(c.Request.Context(), subject.UserID, c.Query("timezone"), c.Query("month"))
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

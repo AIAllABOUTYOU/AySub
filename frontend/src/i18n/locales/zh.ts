@@ -795,6 +795,13 @@ export default {
     failed: '签到失败',
     loadFailed: '加载签到状态失败',
     newBalance: '当前余额',
+    history: '签到历史',
+    historyHint: '按月查看历史签到记录和奖励。',
+    historyEmpty: '本月暂无签到记录',
+    totalCheckins: '累计签到',
+    monthCheckins: '本月签到',
+    totalRewards: '累计奖励',
+    monthRewards: '本月奖励',
   },
 
   // Groups (shared)
@@ -4242,6 +4249,8 @@ export default {
       openaiQuotaReset: {
         count: '次数',
         reset: '重置',
+        confirmTitle: '确认重置',
+        confirmMessage: '现在消耗 1 次上游重置次数吗？当前剩余 {count} 次。',
         countTooltipLoad: '点击查询剩余上游重置次数',
         countTooltipRefresh: '点击刷新剩余上游重置次数',
         resetTooltipReady: '消耗 1 次上游重置次数以立即恢复 Codex 窗口',
