@@ -449,6 +449,7 @@
                     ? 'text-primary-600 dark:text-primary-400'
                     : 'text-gray-400 dark:text-dark-500'"
                   :title="t('admin.users.sortBy')"
+                  :data-test="`usage-sort-trigger-${usageKey}`"
                   @click.stop="toggleUsageSortMenu(usageKey)"
                 >
                   <span
@@ -485,6 +486,7 @@
                     :class="isUsageSortActive(usageKey, metric)
                       ? 'font-medium text-primary-600 dark:text-primary-400'
                       : 'text-gray-700 dark:text-gray-300'"
+                    :data-test="`usage-sort-${usageKey}-${metric}`"
                     @click.stop="toggleUsageSort(usageKey, metric)"
                   >
                     <span>{{ metric === 'today' ? t('admin.users.today') : t('admin.users.total') }}</span>
@@ -1172,6 +1174,12 @@ const persistUsageSort = () => {
     console.error('Failed to persist usage sort:', e)
   }
 }
+const clearUsageSort = () => {
+  if (!usageSort.value) return
+  usageSort.value = null
+  openUsageSortMenu.value = null
+  persistUsageSort()
+}
 
 const isUsageSortActive = (key: string, metric: UsageMetric) =>
   !!usageSort.value && usageSort.value.key === key && usageSort.value.metric === metric
@@ -1564,6 +1572,7 @@ const handlePageSizeChange = (pageSize: number) => {
 }
 
 const handleSort = (key: string, order: 'asc' | 'desc') => {
+  clearUsageSort()
   sortState.sort_by = key
   sortState.sort_order = order
   pagination.page = 1

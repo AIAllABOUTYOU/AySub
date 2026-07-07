@@ -176,7 +176,7 @@ func TestGwRefundRejectsAlipayMerchantIdentitySnapshotMismatch(t *testing.T) {
 		loadBalancer: newWebhookProviderTestLoadBalancer(client),
 	}
 
-	err = svc.gwRefund(ctx, &RefundPlan{
+	_, err = svc.gwRefund(ctx, &RefundPlan{
 		OrderID:       order.ID,
 		Order:         order,
 		RefundAmount:  order.Amount,

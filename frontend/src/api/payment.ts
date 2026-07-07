@@ -16,6 +16,16 @@ import type {
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
+export interface PublicOrderVerifyResult {
+  out_trade_no: string
+  status: string
+  paid: boolean
+  created_at: string
+  expires_at: string
+  paid_at?: string
+  completed_at?: string
+}
+
 export const paymentAPI = {
   /** Get payment configuration (enabled types, limits, etc.) */
   getConfig() {
@@ -69,7 +79,7 @@ export const paymentAPI = {
 
   /** Legacy-compatible public order lookup by out_trade_no */
   verifyOrderPublic(outTradeNo: string) {
-    return apiClient.post<PaymentOrder>('/payment/public/orders/verify', { out_trade_no: outTradeNo })
+    return apiClient.post<PublicOrderVerifyResult>('/payment/public/orders/verify', { out_trade_no: outTradeNo })
   },
 
   /** Resolve an order from a signed resume token without auth */

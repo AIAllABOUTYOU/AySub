@@ -108,6 +108,11 @@ export const adminPaymentAPI = {
     return apiClient.post(`/admin/payment/orders/${id}/refund`, data)
   },
 
+  /** Query and finalize a pending gateway refund */
+  finalizeRefund(id: number) {
+    return apiClient.post(`/admin/payment/orders/${id}/refund/finalize`)
+  },
+
   // ==================== Channels ====================
 
   /** Get all payment channels */

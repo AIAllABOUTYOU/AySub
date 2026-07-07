@@ -94,6 +94,14 @@ func NewTxContext(parent context.Context, tx *Tx) context.Context {
 	return context.WithValue(parent, txCtxKey{}, tx)
 }
 
+// WithoutTx returns a context copy without the attached transaction.
+func WithoutTx(ctx context.Context) context.Context {
+	if TxFromContext(ctx) == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, txCtxKey{}, (*Tx)(nil))
+}
+
 // OrderFunc applies an ordering on the sql selector.
 // Deprecated: Use Asc/Desc functions or the package builders instead.
 type OrderFunc func(*sql.Selector)

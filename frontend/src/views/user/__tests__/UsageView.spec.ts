@@ -303,6 +303,12 @@ describe('user UsageView tooltip', () => {
     expect(hasSortedExportQuery).toBe(true)
     expect(clickSpy).toHaveBeenCalled()
     expect(showSuccess).toHaveBeenCalled()
+    const csvContent = await exportedBlob!.text()
+    expect(csvContent.startsWith('\uFEFF')).toBe(true)
+    expect(csvContent.slice(1)).toBe([
+      'Time,API Key Name,Model,Reasoning Effort,Inbound Endpoint,Type,Billing Mode,Input Tokens,Output Tokens,Cache Read Tokens,Cache Creation Tokens,Rate Multiplier,Billed Cost,Original Cost,First Token (ms),Duration (ms)',
+      '2026-03-08T00:00:00Z,demo-key,gpt-5.4,,,"Sync",Token,4057,101,278272,4,1,0.09288300,0.09288300,12,345',
+    ].join('\n'))
 
     window.URL.createObjectURL = originalCreateObjectURL
     window.URL.revokeObjectURL = originalRevokeObjectURL

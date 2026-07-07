@@ -175,6 +175,21 @@ func (h *PaymentHandler) ProcessRefund(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// FinalizeRefund queries a pending gateway refund and finalizes the local order.
+// POST /api/v1/admin/payment/orders/:id/refund/finalize
+func (h *PaymentHandler) FinalizeRefund(c *gin.Context) {
+	orderID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	result, err := h.paymentService.QueryAndFinalizeRefund(c.Request.Context(), orderID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 // --- Subscription Plans ---
 
 // ListPlans returns all subscription plans.

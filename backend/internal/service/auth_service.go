@@ -1735,6 +1735,7 @@ func (s *AuthService) snapshotPlatformQuotaDefaults(ctx context.Context, userID 
 	if s.userPlatformQuotaRepo == nil || plan == nil || len(plan.PlatformQuotas) == 0 {
 		return nil
 	}
+	ctx = dbent.WithoutTx(ctx)
 	records := make([]UserPlatformQuotaRecord, 0, len(plan.PlatformQuotas))
 	for platform, q := range plan.PlatformQuotas {
 		rec := UserPlatformQuotaRecord{
