@@ -48,10 +48,20 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import Icon from '@/components/icons/Icon.vue'
 
-defineProps<{ stats: AdminUsageStatsResponse | null }>()
+interface UsageStatsCardsStats {
+  total_requests: number
+  total_input_tokens: number
+  total_output_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_actual_cost: number
+  total_account_cost?: number
+  average_duration_ms: number
+}
+
+defineProps<{ stats: UsageStatsCardsStats | null }>()
 
 const { t } = useI18n()
 
