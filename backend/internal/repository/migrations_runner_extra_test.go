@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -104,12 +105,31 @@ func TestMigrationChecksumCompatibilityRules_CoverEditedUpgradeCompatibilityMigr
 		"118_wechat_dual_mode_and_auth_source_defaults.sql",
 		"120_enforce_payment_orders_out_trade_no_unique_notx.sql",
 		"123_fix_legacy_auth_source_grant_on_signup_defaults.sql",
+		"148_add_user_checkins.sql",
 	} {
 		rule, ok := migrationChecksumCompatibilityRules[name]
 		require.Truef(t, ok, "missing compatibility rule for %s", name)
 		require.NotEmpty(t, rule.fileChecksum)
 		require.NotEmpty(t, rule.acceptedDBChecksum)
 	}
+}
+
+func TestMigrationChecksumCompatibilityRules_Checkin148KeepsPublishedMigrationImmutable(t *testing.T) {
+	const (
+		name                   = "148_add_user_checkins.sql"
+		publishedChecksum      = "ec58f818e01ded1513194e3b3128e22addcd9be0386e149156a44376ee62d203"
+		editedSettingsChecksum = "477266c71c93f7583efe20934982aab91227d39fc1695486c12e76caf6edf742"
+	)
+
+	content, err := os.ReadFile("../../migrations/" + name)
+	require.NoError(t, err)
+	require.Equal(t, publishedChecksum, migrationChecksum(string(content)))
+
+	rule, ok := migrationChecksumCompatibilityRules[name]
+	require.True(t, ok)
+	require.Equal(t, publishedChecksum, rule.fileChecksum)
+	require.True(t, isMigrationChecksumCompatible(name, editedSettingsChecksum, publishedChecksum))
+	require.True(t, isMigrationChecksumCompatible(name, publishedChecksum, editedSettingsChecksum))
 }
 
 func TestEnsureAtlasBaselineAligned(t *testing.T) {
