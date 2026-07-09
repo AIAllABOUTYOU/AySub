@@ -20,6 +20,43 @@ func resolveOpenAIForwardModel(account *Account, requestedModel, defaultMappedMo
 	return mappedModel
 }
 
+var openAIOAuthForeignModelPrefixes = []string{
+	"deepseek",
+	"glm-",
+	"kimi-",
+	"moonshot",
+	"qwen",
+	"qwq-",
+	"minimax",
+	"gemini-",
+	"gemma-",
+	"grok-",
+	"doubao-",
+	"hunyuan-",
+	"llama",
+	"meta-llama",
+	"mistral",
+	"mixtral",
+	"baichuan",
+	"ernie-",
+	"step-",
+	"seed-",
+	"yi-",
+}
+
+func isOpenAIOAuthServableModel(requestedModel string) bool {
+	model := strings.ToLower(lastOpenAIModelSegment(requestedModel))
+	if model == "" {
+		return true
+	}
+	for _, prefix := range openAIOAuthForeignModelPrefixes {
+		if strings.HasPrefix(model, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 // resolveOpenAICompactForwardModel determines the compact-only upstream model
 // for /responses/compact requests. It never affects normal /responses traffic.
 // When no compact-specific mapping matches, the input model is returned as-is.

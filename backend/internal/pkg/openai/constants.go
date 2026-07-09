@@ -15,6 +15,9 @@ type Model struct {
 
 // DefaultModels OpenAI models list
 var DefaultModels = []Model{
+	{ID: "gpt-5.6-sol", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Sol"},
+	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
+	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
 	{ID: "gpt-5.5", Object: "model", Created: 1776873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.5"},
 	{ID: "gpt-5.4", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4"},
 	{ID: "gpt-5.4-mini", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Mini"},
@@ -31,6 +34,7 @@ var DefaultModels = []Model{
 // XAIDefaultModels is the curated Grok/xAI compatible model list exposed for
 // xAI API-key and Grok Cookie groups.
 var XAIDefaultModels = []Model{
+	{ID: "grok-4.5", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.5"},
 	{ID: "grok-4.20-0309-non-reasoning", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Fast"},
 	{ID: "grok-4.20-0309", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Auto"},
 	{ID: "grok-4.20-0309-reasoning", Object: "model", Created: 1773014400, OwnedBy: "xai", Type: "model", DisplayName: "Grok 4.20 Expert"},

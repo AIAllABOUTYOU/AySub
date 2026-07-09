@@ -19,6 +19,7 @@ const (
 	EndpointChatCompletions     = "/v1/chat/completions"
 	EndpointEmbeddings          = "/v1/embeddings"
 	EndpointResponses           = "/v1/responses"
+	EndpointResponsesCompact    = "/v1/responses/compact"
 	EndpointImagesGenerations   = "/v1/images/generations"
 	EndpointImagesEdits         = "/v1/images/edits"
 	EndpointVideos              = "/v1/videos"
@@ -45,6 +46,7 @@ const (
 //	"/antigravity/v1/messages"   → "/v1/messages"
 //	"/v1/chat/completions"       → "/v1/chat/completions"
 //	"/openai/v1/responses/foo"   → "/v1/responses"
+//	"/openai/v1/responses/compact" → "/v1/responses/compact"
 //	"/v1beta/models/gemini:gen"  → "/v1beta/models"
 func NormalizeInboundEndpoint(path string) string {
 	path = strings.TrimSpace(path)
@@ -71,13 +73,31 @@ func NormalizeInboundEndpoint(path string) string {
 		return EndpointLiveKitRTC
 	case strings.Contains(path, EndpointVideos) || strings.Contains(path, "/videos"):
 		return EndpointVideos
-	case strings.Contains(path, EndpointResponses) || strings.HasSuffix(path, "/responses") || strings.Contains(path, "/responses/"):
+	case strings.Contains(path, EndpointResponsesCompact) || isResponsesCompactAliasPath(path):
+		return EndpointResponsesCompact
+	case strings.Contains(path, EndpointResponses) || isResponsesRootAliasPath(path):
 		return EndpointResponses
 	case strings.Contains(path, EndpointGeminiModels):
 		return EndpointGeminiModels
 	default:
 		return path
 	}
+}
+
+func isResponsesCompactAliasPath(path string) bool {
+	trimmed := strings.TrimRight(strings.TrimSpace(path), "/")
+	return isBareOrSubpathOf(trimmed, "/responses/compact") ||
+		isBareOrSubpathOf(trimmed, "/backend-api/codex/responses/compact")
+}
+
+func isResponsesRootAliasPath(path string) bool {
+	trimmed := strings.TrimRight(strings.TrimSpace(path), "/")
+	return isBareOrSubpathOf(trimmed, "/responses") ||
+		isBareOrSubpathOf(trimmed, "/backend-api/codex/responses")
+}
+
+func isBareOrSubpathOf(path, root string) bool {
+	return path == root || strings.HasPrefix(path, root+"/")
 }
 
 // DeriveUpstreamEndpoint determines the upstream endpoint from the
@@ -108,6 +128,9 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 		// Preserve subresource suffix (e.g. /v1/responses/compact).
 		if suffix := responsesSubpathSuffix(rawRequestPath); suffix != "" {
 			return EndpointResponses + suffix
+		}
+		if inbound == EndpointResponsesCompact {
+			return EndpointResponsesCompact
 		}
 		return EndpointResponses
 
@@ -173,9 +196,12 @@ func responsesSubpathSuffix(rawPath string) string {
 // Apply this middleware to all gateway route groups.
 func InboundEndpointMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		path := c.FullPath()
-		if path == "" && c.Request != nil && c.Request.URL != nil {
+		path := ""
+		if c.Request != nil && c.Request.URL != nil {
 			path = c.Request.URL.Path
+		}
+		if path == "" {
+			path = c.FullPath()
 		}
 		c.Set(ctxKeyInboundEndpoint, NormalizeInboundEndpoint(path))
 		c.Next()
@@ -189,7 +215,7 @@ func InboundEndpointMiddleware() gin.HandlerFunc {
 
 // GetInboundEndpoint returns the canonical inbound endpoint stored by
 // InboundEndpointMiddleware. If the middleware did not run (e.g. in
-// tests), it falls back to normalizing c.FullPath() on the fly.
+// tests), it falls back to normalizing the raw request path on the fly.
 func GetInboundEndpoint(c *gin.Context) string {
 	if v, ok := c.Get(ctxKeyInboundEndpoint); ok {
 		if s, ok := v.(string); ok && s != "" {
@@ -199,9 +225,11 @@ func GetInboundEndpoint(c *gin.Context) string {
 	// Fallback: normalize on the fly.
 	path := ""
 	if c != nil {
-		path = c.FullPath()
-		if path == "" && c.Request != nil && c.Request.URL != nil {
+		if c.Request != nil && c.Request.URL != nil {
 			path = c.Request.URL.Path
+		}
+		if path == "" {
+			path = c.FullPath()
 		}
 	}
 	return NormalizeInboundEndpoint(path)
