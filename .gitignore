@@ -245,3 +245,4 @@ grok2api/
 !README_CN.md
 !README_JA.md
 !README.md
+tools/upstream-sync-fetch.sh
