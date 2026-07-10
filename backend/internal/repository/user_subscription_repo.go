@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -309,31 +310,120 @@ func (r *userSubscriptionRepository) ActivateWindows(ctx context.Context, id int
 	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 }
 
-func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int64, newWindowStart time.Time) error {
+// ResetUsageWindows serializes multi-window resets with concurrent billing updates.
+// The row lock and all selected field updates live in one transaction, so an
+// IncrementUsage call can only land entirely before or entirely after the reset.
+func (r *userSubscriptionRepository) ResetUsageWindows(ctx context.Context, id int64, resetDaily, resetWeekly, resetMonthly bool, newWindowStart time.Time) error {
+	if !resetDaily && !resetWeekly && !resetMonthly {
+		return service.ErrInvalidInput
+	}
+
+	reset := func(txCtx context.Context, txClient *dbent.Client) error {
+		locked, err := txClient.UserSubscription.Query().
+			Where(usersubscription.IDEQ(id)).
+			ForUpdate().
+			Only(txCtx)
+		if err != nil {
+			return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+		}
+
+		update := locked.Update()
+		if resetDaily {
+			update.SetDailyUsageUsd(0).SetDailyWindowStart(newWindowStart)
+		}
+		if resetWeekly {
+			update.SetWeeklyUsageUsd(0).SetWeeklyWindowStart(newWindowStart)
+		}
+		if resetMonthly {
+			update.SetMonthlyUsageUsd(0).SetMonthlyWindowStart(newWindowStart)
+		}
+		_, err = update.Save(txCtx)
+		return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	}
+
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		return reset(ctx, tx.Client())
+	}
+
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		if errors.Is(err, dbent.ErrTxStarted) {
+			return reset(ctx, r.client)
+		}
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	txCtx := dbent.NewTxContext(ctx, tx)
+	if err := reset(txCtx, tx.Client()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	_, err := client.UserSubscription.UpdateOneID(id).
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	if expectedWindowStart == nil {
+		query = query.Where(usersubscription.DailyWindowStartIsNil())
+	} else {
+		query = query.Where(usersubscription.DailyWindowStartEQ(*expectedWindowStart))
+	}
+	n, err := query.
 		SetDailyUsageUsd(0).
 		SetDailyWindowStart(newWindowStart).
 		Save(ctx)
-	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
 
-func (r *userSubscriptionRepository) ResetWeeklyUsage(ctx context.Context, id int64, newWindowStart time.Time) error {
+func (r *userSubscriptionRepository) ResetWeeklyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	_, err := client.UserSubscription.UpdateOneID(id).
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	if expectedWindowStart == nil {
+		query = query.Where(usersubscription.WeeklyWindowStartIsNil())
+	} else {
+		query = query.Where(usersubscription.WeeklyWindowStartEQ(*expectedWindowStart))
+	}
+	n, err := query.
 		SetWeeklyUsageUsd(0).
 		SetWeeklyWindowStart(newWindowStart).
 		Save(ctx)
-	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
 
-func (r *userSubscriptionRepository) ResetMonthlyUsage(ctx context.Context, id int64, newWindowStart time.Time) error {
+func (r *userSubscriptionRepository) ResetMonthlyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	_, err := client.UserSubscription.UpdateOneID(id).
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	if expectedWindowStart == nil {
+		query = query.Where(usersubscription.MonthlyWindowStartIsNil())
+	} else {
+		query = query.Where(usersubscription.MonthlyWindowStartEQ(*expectedWindowStart))
+	}
+	n, err := query.
 		SetMonthlyUsageUsd(0).
 		SetMonthlyWindowStart(newWindowStart).
 		Save(ctx)
-	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	return r.translateConditionalWindowReset(ctx, client, id, n, err)
+}
+
+func (r *userSubscriptionRepository) translateConditionalWindowReset(ctx context.Context, client *dbent.Client, id int64, affected int, err error) error {
+	if err != nil {
+		return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	}
+	if affected > 0 {
+		return nil
+	}
+
+	// Another request may already have advanced the window. Treat that stale
+	// reset as a no-op while preserving not-found behavior for missing rows.
+	exists, err := client.UserSubscription.Query().Where(usersubscription.IDEQ(id)).Exist(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
+	}
+	if !exists {
+		return service.ErrSubscriptionNotFound
+	}
+	return nil
 }
 
 // IncrementUsage 原子性地累加订阅用量。

@@ -168,6 +168,29 @@ func opsInsertErrorLogArgs(input *service.OpsInsertErrorLogInput) []any {
 	}
 }
 
+func opsErrorLogsOrderBy(filter *service.OpsErrorLogFilter) string {
+	sortBy := ""
+	sortOrder := ""
+	if filter != nil {
+		sortBy = strings.ToLower(strings.TrimSpace(filter.SortBy))
+		sortOrder = strings.ToLower(strings.TrimSpace(filter.SortOrder))
+	}
+
+	column := "e.created_at"
+	switch sortBy {
+	case "model":
+		column = "COALESCE(NULLIF(TRIM(e.requested_model), ''), e.model)"
+	case "status_code":
+		column = "COALESCE(e.upstream_status_code, e.status_code, 0)"
+	}
+
+	direction := "DESC"
+	if sortOrder == "asc" {
+		direction = "ASC"
+	}
+	return fmt.Sprintf("%s %s, e.id %s", column, direction, direction)
+}
+
 func (r *opsRepository) ListErrorLogs(ctx context.Context, filter *service.OpsErrorLogFilter) (*service.OpsErrorLogList, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
@@ -238,7 +261,7 @@ LEFT JOIN groups g ON e.group_id = g.id
 LEFT JOIN users u ON e.user_id = u.id
 LEFT JOIN users u2 ON e.resolved_by_user_id = u2.id
 ` + where + `
-ORDER BY e.created_at DESC
+ORDER BY ` + opsErrorLogsOrderBy(filter) + `
 LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 
 	rows, err := r.db.QueryContext(ctx, selectSQL, argsWithLimit...)
@@ -831,8 +854,9 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 	if filter != nil {
 		resolvedFilter = filter.Resolved
 	}
-	// Keep list endpoints scoped to client errors unless explicitly filtering upstream phase.
-	if phaseFilter != "upstream" {
+	// Only the dedicated upstream-error views include recovered rows whose final
+	// client status is successful. Request-error views always keep this guard.
+	if phaseFilter != "upstream" || filter == nil || !filter.IncludeRecoveredUpstream {
 		clauses = append(clauses, "COALESCE(e.status_code, 0) >= 400")
 	}
 
@@ -856,6 +880,25 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 	if filter.AccountID != nil && *filter.AccountID > 0 {
 		args = append(args, *filter.AccountID)
 		clauses = append(clauses, "e.account_id = $"+itoa(len(args)))
+	}
+	if filter.UserID != nil && *filter.UserID > 0 {
+		args = append(args, *filter.UserID)
+		clauses = append(clauses, "e.user_id = $"+itoa(len(args)))
+	}
+	if filter.APIKeyID != nil && *filter.APIKeyID > 0 {
+		args = append(args, *filter.APIKeyID)
+		clauses = append(clauses, "e.api_key_id = $"+itoa(len(args)))
+	}
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		args = append(args, model)
+		clauses = append(clauses, "COALESCE(NULLIF(TRIM(e.requested_model), ''), e.model, '') = $"+itoa(len(args)))
+	}
+	if filter.RequestType != nil {
+		args = append(args, *filter.RequestType)
+		clauses = append(clauses, "e.request_type = $"+itoa(len(args)))
+	} else if filter.Stream != nil {
+		args = append(args, *filter.Stream)
+		clauses = append(clauses, "e.stream = $"+itoa(len(args)))
 	}
 	if phase := phaseFilter; phase != "" {
 		args = append(args, phase)
@@ -925,6 +968,14 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		args = append(args, like)
 		n := itoa(len(args))
 		clauses = append(clauses, "EXISTS (SELECT 1 FROM users u WHERE u.id = e.user_id AND u.email ILIKE $"+n+")")
+	}
+	if len(filter.ErrorPhasesAny) > 0 {
+		args = append(args, pq.Array(filter.ErrorPhasesAny))
+		clauses = append(clauses, "e.error_phase = ANY($"+itoa(len(args))+")")
+	}
+	if len(filter.ErrorTypesAny) > 0 {
+		args = append(args, pq.Array(filter.ErrorTypesAny))
+		clauses = append(clauses, "e.error_type = ANY($"+itoa(len(args))+")")
 	}
 
 	return "WHERE " + strings.Join(clauses, " AND "), args

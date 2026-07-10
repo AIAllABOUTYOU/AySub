@@ -61,6 +61,7 @@ type Handlers struct {
 	Checkin          *CheckinHandler
 	UserSecurity     *UserSecurityHandler
 	Playground       *PlaygroundSessionHandler
+	BatchImage       *BatchImageHandler
 }
 
 // BuildInfo contains build-time information

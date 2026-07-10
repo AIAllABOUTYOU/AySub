@@ -442,11 +442,17 @@ export default {
     }
   },
 
+  batchImageGuide: {
+    title: '图片批量生成',
+    description: '一次提交多条提示词，任务完成后可统一下载图片结果'
+  },
+
   // Navigation
   nav: {
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
+    batchImage: '批量生图',
     usage: '使用记录',
     requestLogs: '请求日志',
     securityCenter: '安全中心',
@@ -769,6 +775,8 @@ export default {
     quickActions: '快捷操作',
     createApiKey: '创建 API 密钥',
     generateNewKey: '生成新的 API 密钥',
+    batchImageAgent: '批量生图助手',
+    batchImageAgentDesc: '复制给 Agent 的任务说明',
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
@@ -866,6 +874,8 @@ export default {
     total: '近30天',
     quota: '额度',
     lastUsedAt: '上次使用时间',
+    lastUsedIP: '最后使用 IP',
+    currentConcurrency: '当前并发',
     useKey: '使用密钥',
     useKeyModal: {
       title: '使用 API 密钥',
@@ -1054,6 +1064,7 @@ export default {
     type: '类型',
     tokens: 'Token',
     cost: '费用',
+    latency: '延迟',
     firstToken: '首 Token',
     duration: '耗时',
     time: '时间',
@@ -1070,6 +1081,12 @@ export default {
     imageUnitPrice: '单张价格',
     imageTotalPrice: '图片总价',
     imageCount: '图片张数',
+    videoUnitPrice: '每秒价格',
+    videoTotalPrice: '视频总价',
+    videoCount: '视频数量',
+    videoDuration: '视频时长',
+    videoResolution: '视频清晰度',
+    videoResolutionUnknown: '清晰度未知',
     imageBillingSize: '计费尺寸',
     imageInputSize: '输入尺寸',
     imageOutputSize: '输出尺寸',
@@ -1100,7 +1117,20 @@ export default {
     exportExcelSuccess: '使用数据导出成功（Excel格式）',
     exportExcelFailed: '使用数据导出失败',
     imageUnit: '张',
-    userAgent: 'User-Agent'
+    videoUnit: '个',
+    userAgent: 'User-Agent',
+    tabs: { usage: '用量明细', errors: '错误请求', ranking: '用户排行' },
+    errors: {
+      category: '分类',
+      allCategories: '全部分类',
+      allStatuses: '全部状态码',
+      failedToLoad: '加载错误请求失败',
+      categories: {
+        auth: '认证失败', rate_limit: '限流', quota: '余额/订阅',
+        invalid_request: '参数错误', service_unavailable: '服务暂时不可用',
+        upstream: '上游错误', internal: '平台错误', cyber: '安全策略'
+      }
+    }
   },
 
   requestLogs: {
@@ -1426,7 +1456,7 @@ export default {
     },
     toolbar: {
       multiplier: '倍率',
-      density: '密度'
+      tokenUnit: 'Token 价格单位（每百万 / 每千）'
     },
     sort: {
       default: '默认排序',
@@ -2081,6 +2111,8 @@ export default {
       viewUserAccounts: '查看和管理用户账户',
       manageAccounts: '管理账号',
       configureAiAccounts: '配置 AI 平台账号',
+      batchImage: '批量生图',
+      batchImageDesc: '提交任务、复制 Agent 调用说明',
       systemSettings: '系统设置',
       configureSystem: '配置系统设置',
       failedToLoad: '加载仪表盘数据失败'
@@ -3036,10 +3068,27 @@ export default {
         title: '图片生成计费',
         description: '配置图片生成能力和图片基础单价，留空则使用默认价格',
         allowImageGeneration: '允许当前分组生图',
+        allowBatchImageGeneration: '允许当前分组批量生图',
         independentMultiplier: '生图倍率独立',
         imageMultiplier: '生图独立倍率',
+        batchDiscountMultiplier: '批量生图折扣倍率',
+        batchHoldMultiplier: '批量冻结价格比例',
+        batchSectionHint: '批量生图仅影响批量任务：结算价格会叠加批量折扣倍率，提交时冻结金额按普通生图原价 × 批量冻结价格比例计算。参考图也会产生上游输入 token 消耗，建议批量生图折扣倍率设置大于 0.5。',
+        batchDisabledHint: '请先开启当前分组生图，才能开启批量生图。',
+        batchGeminiOnlyHint: '批量生图当前仅支持 Gemini 分组。',
         modeHint: '默认关闭独立倍率时，图片费用 = 图片价格 × 当前分组有效倍率；开启独立倍率后，图片费用 = 图片价格 × 生图独立倍率。',
         finalPricePreview: '最终单张价格预览',
+        notConfigured: '未配置'
+      },
+      videoPricing: {
+        title: '视频生成计费',
+        description:
+          '配置 xAI / Grok 视频生成每秒单价（USD/秒）。留空使用模型默认价：grok-imagine-video 为 480p $0.05/s、720p $0.07/s；video-1.5 为 480p $0.08/s、720p $0.14/s、1080p $0.25/s。',
+        independentMultiplier: '使用独立视频倍率',
+        videoMultiplier: '视频独立倍率',
+        modeHint:
+          '视频费用 = 每秒价格 × 时长（支持 6/10/12/16/20 秒，未指定时按 6 秒）× 视频数量 × 倍率。默认使用分组倍率，开启后改用视频独立倍率。',
+        finalPricePreview: '最终每秒价格预览',
         notConfigured: '未配置'
       },
       modelsList: {
@@ -5640,11 +5689,26 @@ export default {
       billingModeToken: '按量',
       billingModePerRequest: '按次',
       billingModeImage: '按次(图片)',
+      billingModeVideo: '按次(视频)',
       allBillingModes: '全部计费模式',
       ipAddress: 'IP',
       clickToViewBalance: '点击查看充值记录',
       failedToLoadUser: '加载用户信息失败',
       userDeletedBadge: '已删除',
+      tokenRanking: {
+        title: 'Token 排行',
+        rowHint: '查看该用户的用量明细',
+        userCount: '共 {count} 位用户',
+        columns: {
+          user: '用户',
+          requests: '请求数',
+          inputTokens: '输入 Token',
+          outputTokens: '输出 Token',
+          cacheTokens: '缓存 Token',
+          totalTokens: '总 Token',
+          cost: '费用'
+        }
+      },
       cleanup: {
         button: '清理',
         title: '清理使用记录',
@@ -7663,11 +7727,23 @@ export default {
     updateNow: '立即更新',
     updating: '正在更新...',
     updateComplete: '更新完成',
+    rollbackComplete: '回退完成',
     updateFailed: '更新失败',
     restartRequired: '请重启服务以应用更新',
     restartNow: '立即重启',
     restarting: '正在重启...',
-    retry: '重试'
+    retry: '重试',
+    rollback: '版本回退',
+    rollbackSourceHint: '源码构建请使用 Git 标签手动回退。',
+    noRollbackVersions: '没有可回退的旧版本',
+    loadVersionsFailed: '加载回退版本失败',
+    deployScript: '安装脚本',
+    deployDocker: 'Docker',
+    copyCommand: '复制命令',
+    rollbackWarning: '回退会替换当前程序文件，完成后需要重启服务。',
+    rollbackConfirm: '回退到 {version}',
+    rollingBack: '正在回退...',
+    rollbackFailed: '版本回退失败'
   },
 
   // Recharge / Subscription Page

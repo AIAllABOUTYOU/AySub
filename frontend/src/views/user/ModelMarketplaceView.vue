@@ -53,12 +53,15 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-              <label class="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm text-gray-600 dark:border-dark-700 dark:text-gray-300">
+              <div class="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-sm text-gray-600 dark:border-dark-700 dark:text-gray-300">
                 <span>{{ t('modelMarketplace.toolbar.multiplier', '倍率') }}</span>
                 <button
                   type="button"
+                  data-testid="marketplace-multiplier-toggle"
                   class="relative h-5 w-9 rounded-full transition"
                   :class="showMultiplier ? 'bg-cyan-500' : 'bg-gray-200 dark:bg-dark-600'"
+                  :aria-label="t('modelMarketplace.toolbar.multiplier', '倍率')"
+                  :aria-pressed="showMultiplier"
                   @click="showMultiplier = !showMultiplier"
                 >
                   <span
@@ -66,7 +69,7 @@
                     :class="showMultiplier ? 'left-4' : 'left-0.5'"
                   ></span>
                 </button>
-              </label>
+              </div>
 
               <select v-model="sortMode" class="input h-9 w-36 text-sm">
                 <option value="default">{{ t('modelMarketplace.sort.default', '默认排序') }}</option>
@@ -98,12 +101,14 @@
 
               <button
                 type="button"
+                data-testid="marketplace-token-unit-toggle"
                 class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-dark-700 dark:text-gray-300 dark:hover:bg-dark-700"
-                :class="densityMode === 'k' ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-200' : ''"
-                :title="t('modelMarketplace.toolbar.density', '密度')"
-                @click="densityMode = densityMode === 'm' ? 'k' : 'm'"
+                :class="tokenPriceUnit === 'k' ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-200' : ''"
+                :title="t('modelMarketplace.toolbar.tokenUnit', 'Token 价格单位')"
+                :aria-label="t('modelMarketplace.toolbar.tokenUnit', 'Token 价格单位')"
+                @click="tokenPriceUnit = tokenPriceUnit === 'm' ? 'k' : 'm'"
               >
-                {{ densityMode.toUpperCase() }}
+                {{ tokenPriceUnit.toUpperCase() }}
               </button>
 
               <button
@@ -207,7 +212,7 @@
                   <span>{{ modelRows.length }}</span>
                 </button>
                 <button
-                  v-for="option in tagFilterOptions.slice(0, densityMode === 'k' ? 5 : 8)"
+                  v-for="option in tagFilterOptions.slice(0, 8)"
                   :key="option.tag"
                   type="button"
                   class="marketplace-filter-item"
@@ -231,7 +236,7 @@
                   <span>{{ t('common.all', '全部') }}</span>
                 </button>
                 <button
-                  v-for="option in groupFilterOptions.slice(0, densityMode === 'k' ? 5 : 8)"
+                  v-for="option in groupFilterOptions.slice(0, 8)"
                   :key="option.name"
                   type="button"
                   class="marketplace-filter-item"
@@ -418,8 +423,7 @@
 
             <div
               v-else-if="viewMode === 'cards'"
-              class="marketplace-card-grid grid gap-3 md:grid-cols-2"
-              :class="densityMode === 'k' ? '2xl:grid-cols-3' : '2xl:grid-cols-2'"
+              class="marketplace-card-grid grid gap-3 md:grid-cols-2 2xl:grid-cols-2"
             >
               <article
                 v-for="row in filteredRows"
@@ -697,11 +701,9 @@
                               :subscription-type="(item.group.subscription_type || 'standard') as SubscriptionType"
                               :rate-multiplier="item.group.rate_multiplier"
                               :user-rate-multiplier="userGroupRates[item.group.id] ?? null"
-                              always-show-rate
+                              :show-rate="showMultiplier"
+                              :always-show-rate="showMultiplier"
                             />
-                            <span v-if="showMultiplier" class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-950/40 dark:text-red-300">
-                              x{{ formatMultiplier(calculatorGroupMultiplier(item.group)) }}
-                            </span>
                           </div>
                         </td>
                         <td class="px-4 py-4 text-gray-600 dark:text-gray-300">{{ item.channelName }}</td>
@@ -802,7 +804,7 @@ const selectedGroupName = ref('')
 const selectedTag = ref('')
 const sortMode = ref<'default' | 'price' | 'channels' | 'name'>('default')
 const viewMode = ref<'cards' | 'table'>('cards')
-const densityMode = ref<'m' | 'k'>('m')
+const tokenPriceUnit = ref<'m' | 'k'>('m')
 const showMultiplier = ref(false)
 const selectedRow = ref<ModelMarketplaceRow | null>(null)
 const calculatorOpen = ref(false)
@@ -1116,7 +1118,8 @@ function comparablePrice(row: ModelMarketplaceRow): number {
     .map((entry) => {
       const pricing = entry.model.pricing
       if (!pricing) return null
-      return pricing.input_price ?? pricing.per_request_price ?? pricing.image_output_price ?? pricing.output_price
+      const price = pricing.input_price ?? pricing.per_request_price ?? pricing.image_output_price ?? pricing.output_price
+      return price == null ? null : price * entryPriceMultiplier(entry)
     })
     .filter((value): value is number => value !== null)
   return values.length > 0 ? Math.min(...values) : Number.MAX_SAFE_INTEGER
@@ -1203,13 +1206,13 @@ function drawerPriceRows(row: ModelMarketplaceRow): DrawerPriceRow[] {
 }
 
 function priceSummaryForPricing(pricing: UserSupportedModelPricing, group: UserAvailableGroup): string {
-  const multiplier = calculatorGroupMultiplier(group)
+  const multiplier = showMultiplier.value ? calculatorGroupMultiplier(group) : 1
   if (pricing.billing_mode === BILLING_MODE_TOKEN) {
     const input = pricing.input_price == null ? null : pricing.input_price * multiplier
     const output = pricing.output_price == null ? null : pricing.output_price * multiplier
     return t('modelMarketplace.pricing.tokenSummary', {
-      input: formatScaled(input, 1_000_000),
-      output: formatScaled(output, 1_000_000),
+      input: formatScaled(input, tokenPriceScale.value),
+      output: formatScaled(output, tokenPriceScale.value),
     })
   }
   if (pricing.billing_mode === BILLING_MODE_IMAGE) {
@@ -1235,32 +1238,48 @@ function billingModeLabel(mode: BillingMode): string {
 }
 
 function priceSummary(row: ModelMarketplaceRow): string {
-  const prices = row.entries.map((entry) => entry.model.pricing).filter((pricing): pricing is UserSupportedModelPricing => pricing !== null)
-  if (prices.length === 0) return t('availableChannels.noPricing')
+  const pricedEntries = row.entries.filter(
+    (entry): entry is ModelMarketplaceEntry & { model: UserSupportedModel & { pricing: UserSupportedModelPricing } } => entry.model.pricing !== null,
+  )
+  if (pricedEntries.length === 0) return t('availableChannels.noPricing')
 
-  const tokenPrices = prices.filter((pricing) => pricing.billing_mode === BILLING_MODE_TOKEN)
-  if (tokenPrices.length > 0) {
-    const input = minNumber(tokenPrices.map((pricing) => pricing.input_price))
-    const output = minNumber(tokenPrices.map((pricing) => pricing.output_price))
+  const tokenEntries = pricedEntries.filter((entry) => entry.model.pricing.billing_mode === BILLING_MODE_TOKEN)
+  if (tokenEntries.length > 0) {
+    const input = minNumber(tokenEntries.map((entry) => multiplyPrice(entry.model.pricing.input_price, entryPriceMultiplier(entry))))
+    const output = minNumber(tokenEntries.map((entry) => multiplyPrice(entry.model.pricing.output_price, entryPriceMultiplier(entry))))
     return t('modelMarketplace.pricing.tokenSummary', {
-      input: formatScaled(input, 1_000_000),
-      output: formatScaled(output, 1_000_000),
+      input: formatScaled(input, tokenPriceScale.value),
+      output: formatScaled(output, tokenPriceScale.value),
     })
   }
 
-  const requestPrices = prices.filter((pricing) => pricing.billing_mode === BILLING_MODE_PER_REQUEST)
-  if (requestPrices.length > 0) {
-    const price = minNumber(requestPrices.map((pricing) => pricing.per_request_price))
+  const requestEntries = pricedEntries.filter((entry) => entry.model.pricing.billing_mode === BILLING_MODE_PER_REQUEST)
+  if (requestEntries.length > 0) {
+    const price = minNumber(requestEntries.map((entry) => multiplyPrice(entry.model.pricing.per_request_price, entryPriceMultiplier(entry))))
     return t('modelMarketplace.pricing.requestSummary', { price: formatScaled(price, 1) })
   }
 
-  const imagePrices = prices.filter((pricing) => pricing.billing_mode === BILLING_MODE_IMAGE)
-  if (imagePrices.length > 0) {
-    const price = minNumber(imagePrices.map((pricing) => pricing.image_output_price ?? pricing.per_request_price))
+  const imageEntries = pricedEntries.filter((entry) => entry.model.pricing.billing_mode === BILLING_MODE_IMAGE)
+  if (imageEntries.length > 0) {
+    const price = minNumber(imageEntries.map((entry) => {
+      const pricing = entry.model.pricing
+      return multiplyPrice(pricing.image_output_price ?? pricing.per_request_price, entryPriceMultiplier(entry))
+    }))
     return t('modelMarketplace.pricing.imageSummary', { price: formatScaled(price, 1) })
   }
 
   return t('availableChannels.noPricing')
+}
+
+const tokenPriceScale = computed(() => (tokenPriceUnit.value === 'm' ? 1_000_000 : 1_000))
+
+function entryPriceMultiplier(entry: ModelMarketplaceEntry): number {
+  if (!showMultiplier.value || entry.groups.length === 0) return 1
+  return Math.min(...entry.groups.map(calculatorGroupMultiplier))
+}
+
+function multiplyPrice(price: number | null, multiplier: number): number | null {
+  return price == null ? null : price * multiplier
 }
 
 function minNumber(values: Array<number | null>): number | null {

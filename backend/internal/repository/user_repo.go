@@ -32,6 +32,9 @@ type userRepository struct {
 	sql    sqlExecutor
 }
 
+var _ service.RedeemUserAdjustmentRepository = (*userRepository)(nil)
+var _ service.AdminRoleUpdateRepository = (*userRepository)(nil)
+
 func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) service.UserRepository {
 	return newUserRepositoryWithSQL(client, sqlDB)
 }
@@ -179,14 +182,23 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 }
 
 func (r *userRepository) Update(ctx context.Context, userIn *service.User) error {
+	_, err := r.updateUser(ctx, userIn, false)
+	return err
+}
+
+func (r *userRepository) UpdateUserWithAdminRoleGuard(ctx context.Context, userIn *service.User) (string, error) {
+	return r.updateUser(ctx, userIn, true)
+}
+
+func (r *userRepository) updateUser(ctx context.Context, userIn *service.User, guardAdminRole bool) (string, error) {
 	if userIn == nil {
-		return nil
+		return "", nil
 	}
 
 	// 使用 ent 事务包裹用户更新与 allowed_groups 同步，避免跨层事务不一致。
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return err
+		return "", err
 	}
 
 	var txClient *dbent.Client
@@ -204,6 +216,19 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		}
 	}
 
+	if guardAdminRole {
+		releaseAdminRoleLock, lockErr := lockRepositoryScopedKeys(
+			txCtx,
+			txClient,
+			txAwareSQLExecutor(txCtx, r.sql, r.client),
+			"users:active-admin-role-guard",
+		)
+		if lockErr != nil {
+			return "", lockErr
+		}
+		defer releaseAdminRoleLock()
+	}
+
 	releaseEmailLock, err := lockRepositoryScopedKeys(
 		txCtx,
 		txClient,
@@ -211,19 +236,38 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		normalizedEmailUniquenessLockKey(userIn.Email),
 	)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer releaseEmailLock()
 
 	if err := ensureNormalizedEmailAvailableWithClient(txCtx, txClient, userIn.ID, userIn.Email); err != nil {
-		return err
+		return "", err
 	}
 
 	existing, err := clientFromContext(txCtx, txClient).User.Get(txCtx, userIn.ID)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return "", translatePersistenceError(err, service.ErrUserNotFound, nil)
 	}
 	oldEmail := existing.Email
+	oldRole := existing.Role
+
+	if guardAdminRole &&
+		existing.Role == service.RoleAdmin &&
+		existing.Status == service.StatusActive &&
+		userIn.Role != service.RoleAdmin {
+		activeAdminCount, countErr := txClient.User.Query().
+			Where(
+				dbuser.RoleEQ(service.RoleAdmin),
+				dbuser.StatusEQ(service.StatusActive),
+			).
+			Count(txCtx)
+		if countErr != nil {
+			return oldRole, fmt.Errorf("count active admin users: %w", countErr)
+		}
+		if activeAdminCount <= 1 {
+			return oldRole, service.ErrLastActiveAdmin
+		}
+	}
 
 	updateOp := txClient.User.UpdateOneID(userIn.ID).
 		SetEmail(userIn.Email).
@@ -254,24 +298,24 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	}
 	updated, err := updateOp.Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
+		return oldRole, translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
 	}
 
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, updated.ID, userIn.AllowedGroups); err != nil {
-		return err
+		return oldRole, err
 	}
 	if err := replaceEmailAuthIdentityWithClient(txCtx, txClient, updated.ID, oldEmail, updated.Email, "user_repo_update"); err != nil {
-		return err
+		return oldRole, err
 	}
 
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
-			return err
+			return oldRole, err
 		}
 	}
 
 	userIn.UpdatedAt = updated.UpdatedAt
-	return nil
+	return oldRole, nil
 }
 
 func ensureEmailAuthIdentityWithClient(ctx context.Context, client *dbent.Client, userID int64, email string, source string) error {
@@ -732,6 +776,27 @@ func (r *userRepository) UpdateBalance(ctx context.Context, id int64, amount flo
 	return nil
 }
 
+func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id int64, delta float64) error {
+	const updateSQL = `
+		UPDATE users
+		SET balance = GREATEST(balance + $1, 0), updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+	client := clientFromContext(ctx, r.client)
+	result, err := client.ExecContext(ctx, updateSQL, delta, id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrUserNotFound
+	}
+	return nil
+}
+
 // DeductBalance 扣除用户余额
 // 透支策略：允许余额变为负数，确保当前请求能够完成
 // 中间件会阻止余额 <= 0 的用户发起后续请求
@@ -757,6 +822,27 @@ func (r *userRepository) UpdateConcurrency(ctx context.Context, id int64, amount
 		return translatePersistenceError(err, service.ErrUserNotFound, nil)
 	}
 	if n == 0 {
+		return service.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *userRepository) ApplyRedeemConcurrencyAdjustment(ctx context.Context, id int64, delta int) error {
+	const updateSQL = `
+		UPDATE users
+		SET concurrency = GREATEST(concurrency + $1, 0), updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+	client := clientFromContext(ctx, r.client)
+	result, err := client.ExecContext(ctx, updateSQL, delta, id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
 		return service.ErrUserNotFound
 	}
 	return nil
@@ -973,6 +1059,7 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	dst.SignupSource = src.SignupSource
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt
+	dst.FrozenBalance = src.FrozenBalance
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
 }

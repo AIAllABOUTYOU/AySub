@@ -4,12 +4,15 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
+	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
@@ -182,6 +185,89 @@ func (s *UserRepoSuite) TestUpdateIgnoresNoRowsFromConflictingEmailIdentityUpser
 	updated, err := s.repo.GetByID(s.ctx, user.ID)
 	s.Require().NoError(err)
 	s.Require().Equal("updated", updated.Username)
+}
+
+func (s *UserRepoSuite) TestUpdateUserWithAdminRoleGuardRejectsLastActiveAdmin() {
+	admin := s.mustCreateUser(&service.User{
+		Email:  "last-admin@test.com",
+		Role:   service.RoleAdmin,
+		Status: service.StatusActive,
+	})
+	candidate, err := s.repo.GetByID(s.ctx, admin.ID)
+	s.Require().NoError(err)
+	candidate.Role = service.RoleUser
+
+	oldRole, err := s.repo.UpdateUserWithAdminRoleGuard(s.ctx, candidate)
+
+	s.Require().ErrorIs(err, service.ErrLastActiveAdmin)
+	s.Require().Equal(service.RoleAdmin, oldRole)
+	persisted, getErr := s.repo.GetByID(s.ctx, admin.ID)
+	s.Require().NoError(getErr)
+	s.Require().Equal(service.RoleAdmin, persisted.Role)
+}
+
+func (s *UserRepoSuite) TestUpdateUserWithAdminRoleGuardSerializesConcurrentDemotions() {
+	first := s.mustCreateUser(&service.User{
+		Email:  "admin-one@test.com",
+		Role:   service.RoleAdmin,
+		Status: service.StatusActive,
+	})
+	second := s.mustCreateUser(&service.User{
+		Email:  "admin-two@test.com",
+		Role:   service.RoleAdmin,
+		Status: service.StatusActive,
+	})
+
+	firstUpdate, err := s.repo.GetByID(s.ctx, first.ID)
+	s.Require().NoError(err)
+	secondUpdate, err := s.repo.GetByID(s.ctx, second.ID)
+	s.Require().NoError(err)
+	firstUpdate.Role = service.RoleUser
+	secondUpdate.Role = service.RoleUser
+
+	type updateResult struct {
+		err error
+	}
+	start := make(chan struct{})
+	results := make(chan updateResult, 2)
+	var wg sync.WaitGroup
+	for _, candidate := range []*service.User{firstUpdate, secondUpdate} {
+		candidate := candidate
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, updateErr := s.repo.UpdateUserWithAdminRoleGuard(context.Background(), candidate)
+			results <- updateResult{err: updateErr}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var successCount int
+	var deniedCount int
+	for result := range results {
+		switch {
+		case result.err == nil:
+			successCount++
+		case errors.Is(result.err, service.ErrLastActiveAdmin):
+			deniedCount++
+		default:
+			s.Require().NoError(result.err)
+		}
+	}
+	s.Require().Equal(1, successCount)
+	s.Require().Equal(1, deniedCount)
+
+	activeAdmins, err := s.client.User.Query().
+		Where(
+			dbuser.RoleEQ(service.RoleAdmin),
+			dbuser.StatusEQ(service.StatusActive),
+		).
+		Count(s.ctx)
+	s.Require().NoError(err)
+	s.Require().Equal(1, activeAdmins)
 }
 
 func (s *UserRepoSuite) TestDelete() {

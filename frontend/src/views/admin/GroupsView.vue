@@ -852,6 +852,115 @@
               </div>
             </div>
           </div>
+          <div
+            v-if="createForm.platform === 'gemini' && createForm.allow_image_generation"
+            class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700"
+          >
+            <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <input
+                v-model="createForm.allow_batch_image_generation"
+                type="checkbox"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {{ t("admin.groups.imagePricing.allowBatchImageGeneration") }}
+            </label>
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imagePricing.batchSectionHint") }}
+            </p>
+            <div
+              v-if="createForm.allow_batch_image_generation"
+              class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.imagePricing.batchDiscountMultiplier")
+                }}</label>
+                <input
+                  v-model.number="createForm.batch_image_discount_multiplier"
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  class="input"
+                  placeholder="0.5"
+                />
+              </div>
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.imagePricing.batchHoldMultiplier")
+                }}</label>
+                <input
+                  v-model.number="createForm.batch_image_hold_multiplier"
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  class="input"
+                  placeholder="0.6"
+                />
+              </div>
+            </div>
+          </div>
+          <p
+            v-else-if="createForm.platform !== 'gemini'"
+            class="mt-4 border-t border-dashed border-gray-200 pt-4 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400"
+          >
+            {{ t("admin.groups.imagePricing.batchGeminiOnlyHint") }}
+          </p>
+        </div>
+
+        <!-- 视频生成计费配置（仅 xAI / Grok 平台） -->
+        <div
+          v-if="supportsVideoPricingPlatform(createForm.platform)"
+          class="border-t pt-4"
+        >
+          <label class="mb-2 block font-medium text-gray-700 dark:text-gray-300">
+            {{ t("admin.groups.videoPricing.title") }}
+          </label>
+          <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.videoPricing.description") }}
+          </p>
+          <label class="mb-4 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input
+              v-model="createForm.video_rate_independent"
+              type="checkbox"
+              class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            {{ t("admin.groups.videoPricing.independentMultiplier") }}
+          </label>
+          <div v-if="createForm.video_rate_independent" class="mb-4">
+            <label class="input-label">{{ t("admin.groups.videoPricing.videoMultiplier") }}</label>
+            <input
+              v-model.number="createForm.video_rate_multiplier"
+              type="number"
+              step="0.0001"
+              min="0"
+              class="input"
+              placeholder="1"
+            />
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div v-for="tier in videoPricingTiers" :key="tier.key">
+              <label class="input-label">{{ tier.label }} ($/s)</label>
+              <input
+                v-model.number="createForm[tier.key]"
+                type="number"
+                step="0.001"
+                min="0"
+                class="input"
+                :placeholder="getVideoPricePlaceholder(createForm.platform, tier.key)"
+              />
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.videoPricing.modeHint") }}
+          </p>
+          <div class="mt-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <div class="mb-1 font-medium">{{ t("admin.groups.videoPricing.finalPricePreview") }}</div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div v-for="item in createVideoFinalPricePreview" :key="item.label">
+                {{ item.label }}: {{ item.value }}
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
@@ -2141,6 +2250,115 @@
               </div>
             </div>
           </div>
+          <div
+            v-if="editForm.platform === 'gemini' && editForm.allow_image_generation"
+            class="mt-4 border-t border-dashed border-gray-200 pt-4 dark:border-dark-700"
+          >
+            <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <input
+                v-model="editForm.allow_batch_image_generation"
+                type="checkbox"
+                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {{ t("admin.groups.imagePricing.allowBatchImageGeneration") }}
+            </label>
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.imagePricing.batchSectionHint") }}
+            </p>
+            <div
+              v-if="editForm.allow_batch_image_generation"
+              class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.imagePricing.batchDiscountMultiplier")
+                }}</label>
+                <input
+                  v-model.number="editForm.batch_image_discount_multiplier"
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  class="input"
+                  placeholder="0.5"
+                />
+              </div>
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.imagePricing.batchHoldMultiplier")
+                }}</label>
+                <input
+                  v-model.number="editForm.batch_image_hold_multiplier"
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  class="input"
+                  placeholder="0.6"
+                />
+              </div>
+            </div>
+          </div>
+          <p
+            v-else-if="editForm.platform !== 'gemini'"
+            class="mt-4 border-t border-dashed border-gray-200 pt-4 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400"
+          >
+            {{ t("admin.groups.imagePricing.batchGeminiOnlyHint") }}
+          </p>
+        </div>
+
+        <!-- 视频生成计费配置（仅 xAI / Grok 平台） -->
+        <div
+          v-if="supportsVideoPricingPlatform(editForm.platform)"
+          class="border-t pt-4"
+        >
+          <label class="mb-2 block font-medium text-gray-700 dark:text-gray-300">
+            {{ t("admin.groups.videoPricing.title") }}
+          </label>
+          <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.videoPricing.description") }}
+          </p>
+          <label class="mb-4 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input
+              v-model="editForm.video_rate_independent"
+              type="checkbox"
+              class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            {{ t("admin.groups.videoPricing.independentMultiplier") }}
+          </label>
+          <div v-if="editForm.video_rate_independent" class="mb-4">
+            <label class="input-label">{{ t("admin.groups.videoPricing.videoMultiplier") }}</label>
+            <input
+              v-model.number="editForm.video_rate_multiplier"
+              type="number"
+              step="0.0001"
+              min="0"
+              class="input"
+              placeholder="1"
+            />
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div v-for="tier in videoPricingTiers" :key="tier.key">
+              <label class="input-label">{{ tier.label }} ($/s)</label>
+              <input
+                v-model.number="editForm[tier.key]"
+                type="number"
+                step="0.001"
+                min="0"
+                class="input"
+                :placeholder="getVideoPricePlaceholder(editForm.platform, tier.key)"
+              />
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.videoPricing.modeHint") }}
+          </p>
+          <div class="mt-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+            <div class="mb-1 font-medium">{{ t("admin.groups.videoPricing.finalPricePreview") }}</div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div v-for="item in editVideoFinalPricePreview" :key="item.label">
+                {{ item.label }}: {{ item.value }}
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
@@ -3080,6 +3298,11 @@ import {
 } from "./groupsModelsList";
 import { createModelsListCandidatesTracker } from "./groupsModelsListCandidates";
 import { normalizeSupportedModelScopesForPlatform } from "./groupsSupportedModelScopes";
+import {
+  getDefaultVideoPrice,
+  getVideoPricePlaceholder,
+  supportsVideoPricingPlatform,
+} from "./groupsMediaPricing";
 
 const { t } = useI18n();
 const appStore = useAppStore();
@@ -3339,11 +3562,20 @@ const createForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
+  batch_image_discount_multiplier: 0.5,
+  batch_image_hold_multiplier: 0.6,
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
+  // 视频生成计费配置（仅 xAI / Grok 平台）
+  video_rate_independent: false,
+  video_rate_multiplier: 1,
+  video_price_480p: null as number | null,
+  video_price_720p: null as number | null,
+  video_price_1080p: null as number | null,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -3670,11 +3902,20 @@ const editForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  allow_batch_image_generation: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
+  batch_image_discount_multiplier: 0.5,
+  batch_image_hold_multiplier: 0.6,
   image_price_1k: null as number | null,
   image_price_2k: null as number | null,
   image_price_4k: null as number | null,
+  // 视频生成计费配置（仅 xAI / Grok 平台）
+  video_rate_independent: false,
+  video_rate_multiplier: 1,
+  video_price_480p: null as number | null,
+  video_price_720p: null as number | null,
+  video_price_1080p: null as number | null,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
   claude_code_only: false,
   fallback_group_id: null as number | null,
@@ -3702,18 +3943,39 @@ const editForm = reactive({
 });
 
 type ImagePricingFormState = {
+  platform: GroupPlatform;
+  allow_image_generation: boolean;
+  allow_batch_image_generation: boolean;
   rate_multiplier: number;
   image_rate_independent: boolean;
   image_rate_multiplier: number;
+  batch_image_discount_multiplier: number;
+  batch_image_hold_multiplier: number;
   image_price_1k: number | string | null;
   image_price_2k: number | string | null;
   image_price_4k: number | string | null;
+};
+
+type VideoPricingFormState = {
+  platform: GroupPlatform;
+  rate_multiplier: number;
+  video_rate_independent: boolean;
+  video_rate_multiplier: number;
+  video_price_480p: number | string | null;
+  video_price_720p: number | string | null;
+  video_price_1080p: number | string | null;
 };
 
 const imagePricingTiers = [
   { key: "image_price_1k", label: "1K" },
   { key: "image_price_2k", label: "2K" },
   { key: "image_price_4k", label: "4K" },
+] as const;
+
+const videoPricingTiers = [
+  { key: "video_price_480p", label: "480p" },
+  { key: "video_price_720p", label: "720p" },
+  { key: "video_price_1080p", label: "1080p" },
 ] as const;
 
 const normalizePreviewNumber = (value: number | string | null | undefined, fallback = 0) => {
@@ -3735,6 +3997,17 @@ const formatImagePricePreview = (value: number | string | null | undefined) => {
   return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 };
 
+const formatVideoPricePreview = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === "") {
+    return t("admin.groups.videoPricing.notConfigured");
+  }
+  const price = Number(value);
+  if (!Number.isFinite(price) || price < 0) {
+    return t("admin.groups.videoPricing.notConfigured");
+  }
+  return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+};
+
 const buildImageFinalPricePreview = (form: ImagePricingFormState) => {
   const multiplier = form.image_rate_independent
     ? normalizePreviewNumber(form.image_rate_multiplier, 1)
@@ -3750,12 +4023,59 @@ const buildImageFinalPricePreview = (form: ImagePricingFormState) => {
   });
 };
 
+const buildVideoFinalPricePreview = (form: VideoPricingFormState) => {
+  const multiplier = form.video_rate_independent
+    ? normalizePreviewNumber(form.video_rate_multiplier, 1)
+    : normalizePreviewNumber(form.rate_multiplier, 1);
+  return videoPricingTiers.map((tier) => {
+    const configuredPrice = form[tier.key];
+    const parsedPrice =
+      configuredPrice === null || configuredPrice === undefined || configuredPrice === ""
+        ? null
+        : Number(configuredPrice);
+    const basePrice = Number.isFinite(parsedPrice) && (parsedPrice as number) >= 0
+      ? parsedPrice as number
+      : getDefaultVideoPrice(form.platform, tier.key);
+    return {
+      label: tier.label,
+      value: basePrice === null
+        ? t("admin.groups.videoPricing.notConfigured")
+        : formatVideoPricePreview(basePrice * multiplier),
+    };
+  });
+};
+
 const createImageFinalPricePreview = computed(() =>
   buildImageFinalPricePreview(createForm),
 );
 const editImageFinalPricePreview = computed(() =>
   buildImageFinalPricePreview(editForm),
 );
+const createVideoFinalPricePreview = computed(() =>
+  buildVideoFinalPricePreview(createForm),
+);
+const editVideoFinalPricePreview = computed(() =>
+  buildVideoFinalPricePreview(editForm),
+);
+
+const resetDisabledBatchImagePricing = (
+  form: Pick<
+    ImagePricingFormState,
+    | "platform"
+    | "allow_image_generation"
+    | "allow_batch_image_generation"
+    | "batch_image_discount_multiplier"
+    | "batch_image_hold_multiplier"
+  >,
+) => {
+  if (form.platform !== "gemini" || !form.allow_image_generation) {
+    form.allow_batch_image_generation = false;
+  }
+  if (!form.allow_batch_image_generation) {
+    form.batch_image_discount_multiplier = 0.5;
+    form.batch_image_hold_multiplier = 0.6;
+  }
+};
 
 // 根据分组类型返回不同的删除确认消息
 const deleteConfirmMessage = computed(() => {
@@ -3921,11 +4241,19 @@ const closeCreateModal = () => {
   createForm.weekly_limit_usd = null;
   createForm.monthly_limit_usd = null;
   createForm.allow_image_generation = false;
+  createForm.allow_batch_image_generation = false;
   createForm.image_rate_independent = false;
   createForm.image_rate_multiplier = 1;
+  createForm.batch_image_discount_multiplier = 0.5;
+  createForm.batch_image_hold_multiplier = 0.6;
   createForm.image_price_1k = null;
   createForm.image_price_2k = null;
   createForm.image_price_4k = null;
+  createForm.video_rate_independent = false;
+  createForm.video_rate_multiplier = 1;
+  createForm.video_price_480p = null;
+  createForm.video_price_720p = null;
+  createForm.video_price_1080p = null;
   createForm.claude_code_only = false;
   createForm.fallback_group_id = null;
   createForm.fallback_group_id_on_invalid_request = null;
@@ -4015,6 +4343,19 @@ const handleCreateGroup = async () => {
     requestData.image_rate_multiplier = normalizeImageRateMultiplier(
       requestData.image_rate_multiplier,
     );
+    resetDisabledBatchImagePricing(requestData);
+    requestData.batch_image_discount_multiplier = normalizeImageRateMultiplier(
+      requestData.batch_image_discount_multiplier,
+    );
+    requestData.batch_image_hold_multiplier = normalizeImageRateMultiplier(
+      requestData.batch_image_hold_multiplier,
+    );
+    requestData.video_rate_multiplier = normalizeImageRateMultiplier(
+      requestData.video_rate_multiplier,
+    );
+    requestData.video_price_480p = emptyToNull(requestData.video_price_480p);
+    requestData.video_price_720p = emptyToNull(requestData.video_price_720p);
+    requestData.video_price_1080p = emptyToNull(requestData.video_price_1080p);
     await adminAPI.groups.create(requestData);
     appStore.showSuccess(t("admin.groups.groupCreated"));
     closeCreateModal();
@@ -4047,11 +4388,22 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.weekly_limit_usd = group.weekly_limit_usd;
   editForm.monthly_limit_usd = group.monthly_limit_usd;
   editForm.allow_image_generation = group.allow_image_generation ?? false;
+  editForm.allow_batch_image_generation =
+    group.allow_batch_image_generation ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;
   editForm.image_rate_multiplier = group.image_rate_multiplier ?? 1;
+  editForm.batch_image_discount_multiplier =
+    group.batch_image_discount_multiplier ?? 0.5;
+  editForm.batch_image_hold_multiplier =
+    group.batch_image_hold_multiplier ?? 0.6;
   editForm.image_price_1k = group.image_price_1k;
   editForm.image_price_2k = group.image_price_2k;
   editForm.image_price_4k = group.image_price_4k;
+  editForm.video_rate_independent = group.video_rate_independent ?? false;
+  editForm.video_rate_multiplier = group.video_rate_multiplier ?? 1;
+  editForm.video_price_480p = group.video_price_480p;
+  editForm.video_price_720p = group.video_price_720p;
+  editForm.video_price_1080p = group.video_price_1080p;
   editForm.claude_code_only = group.claude_code_only || false;
   editForm.fallback_group_id = group.fallback_group_id;
   editForm.fallback_group_id_on_invalid_request =
@@ -4096,6 +4448,11 @@ const closeEditModal = () => {
   editingGroup.value = null;
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
+  editForm.video_rate_independent = false;
+  editForm.video_rate_multiplier = 1;
+  editForm.video_price_480p = null;
+  editForm.video_price_720p = null;
+  editForm.video_price_1080p = null;
   resetMessagesDispatchFormState(editForm);
   resetModelsListState(editModelsListState);
 };
@@ -4154,6 +4511,22 @@ const handleUpdateGroup = async () => {
     payload.image_rate_multiplier = normalizeImageRateMultiplier(
       payload.image_rate_multiplier,
     );
+    resetDisabledBatchImagePricing(payload);
+    payload.batch_image_discount_multiplier = normalizeImageRateMultiplier(
+      payload.batch_image_discount_multiplier,
+    );
+    payload.batch_image_hold_multiplier = normalizeImageRateMultiplier(
+      payload.batch_image_hold_multiplier,
+    );
+    payload.video_rate_multiplier = normalizeImageRateMultiplier(
+      payload.video_rate_multiplier,
+    );
+    // 更新时 null 表示“不修改”；-1 由后端归一为 NULL，用于真正清除已配置价格。
+    const emptyPriceToClear = (value: unknown) =>
+      value === "" || value === null ? -1 : value;
+    payload.video_price_480p = emptyPriceToClear(payload.video_price_480p) as number;
+    payload.video_price_720p = emptyPriceToClear(payload.video_price_720p) as number;
+    payload.video_price_1080p = emptyPriceToClear(payload.video_price_1080p) as number;
     await adminAPI.groups.update(editingGroup.value.id, payload);
     appStore.showSuccess(t("admin.groups.groupUpdated"));
     closeEditModal();
@@ -4248,8 +4621,23 @@ watch(
       createForm.require_oauth_only = false;
       createForm.require_privacy_set = false;
     }
+    resetDisabledBatchImagePricing(createForm);
     resetModelsListState(createModelsListState);
     loadModelsListCandidates("create", 0, newVal);
+  },
+);
+
+watch(
+  () => createForm.allow_image_generation,
+  () => {
+    resetDisabledBatchImagePricing(createForm);
+  },
+);
+
+watch(
+  () => createForm.allow_batch_image_generation,
+  () => {
+    resetDisabledBatchImagePricing(createForm);
   },
 );
 
@@ -4266,10 +4654,25 @@ watch(
       editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;
     }
+    resetDisabledBatchImagePricing(editForm);
     if (editingGroup.value) {
       resetModelsListState(editModelsListState, editForm.platform === editingGroup.value.platform ? editingGroup.value.models_list_config : undefined);
       loadModelsListCandidates("edit", editingGroup.value.id, newVal);
     }
+  },
+);
+
+watch(
+  () => editForm.allow_image_generation,
+  () => {
+    resetDisabledBatchImagePricing(editForm);
+  },
+);
+
+watch(
+  () => editForm.allow_batch_image_generation,
+  () => {
+    resetDisabledBatchImagePricing(editForm);
   },
 );
 

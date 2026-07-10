@@ -1,6 +1,9 @@
 package service
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type OpsSystemLog struct {
 	ID              int64          `json:"id"`
@@ -96,6 +99,12 @@ type OpsErrorLogFilter struct {
 	Platform  string
 	GroupID   *int64
 	AccountID *int64
+	UserID    *int64
+	APIKeyID  *int64
+	Model     string
+
+	RequestType *int16
+	Stream      *bool
 
 	StatusCodes      []int
 	StatusCodesOther bool
@@ -105,6 +114,11 @@ type OpsErrorLogFilter struct {
 	Resolved         *bool
 	Query            string
 	UserQuery        string // Search by user email
+	ErrorPhasesAny   []string
+	ErrorTypesAny    []string
+	// IncludeRecoveredUpstream is reserved for the ops upstream-error views.
+	// Request-error lists keep the client-visible status guard even for phase=upstream.
+	IncludeRecoveredUpstream bool
 
 	// Optional correlation keys for exact matching.
 	RequestID       string
@@ -118,6 +132,14 @@ type OpsErrorLogFilter struct {
 
 	Page     int
 	PageSize int
+
+	SortBy    string
+	SortOrder string
+}
+
+func (f *OpsErrorLogFilter) SetSort(sortBy, sortOrder string) {
+	f.SortBy = strings.TrimSpace(sortBy)
+	f.SortOrder = strings.TrimSpace(sortOrder)
 }
 
 type OpsErrorLogList struct {

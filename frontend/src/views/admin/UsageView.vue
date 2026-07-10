@@ -64,9 +64,39 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </div>
-      <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+      <div class="card overflow-hidden">
+        <div class="flex items-center border-b border-gray-200 px-4 dark:border-dark-700">
+          <button
+            v-for="tab in detailTabs"
+            :key="tab.key"
+            type="button"
+            data-testid="usage-detail-tab"
+            class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-3 text-sm font-medium transition-colors"
+            :class="activeTab === tab.key
+              ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+              : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+            @click="switchTab(tab.key)"
+          >
+            <Icon :name="tab.icon" size="sm" />
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <UsageFilters
+          v-model="filters"
+          :mode="activeTab === 'errors' ? 'errors' : 'usage'"
+          :start-date="startDate"
+          :end-date="endDate"
+          :exporting="exporting"
+          :model-options="modelNameOptions"
+          @change="applyFilters"
+          @refresh="refreshData"
+          @reset="resetFilters"
+          @cleanup="openCleanupDialog"
+          @export="exportToExcel"
+        >
         <template #after-reset>
-          <div class="relative" ref="columnDropdownRef">
+          <div v-if="activeTab === 'usage'" class="relative" ref="columnDropdownRef">
             <button
               @click="showColumnDropdown = !showColumnDropdown"
               class="btn btn-secondary px-2 md:px-3"
@@ -99,18 +129,45 @@
             </div>
           </div>
         </template>
-      </UsageFilters>
-      <UsageTable
-        :data="usageLogs"
-        :loading="loading"
-        :columns="visibleColumns"
-        :server-side-sort="true"
-        :default-sort-key="'created_at'"
-        :default-sort-order="'desc'"
-        @sort="handleSort"
-        @userClick="handleUserClick"
-      />
-      <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
+        </UsageFilters>
+
+        <div v-show="activeTab === 'usage'">
+          <UsageTable
+            :data="usageLogs"
+            :loading="loading"
+            :columns="visibleColumns"
+            :server-side-sort="true"
+            :default-sort-key="'created_at'"
+            :default-sort-order="'desc'"
+            @sort="handleSort"
+            @userClick="handleUserClick"
+          />
+          <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
+        </div>
+
+        <OpsErrorLogTable
+          v-show="activeTab === 'errors'"
+          :rows="errorRows"
+          :total="errorTotal"
+          :loading="errorLoading"
+          :page="errorPage"
+          :page-size="errorPageSize"
+          @openErrorDetail="openErrorDetail"
+          @update:page="handleErrorPageChange"
+          @update:pageSize="handleErrorPageSizeChange"
+        />
+
+        <div v-show="activeTab === 'ranking'" class="p-4">
+          <UserTokenRanking
+            :start-date="startDate"
+            :end-date="endDate"
+            :filters="breakdownFilters"
+            :model="filters.model"
+            @select-user="handleRankingUserSelect"
+          />
+        </div>
+      </div>
+      <OpsErrorDetailModal v-model:show="showErrorDetail" :error-id="selectedErrorId" error-type="request" />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
@@ -143,7 +200,11 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination fro
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
+import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
+import OpsErrorLogTable from '@/views/admin/ops/components/OpsErrorLogTable.vue'
+import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'
+import { listRequestErrors, type OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -181,6 +242,22 @@ const cleanupDialogVisible = ref(false)
 const showBalanceHistoryModal = ref(false)
 const balanceHistoryUser = ref<AdminUser | null>(null)
 
+type DetailTab = 'usage' | 'errors' | 'ranking'
+const activeTab = ref<DetailTab>('usage')
+const detailTabs = computed(() => [
+  { key: 'usage' as const, label: t('usage.tabs.usage'), icon: 'document' as const },
+  { key: 'errors' as const, label: t('usage.tabs.errors'), icon: 'exclamationTriangle' as const },
+  { key: 'ranking' as const, label: t('usage.tabs.ranking'), icon: 'chart' as const }
+])
+
+const errorRows = ref<OpsErrorLog[]>([])
+const errorLoading = ref(false)
+const errorPage = ref(1)
+const errorPageSize = ref(20)
+const errorTotal = ref(0)
+const showErrorDetail = ref(false)
+const selectedErrorId = ref<number | null>(null)
+
 const breakdownFilters = computed(() => {
   const f: Record<string, any> = {}
   if (filters.value.user_id) f.user_id = filters.value.user_id
@@ -203,6 +280,20 @@ const handleUserClick = async (userId: number) => {
     showBalanceHistoryModal.value = true
   } catch {
     appStore.showError(t('admin.usage.failedToLoadUser'))
+  }
+}
+
+const handleRankingUserSelect = (userId: number) => {
+  filters.value = { ...filters.value, user_id: userId }
+  activeTab.value = 'usage'
+  applyFilters()
+}
+
+const switchTab = (tab: DetailTab) => {
+  activeTab.value = tab
+  showColumnDropdown.value = false
+  if (tab === 'errors' && errorRows.value.length === 0) {
+    void loadErrorLogs()
   }
 }
 
@@ -309,6 +400,61 @@ const loadLogs = async () => {
     )
     if(!c.signal.aborted) { usageLogs.value = res.items; pagination.total = res.total }
   } catch (error: any) { if(error?.name !== 'AbortError') console.error('Failed to load usage logs:', error) } finally { if(abortController === c) loading.value = false }
+}
+
+const toRFC3339 = (date: string | undefined, endOfDay = false): string | undefined => {
+  if (!date) return undefined
+  return new Date(`${date}${endOfDay ? 'T23:59:59.999' : 'T00:00:00'}`).toISOString()
+}
+
+const loadErrorLogs = async () => {
+  errorLoading.value = true
+  try {
+    const requestType = filters.value.request_type
+    const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
+    const response = await listRequestErrors({
+      page: errorPage.value,
+      page_size: errorPageSize.value,
+      view: 'all',
+      start_time: toRFC3339(filters.value.start_date || startDate.value),
+      end_time: toRFC3339(filters.value.end_date || endDate.value, true),
+      user_id: filters.value.user_id,
+      api_key_id: filters.value.api_key_id,
+      account_id: filters.value.account_id,
+      group_id: filters.value.group_id,
+      model: filters.value.model || undefined,
+      request_type: requestType,
+      stream: legacyStream === null ? undefined : legacyStream,
+      phase: filters.value.error_phase || undefined,
+      category: filters.value.error_category || undefined,
+      status_codes: filters.value.status_code != null ? String(filters.value.status_code) : undefined,
+      sort_by: 'created_at',
+      sort_order: 'desc'
+    })
+    errorRows.value = response.items || []
+    errorTotal.value = response.total || 0
+  } catch (error) {
+    console.error('Failed to load request errors:', error)
+    appStore.showError(t('usage.errors.failedToLoad'))
+  } finally {
+    errorLoading.value = false
+  }
+}
+
+const handleErrorPageChange = (page: number) => {
+  errorPage.value = page
+  void loadErrorLogs()
+}
+
+const handleErrorPageSizeChange = (pageSize: number) => {
+  errorPageSize.value = pageSize
+  errorPage.value = 1
+  void loadErrorLogs()
+}
+
+const openErrorDetail = (id: number) => {
+  selectedErrorId.value = id
+  showErrorDetail.value = true
 }
 const loadStats = async (force = false) => {
   const seq = ++statsReqSeq
@@ -426,6 +572,11 @@ const loadChartData = async () => {
   } catch (error) { console.error('Failed to load chart data:', error) } finally { if (seq === chartReqSeq) chartsLoading.value = false }
 }
 const applyFilters = () => {
+	if (activeTab.value === 'errors') {
+		errorPage.value = 1
+		void loadErrorLogs()
+		return
+	}
   pagination.page = 1
   invalidateModelStatsCache()
   loadLogs()
@@ -434,6 +585,10 @@ const applyFilters = () => {
   loadChartData()
 }
 const refreshData = () => {
+	if (activeTab.value === 'errors') {
+		void loadErrorLogs()
+		return
+	}
   invalidateModelStatsCache()
   loadLogs()
   loadStats(true)
@@ -539,8 +694,7 @@ const allColumns = computed(() => [
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
-  { key: 'first_token', label: t('usage.firstToken'), sortable: false },
-  { key: 'duration', label: t('usage.duration'), sortable: false },
+  { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }

@@ -30,6 +30,13 @@ type stubConcurrencyCacheForTest struct {
 	usersLoadBatch map[int64]*UserLoadInfo
 	usersLoadErr   error
 	cleanupErr     error
+	apiKeyCounts   map[int64]int
+	apiKeyTrackErr error
+	apiKeyGetErr   error
+	trackedKeyID   int64
+	trackedKeyReq  string
+	releasedKeyID  int64
+	releasedKeyReq string
 
 	// 记录调用
 	releasedAccountIDs []int64
@@ -38,6 +45,7 @@ type stubConcurrencyCacheForTest struct {
 }
 
 var _ ConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
+var _ APIKeyConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
 
 func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
 	return c.acquireResult, c.acquireErr
@@ -97,6 +105,51 @@ func (c *stubConcurrencyCacheForTest) CleanupExpiredAccountSlots(_ context.Conte
 
 func (c *stubConcurrencyCacheForTest) CleanupStaleProcessSlots(_ context.Context, _ string) error {
 	return c.cleanupErr
+}
+
+func (c *stubConcurrencyCacheForTest) TrackAPIKeySlot(_ context.Context, apiKeyID int64, requestID string) error {
+	c.trackedKeyID = apiKeyID
+	c.trackedKeyReq = requestID
+	return c.apiKeyTrackErr
+}
+
+func (c *stubConcurrencyCacheForTest) ReleaseAPIKeySlot(_ context.Context, apiKeyID int64, requestID string) error {
+	c.releasedKeyID = apiKeyID
+	c.releasedKeyReq = requestID
+	return c.releaseErr
+}
+
+func (c *stubConcurrencyCacheForTest) GetAPIKeyConcurrencyBatch(_ context.Context, apiKeyIDs []int64) (map[int64]int, error) {
+	if c.apiKeyGetErr != nil {
+		return nil, c.apiKeyGetErr
+	}
+	out := make(map[int64]int, len(apiKeyIDs))
+	for _, id := range apiKeyIDs {
+		out[id] = c.apiKeyCounts[id]
+	}
+	return out, nil
+}
+
+func TestTrackAPIKeySlotRecordsAndReleases(t *testing.T) {
+	cache := &stubConcurrencyCacheForTest{}
+	svc := NewConcurrencyService(cache)
+
+	release := svc.TrackAPIKeySlot(context.Background(), 42)
+	require.Equal(t, int64(42), cache.trackedKeyID)
+	require.NotEmpty(t, cache.trackedKeyReq)
+
+	release()
+	require.Equal(t, int64(42), cache.releasedKeyID)
+	require.Equal(t, cache.trackedKeyReq, cache.releasedKeyReq)
+}
+
+func TestGetAPIKeyConcurrencyBatchFailOpen(t *testing.T) {
+	cache := &stubConcurrencyCacheForTest{apiKeyGetErr: errors.New("redis down")}
+	svc := NewConcurrencyService(cache)
+
+	counts, err := svc.GetAPIKeyConcurrencyBatch(context.Background(), []int64{1, 2})
+	require.NoError(t, err)
+	require.Equal(t, map[int64]int{1: 0, 2: 0}, counts)
 }
 
 type trackingConcurrencyCache struct {

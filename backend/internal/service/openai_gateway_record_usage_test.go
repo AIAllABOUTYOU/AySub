@@ -1486,6 +1486,51 @@ func TestOpenAIGatewayServiceRecordUsage_ImageUsesPerImageBillingEvenWithUsageTo
 	require.InDelta(t, 0.0, usageRepo.lastLog.ImageOutputCost, 1e-12)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_VideoTakesPriorityOverLegacyImageMetadata(t *testing.T) {
+	videoPrice := 0.14
+	groupID := int64(126)
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:            "resp_video_per_second",
+			Model:                "grok-imagine-video",
+			ImageCount:           1,
+			VideoCount:           1,
+			VideoResolution:      "720p",
+			VideoDurationSeconds: 20,
+			Duration:             time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      10126,
+			GroupID: i64p(groupID),
+			Group: &Group{
+				ID:                   groupID,
+				RateMultiplier:       0.2,
+				VideoRateIndependent: true,
+				VideoRateMultiplier:  0.5,
+				VideoPrice720P:       &videoPrice,
+			},
+		},
+		User:    &User{ID: 20126},
+		Account: &Account{ID: 30126},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModeVideo), *usageRepo.lastLog.BillingMode)
+	require.Equal(t, 1, usageRepo.lastLog.VideoCount)
+	require.NotNil(t, usageRepo.lastLog.VideoResolution)
+	require.Equal(t, "720p", *usageRepo.lastLog.VideoResolution)
+	require.NotNil(t, usageRepo.lastLog.VideoDurationSeconds)
+	require.Equal(t, 20, *usageRepo.lastLog.VideoDurationSeconds)
+	require.InDelta(t, 2.8, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, 1.4, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, 0.5, usageRepo.lastLog.RateMultiplier, 1e-12)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_ImageSharedMultiplierPreservesExistingBehavior(t *testing.T) {
 	imagePrice := 0.2
 	groupID := int64(121)

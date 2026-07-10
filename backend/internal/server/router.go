@@ -81,6 +81,10 @@ func SetupRouter(
 		settingService.SetOnUpdateCallback(refreshFrameOrigins)
 	}
 
+	if handlers != nil && handlers.Admin != nil && handlers.Admin.User != nil {
+		handlers.Admin.User.SetSecurityAuditService(securityAuditService)
+	}
+
 	// 注册路由
 	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, apiKeyService, subscriptionService, opsService, securityAuditService, settingService, cfg, redisClient)
 

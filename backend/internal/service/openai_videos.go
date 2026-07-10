@@ -598,14 +598,17 @@ func (s *OpenAIGatewayService) ForwardVideos(ctx context.Context, c *gin.Context
 	job = getGrokVideoJob(job.ID)
 	c.JSON(http.StatusOK, job.PublicPayload())
 	return &OpenAIForwardResult{
-		RequestID:       job.ID,
-		ResponseID:      job.ID,
-		Usage:           OpenAIUsage{InputTokens: estimateGrokTextTokens(parsed.Prompt), OutputTokens: 1},
-		Model:           requestModel,
-		BillingModel:    requestModel,
-		UpstreamModel:   grokVideoModelName,
-		ResponseHeaders: http.Header{"Content-Type": []string{"application/json"}},
-		Duration:        time.Since(startTime),
+		RequestID:            job.ID,
+		ResponseID:           job.ID,
+		Usage:                OpenAIUsage{InputTokens: estimateGrokTextTokens(parsed.Prompt), OutputTokens: 1},
+		Model:                requestModel,
+		BillingModel:         requestModel,
+		UpstreamModel:        grokVideoModelName,
+		ResponseHeaders:      http.Header{"Content-Type": []string{"application/json"}},
+		Duration:             time.Since(startTime),
+		VideoCount:           1,
+		VideoResolution:      NormalizeVideoBillingResolutionOrDefault(parsed.ResolutionName),
+		VideoDurationSeconds: NormalizeVideoBillingDurationSecondsOrDefault(parsed.Seconds),
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,8 @@ import (
 )
 
 var (
-	ErrNoUpdateAvailable = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
+	ErrNoUpdateAvailable         = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
+	ErrRollbackVersionNotAllowed = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
 )
 
 const (
@@ -36,6 +38,9 @@ const (
 
 	// Security: max download size (500MB)
 	maxDownloadSize = 500 * 1024 * 1024
+
+	maxRollbackVersions   = 3
+	rollbackFetchPageSize = 15
 )
 
 // UpdateCache defines cache operations for update service
@@ -47,6 +52,7 @@ type UpdateCache interface {
 // GitHubReleaseClient 获取 GitHub release 信息的接口
 type GitHubReleaseClient interface {
 	FetchLatestRelease(ctx context.Context, repo string) (*GitHubRelease, error)
+	FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*GitHubRelease, error)
 	DownloadFile(ctx context.Context, url, dest string, maxSize int64) error
 	FetchChecksumFile(ctx context.Context, url string) ([]byte, error)
 }
@@ -103,7 +109,15 @@ type GitHubRelease struct {
 	Body        string        `json:"body"`
 	PublishedAt string        `json:"published_at"`
 	HTMLURL     string        `json:"html_url"`
+	Draft       bool          `json:"draft"`
+	Prerelease  bool          `json:"prerelease"`
 	Assets      []GitHubAsset `json:"assets"`
+}
+
+type RollbackVersion struct {
+	Version     string `json:"version"`
+	PublishedAt string `json:"published_at"`
+	HTMLURL     string `json:"html_url"`
 }
 
 type GitHubAsset struct {
@@ -155,12 +169,18 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 		return ErrNoUpdateAvailable
 	}
 
+	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
+}
+
+// applyReleaseAssets applies one release through the existing validated download,
+// checksum verification, and atomic binary replacement pipeline.
+func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []Asset) error {
 	// Find matching archive and checksum for current platform
 	archiveName := s.getArchiveName()
 	var downloadURL string
 	var checksumURL string
 
-	for _, asset := range info.ReleaseInfo.Assets {
+	for _, asset := range releaseAssets {
 		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
 			downloadURL = asset.DownloadURL
 		}
@@ -279,6 +299,78 @@ func (s *UpdateService) Rollback() error {
 	return nil
 }
 
+func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVersion, error) {
+	releases, err := s.fetchRollbackCandidates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make([]RollbackVersion, 0, len(releases))
+	for _, release := range releases {
+		versions = append(versions, RollbackVersion{
+			Version:     strings.TrimPrefix(release.TagName, "v"),
+			PublishedAt: release.PublishedAt,
+			HTMLURL:     release.HTMLURL,
+		})
+	}
+	return versions, nil
+}
+
+func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
+	target := normalizeReleaseVersion(version)
+	if target == "" {
+		return ErrRollbackVersionNotAllowed
+	}
+
+	releases, err := s.fetchRollbackCandidates(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, release := range releases {
+		if normalizeReleaseVersion(release.TagName) == target {
+			return s.applyReleaseAssets(ctx, releaseAssets(release))
+		}
+	}
+	return ErrRollbackVersionNotAllowed
+}
+
+func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubRelease, error) {
+	releases, err := s.githubClient.FetchRecentReleases(ctx, githubRepo, rollbackFetchPageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(releases))
+	candidates := make([]*GitHubRelease, 0, maxRollbackVersions)
+	for _, release := range releases {
+		if release == nil || release.Draft || release.Prerelease {
+			continue
+		}
+		version := normalizeReleaseVersion(release.TagName)
+		if version == "" || compareVersions(version, normalizeReleaseVersion(s.currentVersion)) >= 0 {
+			continue
+		}
+		if _, exists := seen[version]; exists {
+			continue
+		}
+		seen[version] = struct{}{}
+		candidates = append(candidates, release)
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return compareVersions(normalizeReleaseVersion(candidates[i].TagName), normalizeReleaseVersion(candidates[j].TagName)) > 0
+	})
+	if len(candidates) > maxRollbackVersions {
+		candidates = candidates[:maxRollbackVersions]
+	}
+	return candidates, nil
+}
+
+func normalizeReleaseVersion(version string) string {
+	return strings.TrimPrefix(strings.TrimSpace(version), "v")
+}
+
 func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
 	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
 	if err != nil {
@@ -286,15 +378,6 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
-
-	assets := make([]Asset, len(release.Assets))
-	for i, a := range release.Assets {
-		assets[i] = Asset{
-			Name:        a.Name,
-			DownloadURL: a.BrowserDownloadURL,
-			Size:        a.Size,
-		}
-	}
 
 	return &UpdateInfo{
 		CurrentVersion: s.currentVersion,
@@ -305,11 +388,23 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 			Body:        release.Body,
 			PublishedAt: release.PublishedAt,
 			HTMLURL:     release.HTMLURL,
-			Assets:      assets,
+			Assets:      releaseAssets(release),
 		},
 		Cached:    false,
 		BuildType: s.buildType,
 	}, nil
+}
+
+func releaseAssets(release *GitHubRelease) []Asset {
+	assets := make([]Asset, len(release.Assets))
+	for i, asset := range release.Assets {
+		assets[i] = Asset{
+			Name:        asset.Name,
+			DownloadURL: asset.BrowserDownloadURL,
+			Size:        asset.Size,
+		}
+	}
+	return assets
 }
 
 func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest string) error {

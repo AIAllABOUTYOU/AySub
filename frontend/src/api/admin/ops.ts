@@ -5,7 +5,7 @@
  */
 
 import { apiClient } from '../client'
-import type { PaginatedResponse } from '@/types'
+import type { PaginatedResponse, UsageRequestType } from '@/types'
 
 export type OpsQueryMode = 'auto' | 'raw' | 'preagg'
 
@@ -1102,8 +1102,14 @@ export type OpsErrorListQueryParams = {
   platform?: string
   group_id?: number | null
   account_id?: number | null
+  user_id?: number
+  api_key_id?: number
+  model?: string
+  request_type?: UsageRequestType
+  stream?: boolean
 
   phase?: string
+  category?: string
   error_owner?: string
   error_source?: string
   resolved?: string
@@ -1112,6 +1118,8 @@ export type OpsErrorListQueryParams = {
   q?: string
   status_codes?: string
   status_codes_other?: string
+  sort_by?: 'created_at' | 'model' | 'status_code'
+  sort_order?: 'asc' | 'desc'
 }
 
 // Legacy unified endpoints

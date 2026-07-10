@@ -56,7 +56,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),
 		field.String("model_mapping_chain").MaxLen(500).Optional().Nillable().Comment("模型映射链"),
 		field.String("billing_tier").MaxLen(50).Optional().Nillable().Comment("计费层级标签"),
-		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image"),
+		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image/video"),
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
@@ -149,6 +149,20 @@ func (UsageLog) Fields() []ent.Field {
 		field.JSON("image_size_breakdown", map[string]int{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+
+		// 视频生成字段。可空时长用于区分历史未知值和真实请求时长。
+		field.Int("video_count").
+			Default(0).
+			Comment("视频生成数量；>0 表示本行是视频生成用量"),
+		field.String("video_resolution").
+			MaxLen(10).
+			Optional().
+			Nillable().
+			Comment("计费用视频分辨率 480p/720p/1080p"),
+		field.Int("video_duration_seconds").
+			Optional().
+			Nillable().
+			Comment("提交时请求的视频时长（秒），按秒计费的乘数"),
 		// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 		field.Bool("cache_ttl_overridden").
 			Default(false),

@@ -95,8 +95,17 @@
         </template>
 
         <template #cell-tokens="{ row }">
+          <div v-if="isVideoUsage(row)" class="flex items-center gap-1.5">
+            <Icon name="play" size="sm" class="text-amber-500" />
+            <span class="font-medium text-gray-900 dark:text-white">
+              {{ row.video_count || 1 }}{{ t('usage.videoUnit') }}
+            </span>
+            <span class="text-gray-400">
+              ({{ row.video_resolution || t('usage.videoResolutionUnknown') }} · {{ row.video_duration_seconds || 0 }}s)
+            </span>
+          </div>
           <!-- 图片生成请求（仅按次计费时显示图片格式） -->
-          <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
+          <div v-else-if="isImageUsage(row)" class="flex items-center gap-1.5">
             <svg class="h-4 w-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
@@ -163,13 +172,23 @@
           </div>
         </template>
 
-        <template #cell-first_token="{ row }">
-          <span v-if="row.first_token_ms != null" class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.first_token_ms) }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
-        </template>
-
-        <template #cell-duration="{ row }">
-          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.duration_ms) }}</span>
+        <template #cell-latency="{ row }">
+          <div class="flex items-stretch gap-2">
+            <span
+              class="w-1 shrink-0 rounded-full"
+              :class="row.first_token_ms != null
+                ? ['bg-gradient-to-b from-40% to-60%', LATENCY_BAR_FROM_CLASSES[firstTokenSeverity(row.first_token_ms)], LATENCY_BAR_TO_CLASSES[durationSeverity(row.duration_ms ?? 0)]]
+                : LATENCY_BAR_CLASSES[durationSeverity(row.duration_ms ?? 0)]"
+              aria-hidden="true"
+            ></span>
+            <div class="grid grid-cols-[max-content_max-content] items-baseline gap-x-2 gap-y-0.5 text-xs">
+              <span class="text-gray-400 dark:text-gray-500">{{ t('usage.firstToken') }}</span>
+              <span v-if="row.first_token_ms != null" class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[firstTokenSeverity(row.first_token_ms)]">{{ formatLatencyDuration(row.first_token_ms) }}</span>
+              <span v-else class="text-gray-400 dark:text-gray-500">-</span>
+              <span class="text-gray-400 dark:text-gray-500">{{ t('usage.duration') }}</span>
+              <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatLatencyDuration(row.duration_ms) }}</span>
+            </div>
+          </div>
         </template>
 
         <template #cell-created_at="{ value }">
@@ -282,8 +301,30 @@
               <span class="text-gray-400">{{ t('admin.usage.outputCost') }}</span>
               <span class="font-medium text-white">${{ tooltipData.output_cost.toFixed(6) }}</span>
             </div>
+            <template v-if="tooltipData && isVideoUsage(tooltipData)">
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.videoCount') }}</span>
+                <span class="font-medium text-white">{{ tooltipData.video_count || 1 }}{{ t('usage.videoUnit') }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.videoResolution') }}</span>
+                <span class="font-medium text-white">{{ tooltipData.video_resolution || t('usage.videoResolutionUnknown') }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.videoDuration') }}</span>
+                <span class="font-medium text-white">{{ tooltipData.video_duration_seconds || 0 }}s</span>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.videoUnitPrice') }}</span>
+                <span class="font-medium text-sky-300">${{ videoUnitPrice(tooltipData).toFixed(6) }}/s</span>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.videoTotalPrice') }}</span>
+                <span class="font-medium text-white">${{ tooltipData.total_cost?.toFixed(6) || '0.000000' }}</span>
+              </div>
+            </template>
             <!-- Token billing: show unit prices per 1M tokens -->
-            <template v-if="tooltipData && isImageUsage(tooltipData)">
+            <template v-else-if="tooltipData && isImageUsage(tooltipData)">
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageCount') }}</span>
                 <span class="font-medium text-white">{{ tooltipData.image_count }}{{ t('usage.imageUnit') }}</span>
@@ -387,7 +428,24 @@ import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
-import { getBillingModeLabel, getBillingModeBadgeClass, BILLING_MODE_TOKEN, BILLING_MODE_IMAGE } from '@/utils/billingMode'
+import {
+  LATENCY_BAR_CLASSES,
+  LATENCY_BAR_FROM_CLASSES,
+  LATENCY_BAR_TO_CLASSES,
+  LATENCY_TEXT_CLASSES,
+  durationSeverity,
+  firstTokenSeverity,
+  formatLatencyDuration,
+} from '@/utils/latencyHealth'
+import {
+  BILLING_MODE_TOKEN,
+  getBillingModeBadgeClass,
+  getBillingModeLabel,
+  getDisplayBillingMode,
+  isImageUsage,
+  isVideoUsage,
+  videoUnitPrice,
+} from '@/utils/billingMode'
 import {
   formatImageBillingSize,
   formatImageInputSize,
@@ -408,17 +466,6 @@ function imageUnitPrice(row: AdminUsageLog | null): number {
   const total = row.total_cost ?? 0
   const price = total / row.image_count
   return Number.isFinite(price) ? price : 0
-}
-
-function isImageUsage(row: Pick<AdminUsageLog, 'image_count'> | null | undefined): boolean {
-  return (row?.image_count ?? 0) > 0
-}
-
-function getDisplayBillingMode(row: Pick<AdminUsageLog, 'billing_mode' | 'image_count'> | null | undefined): string | null | undefined {
-  if (isImageUsage(row)) {
-    return BILLING_MODE_IMAGE
-  }
-  return row?.billing_mode
 }
 
 import DataTable from '@/components/common/DataTable.vue'
@@ -478,12 +525,6 @@ const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
 
 const formatUserAgent = (ua: string): string => {
   return ua
-}
-
-const formatDuration = (ms: number | null | undefined): string => {
-  if (ms == null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
 }
 
 // Cost tooltip functions

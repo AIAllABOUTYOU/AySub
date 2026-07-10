@@ -326,6 +326,7 @@ import PublicHeader from '@/components/layout/PublicHeader.vue'
 import AnnouncementBanner from '@/components/common/AnnouncementBanner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { isDefaultHomeText } from '@/utils/homeConfigDefaults'
+import { sanitizeUrl } from '@/utils/url'
 import type {
   HomeConfig,
   HomeCustomSectionItem,
@@ -358,9 +359,9 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub')
-const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
+const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'All Your AI Sub Hub')
-const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
+const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 const homeConfig = computed<HomeConfig>(() => appStore.cachedPublicSettings?.home_config || {})
 

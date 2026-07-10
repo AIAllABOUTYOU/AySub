@@ -118,6 +118,13 @@ type UserRepository interface {
 	DisableTotp(ctx context.Context, userID int64) error
 }
 
+// RedeemUserAdjustmentRepository is intentionally narrower than UserRepository:
+// negative redeem codes floor values at zero, while usage billing may overdraw.
+type RedeemUserAdjustmentRepository interface {
+	ApplyRedeemBalanceAdjustment(ctx context.Context, id int64, delta float64) error
+	ApplyRedeemConcurrencyAdjustment(ctx context.Context, id int64, delta int) error
+}
+
 type UserAuthIdentityRecord struct {
 	ProviderType    string
 	ProviderKey     string

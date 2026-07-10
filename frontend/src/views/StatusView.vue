@@ -246,6 +246,7 @@ import { statusAPI, type PublicStatusEvent, type PublicStatusResponse } from '@/
 import { useAppStore } from '@/stores'
 import Icon from '@/components/icons/Icon.vue'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import { sanitizeUrl } from '@/utils/url'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -258,7 +259,7 @@ const errorMessage = ref('')
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub')
-const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
+const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const currentYear = computed(() => new Date().getFullYear())
 
 const statusLabel = computed(() => {

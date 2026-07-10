@@ -2,7 +2,9 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,6 +28,8 @@ type systemUpdateService interface {
 	CheckUpdate(ctx context.Context, force bool) (*service.UpdateInfo, error)
 	PerformUpdate(ctx context.Context) error
 	Rollback() error
+	ListRollbackVersions(ctx context.Context) ([]service.RollbackVersion, error)
+	RollbackToVersion(ctx context.Context, version string) error
 }
 
 // NewSystemHandler creates a new SystemHandler
@@ -55,6 +59,17 @@ func (h *SystemHandler) CheckUpdates(c *gin.Context) {
 		return
 	}
 	response.Success(c, info)
+}
+
+// GetRollbackVersions returns up to three stable releases older than the current version.
+// GET /api/v1/admin/system/rollback-versions
+func (h *SystemHandler) GetRollbackVersions(c *gin.Context) {
+	versions, err := h.updateSvc.ListRollbackVersions(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"versions": versions})
 }
 
 // PerformUpdate downloads and applies the update
@@ -105,8 +120,16 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 // Rollback restores the previous version
 // POST /api/v1/admin/system/rollback
 func (h *SystemHandler) Rollback(c *gin.Context) {
-	operationID := buildSystemOperationID(c, "rollback")
-	payload := gin.H{"operation_id": operationID}
+	var req struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	version := strings.TrimPrefix(strings.TrimSpace(req.Version), "v")
+	operationID := buildSystemOperationID(c, "rollback", version)
+	payload := gin.H{"operation_id": operationID, "version": version}
 	executeAdminIdempotentJSON(c, "admin.system.rollback", payload, service.DefaultSystemOperationIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		lock, release, err := h.acquireSystemLock(ctx, operationID)
 		if err != nil {
@@ -118,9 +141,15 @@ func (h *SystemHandler) Rollback(c *gin.Context) {
 			release(releaseReason, succeeded)
 		}()
 
-		if err := h.updateSvc.Rollback(); err != nil {
+		var rollbackErr error
+		if version == "" {
+			rollbackErr = h.updateSvc.Rollback()
+		} else {
+			rollbackErr = h.updateSvc.RollbackToVersion(ctx, version)
+		}
+		if rollbackErr != nil {
 			releaseReason = "SYSTEM_ROLLBACK_FAILED"
-			return nil, err
+			return nil, rollbackErr
 		}
 		succeeded = true
 
@@ -181,16 +210,27 @@ func (h *SystemHandler) acquireSystemLock(
 	return lock, release, nil
 }
 
-func buildSystemOperationID(c *gin.Context, operation string) string {
+func buildSystemOperationID(c *gin.Context, operation string, targets ...string) string {
+	operationScope := operation
+	if len(targets) > 0 {
+		target := strings.TrimSpace(strings.Join(targets, "|"))
+		if target != "" {
+			targetHash := service.HashIdempotencyKey(target)
+			if len(targetHash) > 8 {
+				targetHash = targetHash[:8]
+			}
+			operationScope += "-" + targetHash
+		}
+	}
 	key := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if key == "" {
-		return "sysop-" + operation + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+		return "sysop-" + operationScope + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	actorScope := "admin:0"
 	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok {
 		actorScope = "admin:" + strconv.FormatInt(subject.UserID, 10)
 	}
-	seed := operation + "|" + actorScope + "|" + c.FullPath() + "|" + key
+	seed := operationScope + "|" + actorScope + "|" + c.FullPath() + "|" + key
 	hash := service.HashIdempotencyKey(seed)
 	if len(hash) > 24 {
 		hash = hash[:24]

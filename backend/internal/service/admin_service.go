@@ -131,10 +131,12 @@ type CreateUserInput struct {
 	Password      string
 	Username      string
 	Notes         string
+	Role          string // 空字符串表示使用默认角色 user；合法值为 user/admin。
 	Balance       *float64
 	Concurrency   int
 	RPMLimit      int
 	AllowedGroups []int64
+	ActorAdminID  int64
 }
 
 type UpdateUserInput struct {
@@ -142,6 +144,7 @@ type UpdateUserInput struct {
 	Password      string
 	Username      *string
 	Notes         *string
+	Role          string   // 空字符串表示不修改；合法值为 user/admin。
 	Balance       *float64 // 使用指针区分"未提供"和"设置为0"
 	Concurrency   *int     // 使用指针区分"未提供"和"设置为0"
 	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
@@ -149,7 +152,8 @@ type UpdateUserInput struct {
 	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
-	GroupRates map[int64]*float64
+	GroupRates   map[int64]*float64
+	ActorAdminID int64
 }
 
 type AdminBindAuthIdentityInput struct {
@@ -201,14 +205,22 @@ type CreateGroupInput struct {
 	WeeklyLimitUSD   *float64 // 周限额 (USD)
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration bool
-	ImageRateIndependent bool
-	ImageRateMultiplier  *float64
-	ImagePrice1K         *float64
-	ImagePrice2K         *float64
-	ImagePrice4K         *float64
-	ClaudeCodeOnly       bool   // 仅允许 Claude Code 客户端
-	FallbackGroupID      *int64 // 降级分组 ID
+	AllowImageGeneration         bool
+	AllowBatchImageGeneration    bool
+	ImageRateIndependent         bool
+	ImageRateMultiplier          *float64
+	ImagePrice1K                 *float64
+	ImagePrice2K                 *float64
+	ImagePrice4K                 *float64
+	BatchImageDiscountMultiplier *float64
+	BatchImageHoldMultiplier     *float64
+	VideoRateIndependent         bool
+	VideoRateMultiplier          *float64
+	VideoPrice480P               *float64
+	VideoPrice720P               *float64
+	VideoPrice1080P              *float64
+	ClaudeCodeOnly               bool   // 仅允许 Claude Code 客户端
+	FallbackGroupID              *int64 // 降级分组 ID
 	// 无效请求兜底分组 ID（仅 anthropic 平台使用）
 	FallbackGroupIDOnInvalidRequest *int64
 	// 模型路由配置（仅 anthropic 平台使用）
@@ -242,14 +254,22 @@ type UpdateGroupInput struct {
 	WeeklyLimitUSD   *float64 // 周限额 (USD)
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration *bool
-	ImageRateIndependent *bool
-	ImageRateMultiplier  *float64
-	ImagePrice1K         *float64
-	ImagePrice2K         *float64
-	ImagePrice4K         *float64
-	ClaudeCodeOnly       *bool  // 仅允许 Claude Code 客户端
-	FallbackGroupID      *int64 // 降级分组 ID
+	AllowImageGeneration         *bool
+	AllowBatchImageGeneration    *bool
+	ImageRateIndependent         *bool
+	ImageRateMultiplier          *float64
+	ImagePrice1K                 *float64
+	ImagePrice2K                 *float64
+	ImagePrice4K                 *float64
+	BatchImageDiscountMultiplier *float64
+	BatchImageHoldMultiplier     *float64
+	VideoRateIndependent         *bool
+	VideoRateMultiplier          *float64
+	VideoPrice480P               *float64
+	VideoPrice720P               *float64
+	VideoPrice1080P              *float64
+	ClaudeCodeOnly               *bool  // 仅允许 Claude Code 客户端
+	FallbackGroupID              *int64 // 降级分组 ID
 	// 无效请求兜底分组 ID（仅 anthropic 平台使用）
 	FallbackGroupIDOnInvalidRequest *int64
 	// 模型路由配置（仅 anthropic 平台使用）
@@ -551,6 +571,21 @@ const (
 
 var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_STATUS_UNAVAILABLE", "RPM cache not available")
 
+var (
+	ErrInvalidUserRole          = infraerrors.BadRequest("INVALID_USER_ROLE", "role must be user or admin")
+	ErrCannotDemoteSelf         = infraerrors.BadRequest("CANNOT_DEMOTE_SELF", "cannot demote yourself from admin")
+	ErrLastActiveAdmin          = infraerrors.Conflict("LAST_ACTIVE_ADMIN", "cannot demote the last active admin user")
+	ErrAtomicRoleUpdateRequired = errors.New("user repository does not support atomic admin role updates")
+)
+
+type AdminRoleUpdateRepository interface {
+	UpdateUserWithAdminRoleGuard(ctx context.Context, user *User) (oldRole string, err error)
+}
+
+type securityAuditLogWriter interface {
+	CreateAuditLog(ctx context.Context, input SecurityAuditCreateInput) (*SecurityAuditLog, error)
+}
+
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
 	userRepo             UserRepository
@@ -571,10 +606,15 @@ type adminServiceImpl struct {
 	userSubRepo          UserSubscriptionRepository
 	privacyClientFactory PrivacyClientFactory
 	runtimeBlocker       AccountRuntimeBlocker
+	securityAuditWriter  securityAuditLogWriter
 }
 
 type userGroupRateBatchReader interface {
 	GetByUserIDs(ctx context.Context, userIDs []int64) (map[int64]map[int64]float64, error)
+}
+
+func (s *adminServiceImpl) SetSecurityAuditService(auditService *SecurityAuditService) {
+	s.securityAuditWriter = auditService
 }
 
 // NewAdminService creates a new AdminService
@@ -707,7 +747,82 @@ func (s *adminServiceImpl) GetUserIncludeDeleted(ctx context.Context, id int64) 
 	return s.userRepo.GetByIDIncludeDeleted(ctx, id)
 }
 
+func normalizeAdminUserRole(role, fallback string) (string, error) {
+	if role == "" {
+		return fallback, nil
+	}
+	if role != RoleUser && role != RoleAdmin {
+		return "", ErrInvalidUserRole
+	}
+	return role, nil
+}
+
+func auditInt64Pointer(id int64) *int64 {
+	if id <= 0 {
+		return nil
+	}
+	return &id
+}
+
+func (s *adminServiceImpl) writeUserRoleAudit(
+	ctx context.Context,
+	action string,
+	actorAdminID int64,
+	targetUserID int64,
+	targetLabel string,
+	oldRole string,
+	newRole string,
+	result string,
+	reason string,
+) {
+	if s.securityAuditWriter == nil {
+		return
+	}
+
+	resourceID := ""
+	if targetUserID > 0 {
+		resourceID = strconv.FormatInt(targetUserID, 10)
+	}
+	_, err := s.securityAuditWriter.CreateAuditLog(ctx, SecurityAuditCreateInput{
+		ActorType:    "admin",
+		ActorID:      auditInt64Pointer(actorAdminID),
+		SubjectType:  "user",
+		SubjectID:    auditInt64Pointer(targetUserID),
+		SubjectLabel: targetLabel,
+		ResourceType: "user",
+		ResourceID:   resourceID,
+		Action:       action,
+		Result:       result,
+		RiskLevel:    SecurityAuditRiskHigh,
+		Reason:       reason,
+		Metadata: map[string]any{
+			"actor_admin_id": actorAdminID,
+			"target_user_id": targetUserID,
+			"old_role":       oldRole,
+			"new_role":       newRole,
+		},
+		DiffSummary: map[string]any{
+			"old_role": oldRole,
+			"new_role": newRole,
+		},
+	})
+	if err != nil {
+		slog.Warn("security audit write failed for admin user role operation",
+			"action", action,
+			"actor_admin_id", actorAdminID,
+			"target_user_id", targetUserID,
+			"result", result,
+			"error", err,
+		)
+	}
+}
+
 func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInput) (*User, error) {
+	role, err := normalizeAdminUserRole(input.Role, RoleUser)
+	if err != nil {
+		return nil, err
+	}
+
 	balance := 0.0
 	if input.Balance != nil {
 		balance = *input.Balance
@@ -719,7 +834,7 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 		Email:         input.Email,
 		Username:      input.Username,
 		Notes:         input.Notes,
-		Role:          RoleUser, // Always create as regular user, never admin
+		Role:          role,
 		Balance:       balance,
 		Concurrency:   input.Concurrency,
 		RPMLimit:      input.RPMLimit,
@@ -727,10 +842,19 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 		AllowedGroups: input.AllowedGroups,
 	}
 	if err := user.SetPassword(input.Password); err != nil {
+		if role == RoleAdmin {
+			s.writeUserRoleAudit(ctx, "admin.user.role.create", input.ActorAdminID, 0, input.Email, "", role, SecurityAuditResultFailure, err.Error())
+		}
 		return nil, err
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
+		if role == RoleAdmin {
+			s.writeUserRoleAudit(ctx, "admin.user.role.create", input.ActorAdminID, user.ID, input.Email, "", role, SecurityAuditResultFailure, err.Error())
+		}
 		return nil, err
+	}
+	if role == RoleAdmin {
+		s.writeUserRoleAudit(ctx, "admin.user.role.create", input.ActorAdminID, user.ID, user.Email, "", role, SecurityAuditResultSuccess, "admin user created")
 	}
 	s.assignDefaultSubscriptions(ctx, user.ID)
 	return user, nil
@@ -777,6 +901,20 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	oldStatus := user.Status
 	oldRole := user.Role
 	oldRPMLimit := user.RPMLimit
+	requestedRole := input.Role
+	roleExplicit := requestedRole != ""
+	if roleExplicit {
+		role, roleErr := normalizeAdminUserRole(requestedRole, user.Role)
+		if roleErr != nil {
+			s.writeUserRoleAudit(ctx, "admin.user.role.update", input.ActorAdminID, user.ID, user.Email, user.Role, requestedRole, SecurityAuditResultDenied, roleErr.Error())
+			return nil, roleErr
+		}
+		if user.Role == RoleAdmin && role == RoleUser && input.ActorAdminID == user.ID {
+			s.writeUserRoleAudit(ctx, "admin.user.role.update", input.ActorAdminID, user.ID, user.Email, user.Role, role, SecurityAuditResultDenied, ErrCannotDemoteSelf.Error())
+			return nil, ErrCannotDemoteSelf
+		}
+		user.Role = role
+	}
 
 	if input.Email != "" {
 		user.Email = input.Email
@@ -810,8 +948,28 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 		user.AllowedGroups = *input.AllowedGroups
 	}
 
-	if err := s.userRepo.Update(ctx, user); err != nil {
+	if roleExplicit {
+		roleRepo, ok := s.userRepo.(AdminRoleUpdateRepository)
+		if !ok {
+			s.writeUserRoleAudit(ctx, "admin.user.role.update", input.ActorAdminID, user.ID, user.Email, oldRole, user.Role, SecurityAuditResultFailure, ErrAtomicRoleUpdateRequired.Error())
+			return nil, ErrAtomicRoleUpdateRequired
+		}
+		persistedOldRole, updateErr := roleRepo.UpdateUserWithAdminRoleGuard(ctx, user)
+		if updateErr != nil {
+			result := SecurityAuditResultFailure
+			if errors.Is(updateErr, ErrLastActiveAdmin) {
+				result = SecurityAuditResultDenied
+			}
+			s.writeUserRoleAudit(ctx, "admin.user.role.update", input.ActorAdminID, user.ID, user.Email, persistedOldRole, user.Role, result, updateErr.Error())
+			return nil, updateErr
+		}
+		oldRole = persistedOldRole
+	} else if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
+	}
+
+	if roleExplicit && user.Role != oldRole {
+		s.writeUserRoleAudit(ctx, "admin.user.role.update", input.ActorAdminID, user.ID, user.Email, oldRole, user.Role, SecurityAuditResultSuccess, "user role updated")
 	}
 
 	// 同步用户专属分组倍率
@@ -1740,12 +1898,39 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	imagePrice1K := normalizePrice(input.ImagePrice1K)
 	imagePrice2K := normalizePrice(input.ImagePrice2K)
 	imagePrice4K := normalizePrice(input.ImagePrice4K)
+	videoPrice480P := normalizePrice(input.VideoPrice480P)
+	videoPrice720P := normalizePrice(input.VideoPrice720P)
+	videoPrice1080P := normalizePrice(input.VideoPrice1080P)
 	imageRateMultiplier := 1.0
 	if input.ImageRateMultiplier != nil {
 		if *input.ImageRateMultiplier < 0 {
 			return nil, errors.New("image_rate_multiplier must be >= 0")
 		}
 		imageRateMultiplier = *input.ImageRateMultiplier
+	}
+	videoRateMultiplier := 1.0
+	if input.VideoRateMultiplier != nil {
+		if *input.VideoRateMultiplier < 0 {
+			return nil, errors.New("video_rate_multiplier must be >= 0")
+		}
+		videoRateMultiplier = *input.VideoRateMultiplier
+	}
+	batchImageDiscountMultiplier := defaultBatchImageDiscountMultiplier
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		batchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	batchImageHoldMultiplier := defaultBatchImageHoldMultiplier
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		batchImageHoldMultiplier = *input.BatchImageHoldMultiplier
+	}
+	if batchImageHoldMultiplier < batchImageDiscountMultiplier {
+		return nil, errors.New("batch_image_hold_multiplier must be >= batch_image_discount_multiplier")
 	}
 
 	// 校验降级分组
@@ -1815,11 +2000,19 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
 		AllowImageGeneration:            input.AllowImageGeneration,
+		AllowBatchImageGeneration:       input.AllowBatchImageGeneration && input.AllowImageGeneration && platform == PlatformGemini,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
 		ImagePrice1K:                    imagePrice1K,
 		ImagePrice2K:                    imagePrice2K,
 		ImagePrice4K:                    imagePrice4K,
+		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:        batchImageHoldMultiplier,
+		VideoRateIndependent:            input.VideoRateIndependent,
+		VideoRateMultiplier:             videoRateMultiplier,
+		VideoPrice480P:                  videoPrice480P,
+		VideoPrice720P:                  videoPrice720P,
+		VideoPrice1080P:                 videoPrice1080P,
 		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
 		FallbackGroupID:                 input.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
@@ -1997,6 +2190,12 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
 	}
+	if input.AllowBatchImageGeneration != nil {
+		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration
+	}
+	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+		group.AllowBatchImageGeneration = false
+	}
 	if input.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *input.ImageRateIndependent
 	}
@@ -2014,6 +2213,39 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.ImagePrice4K != nil {
 		group.ImagePrice4K = normalizePrice(input.ImagePrice4K)
+	}
+	if input.BatchImageDiscountMultiplier != nil {
+		if *input.BatchImageDiscountMultiplier < 0 {
+			return nil, errors.New("batch_image_discount_multiplier must be >= 0")
+		}
+		group.BatchImageDiscountMultiplier = *input.BatchImageDiscountMultiplier
+	}
+	if input.BatchImageHoldMultiplier != nil {
+		if *input.BatchImageHoldMultiplier < 0 {
+			return nil, errors.New("batch_image_hold_multiplier must be >= 0")
+		}
+		group.BatchImageHoldMultiplier = *input.BatchImageHoldMultiplier
+	}
+	if group.BatchImageHoldMultiplier < group.BatchImageDiscountMultiplier {
+		return nil, errors.New("batch_image_hold_multiplier must be >= batch_image_discount_multiplier")
+	}
+	if input.VideoRateIndependent != nil {
+		group.VideoRateIndependent = *input.VideoRateIndependent
+	}
+	if input.VideoRateMultiplier != nil {
+		if *input.VideoRateMultiplier < 0 {
+			return nil, errors.New("video_rate_multiplier must be >= 0")
+		}
+		group.VideoRateMultiplier = *input.VideoRateMultiplier
+	}
+	if input.VideoPrice480P != nil {
+		group.VideoPrice480P = normalizePrice(input.VideoPrice480P)
+	}
+	if input.VideoPrice720P != nil {
+		group.VideoPrice720P = normalizePrice(input.VideoPrice720P)
+	}
+	if input.VideoPrice1080P != nil {
+		group.VideoPrice1080P = normalizePrice(input.VideoPrice1080P)
 	}
 
 	// Claude Code 客户端限制

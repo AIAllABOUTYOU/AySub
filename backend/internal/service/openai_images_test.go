@@ -916,7 +916,14 @@ func TestOpenAIGatewayServiceForwardImages_APIKeyStreamJSONResponseBillsImage(t 
 	require.Equal(t, 21, result.Usage.OutputTokens)
 	require.Equal(t, 9, result.Usage.ImageOutputTokens)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "aGVsbG8=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+	events := parseOpenAIImageTestSSEEvents(rec.Body.String())
+	completed, ok := findOpenAIImageTestSSEEvent(events, "image_generation.completed")
+	require.True(t, ok)
+	require.Equal(t, "aGVsbG8=", gjson.Get(completed.Data, "b64_json").String())
+	require.Equal(t, "draw a cat", gjson.Get(completed.Data, "revised_prompt").String())
+	require.Equal(t, int64(12), gjson.Get(completed.Data, "usage.input_tokens").Int())
+	require.Equal(t, int64(21), gjson.Get(completed.Data, "usage.output_tokens").Int())
 }
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyStreamRawJSONEventStreamFallbackBillsImage(t *testing.T) {

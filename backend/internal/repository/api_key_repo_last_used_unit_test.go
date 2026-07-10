@@ -69,6 +69,19 @@ func TestAPIKeyRepository_CreateWithLastUsedAt(t *testing.T) {
 	require.WithinDuration(t, lastUsed, *got.LastUsedAt, time.Second)
 }
 
+func TestLatestUsageLogIPsQuerySQLite(t *testing.T) {
+	query, args := latestUsageLogIPsQuery([]int64{7, 9}, dialect.SQLite)
+	require.Contains(t, query, "api_key_id IN (?, ?)")
+	require.Contains(t, query, "ROW_NUMBER() OVER")
+	require.Equal(t, []any{int64(7), int64(9)}, args)
+}
+
+func TestLatestUsageLogIPsQueryPostgres(t *testing.T) {
+	query, args := latestUsageLogIPsQuery([]int64{7, 9}, dialect.Postgres)
+	require.Contains(t, query, "api_key_id = ANY($1::bigint[])")
+	require.Len(t, args, 1)
+}
+
 func TestAPIKeyRepository_UpdateLastUsed(t *testing.T) {
 	repo, client := newAPIKeyRepoSQLite(t)
 	ctx := context.Background()

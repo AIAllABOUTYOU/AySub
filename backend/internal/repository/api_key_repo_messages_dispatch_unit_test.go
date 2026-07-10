@@ -43,6 +43,7 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 		SetName("g-auth-dispatch-unit").
 		SetPlatform(service.PlatformOpenAI).
 		SetStatus(service.StatusActive).
+		SetIsExclusive(true).
 		SetSubscriptionType(service.SubscriptionTypeStandard).
 		SetRateMultiplier(1).
 		SetAllowMessagesDispatch(true).
@@ -55,6 +56,11 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 				"claude-sonnet-4.5": "gpt-5.4-nano",
 			},
 		}).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.UserAllowedGroup.Create().
+		SetUserID(user.ID).
+		SetGroupID(group.ID).
 		Save(ctx)
 	require.NoError(t, err)
 
@@ -71,5 +77,7 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	require.NoError(t, err)
 	require.Equal(t, key.Name, got.Name)
 	require.NotNil(t, got.Group)
+	require.True(t, got.Group.IsExclusive)
+	require.Equal(t, []int64{group.ID}, got.User.AllowedGroups)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
 }

@@ -128,15 +128,30 @@
         </div>
 
         <!-- Billing Type Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
+        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
           <label class="input-label">{{ t('admin.usage.billingType') }}</label>
           <Select v-model="filters.billing_type" :options="billingTypeOptions" @change="emitChange" />
         </div>
 
         <!-- Billing Mode Filter -->
-        <div class="w-full sm:w-auto sm:min-w-[200px]">
+        <div v-if="mode === 'usage'" class="w-full sm:w-auto sm:min-w-[200px]">
           <label class="input-label">{{ t('admin.usage.billingMode') }}</label>
           <Select v-model="filters.billing_mode" :options="billingModeOptions" @change="emitChange" />
+        </div>
+
+        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[180px]">
+          <label class="input-label">{{ t('admin.ops.errorLog.type') }}</label>
+          <Select v-model="filters.error_phase" :options="errorPhaseOptions" @change="emitChange" />
+        </div>
+
+        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[190px]">
+          <label class="input-label">{{ t('usage.errors.category') }}</label>
+          <Select v-model="filters.error_category" :options="errorCategoryOptions" @change="emitChange" />
+        </div>
+
+        <div v-if="mode === 'errors'" class="w-full sm:w-auto sm:min-w-[160px]">
+          <label class="input-label">{{ t('admin.ops.errorLog.status') }}</label>
+          <Select v-model="filters.status_code" :options="statusCodeOptions" @change="emitChange" />
         </div>
 
         <!-- Group Filter -->
@@ -156,12 +171,14 @@
           {{ t('common.reset') }}
         </button>
         <slot name="after-reset" />
-        <button type="button" @click="$emit('cleanup')" class="btn btn-danger">
-          {{ t('admin.usage.cleanup.button') }}
-        </button>
-        <button type="button" @click="$emit('export')" :disabled="exporting" class="btn btn-primary">
-          {{ t('usage.exportExcel') }}
-        </button>
+        <template v-if="mode === 'usage'">
+          <button type="button" @click="$emit('cleanup')" class="btn btn-danger">
+            {{ t('admin.usage.cleanup.button') }}
+          </button>
+          <button type="button" @click="$emit('export')" :disabled="exporting" class="btn btn-primary">
+            {{ t('usage.exportExcel') }}
+          </button>
+        </template>
       </div>
     </div>
   </div>
@@ -183,10 +200,12 @@ interface Props {
   endDate: string
   showActions?: boolean
   modelOptions?: string[]
+  mode?: 'usage' | 'errors'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showActions: true
+  showActions: true,
+  mode: 'usage'
 })
 const emit = defineEmits([
   'update:modelValue',
@@ -236,6 +255,40 @@ const requestTypeOptions = ref<SelectOption[]>([
   { value: 'sync', label: t('usage.sync') }
 ])
 
+const errorPhaseOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('admin.usage.allTypes') },
+  { value: 'request', label: t('admin.ops.errorLog.typeRequest') },
+  { value: 'auth', label: t('admin.ops.errorLog.typeAuth') },
+  { value: 'routing', label: t('admin.ops.errorLog.typeRouting') },
+  { value: 'upstream', label: t('admin.ops.errorLog.typeUpstream') },
+  { value: 'network', label: t('admin.ops.errorDetails.phase.network') },
+  { value: 'internal', label: t('admin.ops.errorLog.typeInternal') }
+])
+
+const errorCategoryCodes = [
+  'auth',
+  'rate_limit',
+  'quota',
+  'invalid_request',
+  'service_unavailable',
+  'upstream',
+  'internal',
+  'cyber'
+]
+const errorCategoryOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('usage.errors.allCategories') },
+  ...errorCategoryCodes.map((category) => ({
+    value: category,
+    label: t(`usage.errors.categories.${category}`)
+  }))
+])
+
+const commonErrorStatusCodes = [400, 401, 403, 404, 408, 413, 422, 429, 499, 500, 502, 503, 504, 529]
+const statusCodeOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('usage.errors.allStatuses') },
+  ...commonErrorStatusCodes.map((status) => ({ value: status, label: String(status) }))
+])
+
 const billingTypeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allBillingTypes') },
   { value: 0, label: t('admin.usage.billingTypeBalance') },
@@ -246,7 +299,8 @@ const billingModeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allBillingModes') },
   { value: 'token', label: t('admin.usage.billingModeToken') },
   { value: 'per_request', label: t('admin.usage.billingModePerRequest') },
-  { value: 'image', label: t('admin.usage.billingModeImage') }
+  { value: 'image', label: t('admin.usage.billingModeImage') },
+  { value: 'video', label: t('admin.usage.billingModeVideo') }
 ])
 
 const emitChange = () => emit('change')

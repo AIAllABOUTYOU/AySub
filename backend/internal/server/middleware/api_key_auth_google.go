@@ -48,7 +48,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
-		if !apiKey.IsActive() {
+		if !apiKey.IsActive() &&
+			apiKey.Status != service.StatusAPIKeyExpired &&
+			apiKey.Status != service.StatusAPIKeyQuotaExhausted {
 			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_DISABLED", "API key is disabled", 401)
 			abortWithGoogleError(c, 401, "API key is disabled")
 			return
@@ -89,6 +91,12 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			abortWithGoogleError(c, 403, message)
 			return
 		}
+		if !validateAPIKeyGroupAllowed(apiKey) {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "GROUP_NOT_ALLOWED", "API Key 所属专属分组不再允许当前用户使用", 403)
+			abortWithGoogleError(c, 403, "API Key 所属专属分组不再允许当前用户使用")
+			return
+		}
 
 		// 简易模式：跳过余额和订阅检查
 		if cfg.RunMode == config.RunModeSimple {
@@ -101,6 +109,27 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			setGroupContext(c, apiKey.Group)
 			_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 			c.Next()
+			return
+		}
+
+		switch apiKey.Status {
+		case service.StatusAPIKeyQuotaExhausted:
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_QUOTA_EXHAUSTED", "API key quota exhausted", 429)
+			abortWithGoogleError(c, 429, "API key 额度已用完")
+			return
+		case service.StatusAPIKeyExpired:
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_EXPIRED", "API key expired", 403)
+			abortWithGoogleError(c, 403, "API key 已过期")
+			return
+		}
+		if apiKey.IsExpired() {
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_EXPIRED", "API key expired", 403)
+			abortWithGoogleError(c, 403, "API key 已过期")
+			return
+		}
+		if apiKey.IsQuotaExhausted() {
+			auditAPIKeyAuthDenied(c, auditService, apiKey, "API_KEY_QUOTA_EXHAUSTED", "API key quota exhausted", 429)
+			abortWithGoogleError(c, 429, "API key 额度已用完")
 			return
 		}
 
@@ -118,6 +147,15 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			}
 
 			needsMaintenance, err := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+			if needsMaintenance {
+				refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
+				if maintenanceErr != nil {
+					abortWithGoogleError(c, 500, "Failed to maintain subscription usage windows")
+					return
+				}
+				subscription = refreshed
+				_, err = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+			}
 			if err != nil {
 				status := 403
 				if errors.Is(err, service.ErrDailyLimitExceeded) ||
@@ -131,11 +169,6 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			}
 
 			c.Set(string(ContextKeySubscription), subscription)
-
-			if needsMaintenance {
-				maintenanceCopy := *subscription
-				subscriptionService.DoWindowMaintenance(&maintenanceCopy)
-			}
 		} else {
 			if apiKey.User.Balance <= 0 {
 				auditAPIKeyAuthDenied(c, auditService, apiKey, "INSUFFICIENT_BALANCE", "Insufficient account balance", 403)

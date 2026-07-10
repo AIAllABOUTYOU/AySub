@@ -72,6 +72,140 @@ func NewOpsHandler(opsService *service.OpsService) *OpsHandler {
 	return &OpsHandler{opsService: opsService}
 }
 
+func parseAdminOpsErrorFilter(c *gin.Context, defaultRange string) (*service.OpsErrorLogFilter, error) {
+	page, pageSize := response.ParsePagination(c)
+	if pageSize > 500 {
+		pageSize = 500
+	}
+
+	startTime, endTime, err := parseOpsTimeRange(c, defaultRange)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := &service.OpsErrorLogFilter{
+		Page:      page,
+		PageSize:  pageSize,
+		View:      parseOpsViewParam(c),
+		Phase:     strings.TrimSpace(c.Query("phase")),
+		Owner:     strings.TrimSpace(c.Query("error_owner")),
+		Source:    strings.TrimSpace(c.Query("error_source")),
+		Query:     strings.TrimSpace(c.Query("q")),
+		UserQuery: strings.TrimSpace(c.Query("user_query")),
+		Platform:  strings.TrimSpace(c.Query("platform")),
+		Model:     strings.TrimSpace(c.Query("model")),
+	}
+	if !startTime.IsZero() {
+		filter.StartTime = &startTime
+	}
+	if !endTime.IsZero() {
+		filter.EndTime = &endTime
+	}
+
+	idFilters := []struct {
+		queryKey string
+		target   **int64
+	}{
+		{queryKey: "group_id", target: &filter.GroupID},
+		{queryKey: "account_id", target: &filter.AccountID},
+		{queryKey: "user_id", target: &filter.UserID},
+		{queryKey: "api_key_id", target: &filter.APIKeyID},
+	}
+	for _, item := range idFilters {
+		value := strings.TrimSpace(c.Query(item.queryKey))
+		if value == "" {
+			continue
+		}
+		id, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || id <= 0 {
+			return nil, fmt.Errorf("invalid %s", item.queryKey)
+		}
+		*item.target = &id
+	}
+
+	if value := strings.TrimSpace(c.Query("request_type")); value != "" {
+		requestType, parseErr := service.ParseUsageRequestType(value)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		normalized := int16(requestType)
+		filter.RequestType = &normalized
+	} else if value := strings.TrimSpace(c.Query("stream")); value != "" {
+		stream, parseErr := strconv.ParseBool(value)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid stream")
+		}
+		filter.Stream = &stream
+	}
+
+	if value := strings.TrimSpace(c.Query("resolved")); value != "" {
+		resolved, parseErr := parseOpsBool(value)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid resolved")
+		}
+		filter.Resolved = &resolved
+	}
+
+	if values := strings.TrimSpace(c.Query("status_codes")); values != "" {
+		for _, raw := range strings.Split(values, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			statusCode, parseErr := strconv.Atoi(raw)
+			if parseErr != nil || statusCode < 0 {
+				return nil, fmt.Errorf("invalid status_codes")
+			}
+			filter.StatusCodes = append(filter.StatusCodes, statusCode)
+		}
+	}
+	if value := strings.TrimSpace(c.Query("status_codes_other")); value != "" {
+		other, parseErr := parseOpsBool(value)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid status_codes_other")
+		}
+		filter.StatusCodesOther = other
+	}
+
+	filter.ErrorPhasesAny, filter.ErrorTypesAny = adminOpsErrorCategoryFilters(c.Query("category"))
+	filter.SetSort(c.Query("sort_by"), c.Query("sort_order"))
+	return filter, nil
+}
+
+func parseOpsBool(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes":
+		return true, nil
+	case "0", "false", "no":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean")
+	}
+}
+
+func adminOpsErrorCategoryFilters(category string) ([]string, []string) {
+	switch strings.ToLower(strings.TrimSpace(category)) {
+	case "auth":
+		return []string{"auth"}, nil
+	case "service_unavailable":
+		return []string{"routing"}, nil
+	case "upstream":
+		return []string{"upstream", "network"}, nil
+	case "internal":
+		return []string{"internal"}, nil
+	case "rate_limit":
+		return nil, []string{"rate_limit_error"}
+	case "quota":
+		return nil, []string{"billing_error", "subscription_error"}
+	case "invalid_request":
+		return nil, []string{"invalid_request_error"}
+	case "cyber":
+		return []string{"request"}, []string{"cyber_policy"}
+	default:
+		return nil, nil
+	}
+}
+
 // GetErrorLogs lists ops error logs.
 // GET /api/v1/admin/ops/errors
 func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
@@ -84,88 +218,10 @@ func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
 		return
 	}
 
-	page, pageSize := response.ParsePagination(c)
-	// Ops list can be larger than standard admin tables.
-	if pageSize > 500 {
-		pageSize = 500
-	}
-
-	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	filter, err := parseAdminOpsErrorFilter(c, "1h")
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return
-	}
-
-	filter := &service.OpsErrorLogFilter{Page: page, PageSize: pageSize}
-
-	if !startTime.IsZero() {
-		filter.StartTime = &startTime
-	}
-	if !endTime.IsZero() {
-		filter.EndTime = &endTime
-	}
-	filter.View = parseOpsViewParam(c)
-	filter.Phase = strings.TrimSpace(c.Query("phase"))
-	filter.Owner = strings.TrimSpace(c.Query("error_owner"))
-	filter.Source = strings.TrimSpace(c.Query("error_source"))
-	filter.Query = strings.TrimSpace(c.Query("q"))
-	filter.UserQuery = strings.TrimSpace(c.Query("user_query"))
-
-	// Force request errors: client-visible status >= 400.
-	// buildOpsErrorLogsWhere already applies this for non-upstream phase.
-	if strings.EqualFold(strings.TrimSpace(filter.Phase), "upstream") {
-		filter.Phase = ""
-	}
-
-	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
-		filter.Platform = platform
-	}
-	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			response.BadRequest(c, "Invalid group_id")
-			return
-		}
-		filter.GroupID = &id
-	}
-	if v := strings.TrimSpace(c.Query("account_id")); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			response.BadRequest(c, "Invalid account_id")
-			return
-		}
-		filter.AccountID = &id
-	}
-
-	if v := strings.TrimSpace(c.Query("resolved")); v != "" {
-		switch strings.ToLower(v) {
-		case "1", "true", "yes":
-			b := true
-			filter.Resolved = &b
-		case "0", "false", "no":
-			b := false
-			filter.Resolved = &b
-		default:
-			response.BadRequest(c, "Invalid resolved")
-			return
-		}
-	}
-	if statusCodesStr := strings.TrimSpace(c.Query("status_codes")); statusCodesStr != "" {
-		parts := strings.Split(statusCodesStr, ",")
-		out := make([]int, 0, len(parts))
-		for _, part := range parts {
-			p := strings.TrimSpace(part)
-			if p == "" {
-				continue
-			}
-			n, err := strconv.Atoi(p)
-			if err != nil || n < 0 {
-				response.BadRequest(c, "Invalid status_codes")
-				return
-			}
-			out = append(out, n)
-		}
-		filter.StatusCodes = out
 	}
 
 	result, err := h.opsService.GetErrorLogs(c.Request.Context(), filter)
@@ -188,85 +244,10 @@ func (h *OpsHandler) ListRequestErrors(c *gin.Context) {
 		return
 	}
 
-	page, pageSize := response.ParsePagination(c)
-	if pageSize > 500 {
-		pageSize = 500
-	}
-	startTime, endTime, err := parseOpsTimeRange(c, "1h")
+	filter, err := parseAdminOpsErrorFilter(c, "1h")
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return
-	}
-
-	filter := &service.OpsErrorLogFilter{Page: page, PageSize: pageSize}
-	if !startTime.IsZero() {
-		filter.StartTime = &startTime
-	}
-	if !endTime.IsZero() {
-		filter.EndTime = &endTime
-	}
-	filter.View = parseOpsViewParam(c)
-	filter.Phase = strings.TrimSpace(c.Query("phase"))
-	filter.Owner = strings.TrimSpace(c.Query("error_owner"))
-	filter.Source = strings.TrimSpace(c.Query("error_source"))
-	filter.Query = strings.TrimSpace(c.Query("q"))
-	filter.UserQuery = strings.TrimSpace(c.Query("user_query"))
-
-	// Force request errors: client-visible status >= 400.
-	// buildOpsErrorLogsWhere already applies this for non-upstream phase.
-	if strings.EqualFold(strings.TrimSpace(filter.Phase), "upstream") {
-		filter.Phase = ""
-	}
-
-	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
-		filter.Platform = platform
-	}
-	if v := strings.TrimSpace(c.Query("group_id")); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			response.BadRequest(c, "Invalid group_id")
-			return
-		}
-		filter.GroupID = &id
-	}
-	if v := strings.TrimSpace(c.Query("account_id")); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			response.BadRequest(c, "Invalid account_id")
-			return
-		}
-		filter.AccountID = &id
-	}
-
-	if v := strings.TrimSpace(c.Query("resolved")); v != "" {
-		switch strings.ToLower(v) {
-		case "1", "true", "yes":
-			b := true
-			filter.Resolved = &b
-		case "0", "false", "no":
-			b := false
-			filter.Resolved = &b
-		default:
-			response.BadRequest(c, "Invalid resolved")
-			return
-		}
-	}
-	if statusCodesStr := strings.TrimSpace(c.Query("status_codes")); statusCodesStr != "" {
-		parts := strings.Split(statusCodesStr, ",")
-		out := make([]int, 0, len(parts))
-		for _, part := range parts {
-			p := strings.TrimSpace(part)
-			if p == "" {
-				continue
-			}
-			n, err := strconv.Atoi(p)
-			if err != nil || n < 0 {
-				response.BadRequest(c, "Invalid status_codes")
-				return
-			}
-			out = append(out, n)
-		}
-		filter.StatusCodes = out
 	}
 
 	result, err := h.opsService.GetErrorLogs(c.Request.Context(), filter)
@@ -340,6 +321,7 @@ func (h *OpsHandler) ListRequestErrorUpstreamErrors(c *gin.Context) {
 	}
 	filter.View = "all"
 	filter.Phase = "upstream"
+	filter.IncludeRecoveredUpstream = true
 	filter.Owner = "provider"
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
@@ -420,6 +402,7 @@ func (h *OpsHandler) ListUpstreamErrors(c *gin.Context) {
 
 	filter.View = parseOpsViewParam(c)
 	filter.Phase = "upstream"
+	filter.IncludeRecoveredUpstream = true
 	filter.Owner = "provider"
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))

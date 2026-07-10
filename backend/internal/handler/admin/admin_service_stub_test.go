@@ -19,6 +19,9 @@ type stubAdminService struct {
 	redeems              []service.RedeemCode
 	boundAuthIdentity    *service.AdminBindAuthIdentityInput
 	boundAuthIdentityFor int64
+	createdUsers         []*service.CreateUserInput
+	updatedUsers         []*service.UpdateUserInput
+	updatedUserIDs       []int64
 	createdAccounts      []*service.CreateAccountInput
 	createdProxies       []*service.CreateProxyInput
 	updatedProxyIDs      []int64
@@ -165,12 +168,21 @@ func (s *stubAdminService) GetUserIncludeDeleted(ctx context.Context, id int64) 
 }
 
 func (s *stubAdminService) CreateUser(ctx context.Context, input *service.CreateUserInput) (*service.User, error) {
-	user := service.User{ID: 100, Email: input.Email, Status: service.StatusActive}
+	copyInput := *input
+	s.createdUsers = append(s.createdUsers, &copyInput)
+	role := input.Role
+	if role == "" {
+		role = service.RoleUser
+	}
+	user := service.User{ID: 100, Email: input.Email, Role: role, Status: service.StatusActive}
 	return &user, nil
 }
 
 func (s *stubAdminService) UpdateUser(ctx context.Context, id int64, input *service.UpdateUserInput) (*service.User, error) {
-	user := service.User{ID: id, Email: "updated@example.com", Status: service.StatusActive}
+	copyInput := *input
+	s.updatedUserIDs = append(s.updatedUserIDs, id)
+	s.updatedUsers = append(s.updatedUsers, &copyInput)
+	user := service.User{ID: id, Email: "updated@example.com", Role: input.Role, Status: service.StatusActive}
 	return &user, nil
 }
 

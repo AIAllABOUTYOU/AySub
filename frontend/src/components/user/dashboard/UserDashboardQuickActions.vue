@@ -51,6 +51,21 @@
         />
       </button>
 
+      <button v-if="canUseBatchImage" @click="router.push('/batch-image')" class="group flex w-full items-center gap-4 rounded-xl bg-gray-50 p-4 text-left transition-all duration-200 hover:bg-gray-100 dark:bg-dark-800/50 dark:hover:bg-dark-800">
+        <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-sky-100 transition-transform group-hover:scale-105 dark:bg-sky-900/30">
+          <Icon name="sparkles" size="lg" class="text-sky-600 dark:text-sky-400" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('dashboard.batchImageAgent') }}</p>
+          <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('dashboard.batchImageAgentDesc') }}</p>
+        </div>
+        <Icon
+          name="chevronRight"
+          size="md"
+          class="text-gray-400 transition-colors group-hover:text-sky-500 dark:text-dark-500"
+        />
+      </button>
+
       <button @click="router.push('/redeem')" class="group flex w-full items-center gap-4 rounded-xl bg-gray-50 p-4 text-left transition-all duration-200 hover:bg-gray-100 dark:bg-dark-800/50 dark:hover:bg-dark-800">
         <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 transition-transform group-hover:scale-105 dark:bg-amber-900/30">
           <Icon name="gift" size="lg" class="text-amber-600 dark:text-amber-400" />
@@ -75,10 +90,12 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
+import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
 
 const router = useRouter()
 const { t } = useI18n()
 const appStore = useAppStore()
+const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 
 const checkinEnabled = computed(() => appStore.cachedPublicSettings?.checkin_enabled === true)
 const checkinRewardAmount = computed(() => appStore.cachedPublicSettings?.checkin_reward_amount ?? 0)
@@ -88,6 +105,7 @@ function formatRewardAmount(value: number): string {
 }
 
 onMounted(() => {
+  void refreshBatchImageAccess()
   appStore.fetchPublicSettings()
 })
 </script>

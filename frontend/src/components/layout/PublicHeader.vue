@@ -112,6 +112,7 @@ import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { HomeNavItem } from '@/types'
+import { sanitizeUrl } from '@/utils/url'
 
 interface Props {
   currentPath?: string
@@ -138,8 +139,8 @@ const isDark = ref(false)
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'AySub-演示站')
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'All Your AI Sub Hub')
-const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo)
-const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url)
+const siteLogo = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
+const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 
 // Default navigation items
 const defaultNavItems = computed<HomeNavItem[]>(() => [

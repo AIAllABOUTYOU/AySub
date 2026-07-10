@@ -52,6 +52,7 @@ type CreateUserRequest struct {
 	Password      string   `json:"password" binding:"required,min=6"`
 	Username      string   `json:"username"`
 	Notes         string   `json:"notes"`
+	Role          string   `json:"role" binding:"omitempty,oneof=user admin"`
 	Balance       *float64 `json:"balance"`
 	Concurrency   int      `json:"concurrency"`
 	RPMLimit      int      `json:"rpm_limit"`
@@ -65,6 +66,7 @@ type UpdateUserRequest struct {
 	Password      string   `json:"password" binding:"omitempty,min=6"`
 	Username      *string  `json:"username"`
 	Notes         *string  `json:"notes"`
+	Role          string   `json:"role" binding:"omitempty,oneof=user admin"`
 	Balance       *float64 `json:"balance"`
 	Concurrency   *int     `json:"concurrency"`
 	RPMLimit      *int     `json:"rpm_limit"`
@@ -73,6 +75,19 @@ type UpdateUserRequest struct {
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64 `json:"group_rates"`
+}
+
+type adminSecurityAuditConfigurer interface {
+	SetSecurityAuditService(auditService *service.SecurityAuditService)
+}
+
+func (h *UserHandler) SetSecurityAuditService(auditService *service.SecurityAuditService) {
+	if h == nil || auditService == nil {
+		return
+	}
+	if configurable, ok := h.adminService.(adminSecurityAuditConfigurer); ok {
+		configurable.SetSecurityAuditService(auditService)
+	}
 }
 
 // UpdateBalanceRequest represents balance update request
@@ -262,10 +277,12 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Password:      req.Password,
 		Username:      req.Username,
 		Notes:         req.Notes,
+		Role:          req.Role,
 		Balance:       req.Balance,
 		Concurrency:   req.Concurrency,
 		RPMLimit:      req.RPMLimit,
 		AllowedGroups: req.AllowedGroups,
+		ActorAdminID:  getAdminIDFromContext(c),
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -296,12 +313,14 @@ func (h *UserHandler) Update(c *gin.Context) {
 		Password:      req.Password,
 		Username:      req.Username,
 		Notes:         req.Notes,
+		Role:          req.Role,
 		Balance:       req.Balance,
 		Concurrency:   req.Concurrency,
 		RPMLimit:      req.RPMLimit,
 		Status:        req.Status,
 		AllowedGroups: req.AllowedGroups,
 		GroupRates:    req.GroupRates,
+		ActorAdminID:  getAdminIDFromContext(c),
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

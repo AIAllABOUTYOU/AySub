@@ -117,6 +117,7 @@ func ProvideHandlers(
 	checkinHandler *CheckinHandler,
 	userSecurityHandler *UserSecurityHandler,
 	playgroundSessionHandler *PlaygroundSessionHandler,
+	batchImageHandler *BatchImageHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 ) *Handlers {
@@ -141,6 +142,7 @@ func ProvideHandlers(
 		Checkin:          checkinHandler,
 		UserSecurity:     userSecurityHandler,
 		Playground:       playgroundSessionHandler,
+		BatchImage:       batchImageHandler,
 	}
 }
 
@@ -166,6 +168,7 @@ var ProviderSet = wire.NewSet(
 	NewCheckinHandler,
 	NewUserSecurityHandler,
 	NewPlaygroundSessionHandler,
+	NewBatchImageHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,

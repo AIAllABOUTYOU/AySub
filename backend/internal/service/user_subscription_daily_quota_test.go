@@ -15,8 +15,13 @@ type dailyResetTrackingUserSubRepo struct {
 	resetDailyCalled bool
 }
 
-func (r *dailyResetTrackingUserSubRepo) ResetDailyUsage(context.Context, int64, time.Time) error {
+func (r *dailyResetTrackingUserSubRepo) ResetDailyUsage(context.Context, int64, *time.Time, time.Time) error {
 	r.resetDailyCalled = true
+	return nil
+}
+
+func (r *dailyResetTrackingUserSubRepo) ResetUsageWindows(_ context.Context, _ int64, resetDaily, _, _ bool, _ time.Time) error {
+	r.resetDailyCalled = resetDaily
 	return nil
 }
 

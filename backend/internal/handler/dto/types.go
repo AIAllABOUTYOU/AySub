@@ -14,6 +14,7 @@ type User struct {
 	Username      string     `json:"username"`
 	Role          string     `json:"role"`
 	Balance       float64    `json:"balance"`
+	FrozenBalance float64    `json:"frozen_balance"`
 	Concurrency   int        `json:"concurrency"`
 	Status        string     `json:"status"`
 	AllowedGroups []int64    `json:"allowed_groups"`
@@ -58,6 +59,7 @@ type APIKey struct {
 	IPWhitelist         []string   `json:"ip_whitelist"`
 	IPBlacklist         []string   `json:"ip_blacklist"`
 	LastUsedAt          *time.Time `json:"last_used_at"`
+	LastUsedIP          *string    `json:"last_used_ip"`
 	PermissionMode      string     `json:"permission_mode"`
 	AllowedModels       []string   `json:"allowed_models"`
 	AllowedEndpoints    []string   `json:"allowed_endpoints"`
@@ -67,6 +69,7 @@ type APIKey struct {
 	ExpiresAt           *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
+	CurrentConcurrency  int        `json:"current_concurrency"`
 
 	// Rate limit fields
 	RateLimit5h   float64    `json:"rate_limit_5h"`
@@ -101,12 +104,20 @@ type Group struct {
 	MonthlyLimitUSD  *float64 `json:"monthly_limit_usd"`
 
 	// 图片生成计费配置（仅 antigravity 平台使用）
-	AllowImageGeneration bool     `json:"allow_image_generation"`
-	ImageRateIndependent bool     `json:"image_rate_independent"`
-	ImageRateMultiplier  float64  `json:"image_rate_multiplier"`
-	ImagePrice1K         *float64 `json:"image_price_1k"`
-	ImagePrice2K         *float64 `json:"image_price_2k"`
-	ImagePrice4K         *float64 `json:"image_price_4k"`
+	AllowImageGeneration         bool     `json:"allow_image_generation"`
+	AllowBatchImageGeneration    bool     `json:"allow_batch_image_generation"`
+	ImageRateIndependent         bool     `json:"image_rate_independent"`
+	ImageRateMultiplier          float64  `json:"image_rate_multiplier"`
+	ImagePrice1K                 *float64 `json:"image_price_1k"`
+	ImagePrice2K                 *float64 `json:"image_price_2k"`
+	ImagePrice4K                 *float64 `json:"image_price_4k"`
+	BatchImageDiscountMultiplier float64  `json:"batch_image_discount_multiplier"`
+	BatchImageHoldMultiplier     float64  `json:"batch_image_hold_multiplier"`
+	VideoRateIndependent         bool     `json:"video_rate_independent"`
+	VideoRateMultiplier          float64  `json:"video_rate_multiplier"`
+	VideoPrice480P               *float64 `json:"video_price_480p"`
+	VideoPrice720P               *float64 `json:"video_price_720p"`
+	VideoPrice1080P              *float64 `json:"video_price_1080p"`
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool   `json:"claude_code_only"`
@@ -473,13 +484,17 @@ type UsageLog struct {
 	ImageSizeBreakdown map[string]int `json:"image_size_breakdown"`
 	MediaType          *string        `json:"media_type"`
 
+	VideoCount           int     `json:"video_count"`
+	VideoResolution      *string `json:"video_resolution"`
+	VideoDurationSeconds *int    `json:"video_duration_seconds"`
+
 	// User-Agent
 	UserAgent *string `json:"user_agent"`
 
 	// Cache TTL Override 标记
 	CacheTTLOverridden bool `json:"cache_ttl_overridden"`
 
-	// BillingMode 计费模式：token/image
+	// BillingMode 计费模式：token/per_request/image/video
 	BillingMode *string `json:"billing_mode,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`

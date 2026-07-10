@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,11 +18,17 @@ import (
 )
 
 type systemHandlerUpdateServiceStub struct {
-	performErr  error
-	updateInfo  *service.UpdateInfo
-	checkErr    error
-	checkForces []bool
-	performCall int
+	performErr       error
+	updateInfo       *service.UpdateInfo
+	checkErr         error
+	checkForces      []bool
+	performCall      int
+	rollbackVersions []service.RollbackVersion
+	rollbackListErr  error
+	rollbackErr      error
+	rollbackCall     int
+	rollbackToErr    error
+	rollbackTargets  []string
 }
 
 func (s *systemHandlerUpdateServiceStub) CheckUpdate(_ context.Context, force bool) (*service.UpdateInfo, error) {
@@ -35,7 +42,17 @@ func (s *systemHandlerUpdateServiceStub) PerformUpdate(context.Context) error {
 }
 
 func (s *systemHandlerUpdateServiceStub) Rollback() error {
-	return nil
+	s.rollbackCall++
+	return s.rollbackErr
+}
+
+func (s *systemHandlerUpdateServiceStub) ListRollbackVersions(context.Context) ([]service.RollbackVersion, error) {
+	return s.rollbackVersions, s.rollbackListErr
+}
+
+func (s *systemHandlerUpdateServiceStub) RollbackToVersion(_ context.Context, version string) error {
+	s.rollbackTargets = append(s.rollbackTargets, version)
+	return s.rollbackToErr
 }
 
 type systemUpdateResponseEnvelope struct {
@@ -70,7 +87,9 @@ func newSystemHandlerTestRouter(t *testing.T, updateSvc *systemHandlerUpdateServ
 	handler := NewSystemHandler(updateSvc, lockSvc)
 
 	router := gin.New()
+	router.GET("/api/v1/admin/system/rollback-versions", handler.GetRollbackVersions)
 	router.POST("/api/v1/admin/system/update", handler.PerformUpdate)
+	router.POST("/api/v1/admin/system/rollback", handler.Rollback)
 	return router
 }
 
@@ -141,4 +160,81 @@ func TestSystemHandlerPerformUpdateFailureStillReturnsInternalError(t *testing.T
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, http.StatusInternalServerError, body.Code)
 	require.Equal(t, "internal error", body.Message)
+}
+
+func TestSystemHandlerGetRollbackVersions(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{rollbackVersions: []service.RollbackVersion{
+		{Version: "0.1.138", PublishedAt: "2026-07-01T00:00:00Z"},
+	}}
+	router := newSystemHandlerTestRouter(t, updateSvc, newMemoryIdempotencyRepoStub())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/system/rollback-versions", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), `"version":"0.1.138"`)
+}
+
+func TestSystemHandlerRollbackWithoutBodyUsesLocalBackup(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{}
+	repo := newMemoryIdempotencyRepoStub()
+	router := newSystemHandlerTestRouter(t, updateSvc, repo)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback", nil)
+	req.Header.Set("Idempotency-Key", "local-backup")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, 1, updateSvc.rollbackCall)
+	require.Empty(t, updateSvc.rollbackTargets)
+	requireSystemLockStatus(t, repo, service.IdempotencyStatusSucceeded)
+}
+
+func TestSystemHandlerRollbackToVersionUsesOnlineRelease(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{}
+	repo := newMemoryIdempotencyRepoStub()
+	router := newSystemHandlerTestRouter(t, updateSvc, repo)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback", strings.NewReader(`{"version":"v0.1.138"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "online-version")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Zero(t, updateSvc.rollbackCall)
+	require.Equal(t, []string{"0.1.138"}, updateSvc.rollbackTargets)
+	requireSystemLockStatus(t, repo, service.IdempotencyStatusSucceeded)
+}
+
+func TestSystemHandlerRollbackRejectsMalformedBody(t *testing.T) {
+	updateSvc := &systemHandlerUpdateServiceStub{}
+	router := newSystemHandlerTestRouter(t, updateSvc, newMemoryIdempotencyRepoStub())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback", strings.NewReader(`{"version":`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Zero(t, updateSvc.rollbackCall)
+	require.Empty(t, updateSvc.rollbackTargets)
+}
+
+func TestBuildSystemOperationIDIncludesRollbackTarget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctxA, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxA.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback", nil)
+	ctxA.Request.Header.Set("Idempotency-Key", "same-key")
+
+	ctxB, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxB.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/system/rollback", nil)
+	ctxB.Request.Header.Set("Idempotency-Key", "same-key")
+
+	require.NotEqual(t,
+		buildSystemOperationID(ctxA, "rollback", "0.1.138"),
+		buildSystemOperationID(ctxB, "rollback", "0.1.137"),
+	)
 }

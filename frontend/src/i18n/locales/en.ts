@@ -442,11 +442,17 @@ export default {
     }
   },
 
+  batchImageGuide: {
+    title: 'Batch Image Generation',
+    description: 'Submit multiple prompts in one job and download the generated images when complete'
+  },
+
   // Navigation
   nav: {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    batchImage: 'Batch Images',
     usage: 'Usage',
     requestLogs: 'Request Logs',
     securityCenter: 'Security Center',
@@ -771,6 +777,8 @@ export default {
     quickActions: 'Quick Actions',
     createApiKey: 'Create API Key',
     generateNewKey: 'Generate a new API key',
+    batchImageAgent: 'Batch Image Assistant',
+    batchImageAgentDesc: 'Copy instructions for an agent',
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
@@ -868,6 +876,8 @@ export default {
     total: 'Last 30d',
     quota: 'Quota',
     lastUsedAt: 'Last Used',
+    lastUsedIP: 'Last Used IP',
+    currentConcurrency: 'Current Concurrency',
     useKey: 'Use Key',
     useKeyModal: {
       title: 'Use API Key',
@@ -1051,6 +1061,7 @@ export default {
     type: 'Type',
     tokens: 'Tokens',
     cost: 'Cost',
+    latency: 'Latency',
     firstToken: 'First Token',
     duration: 'Duration',
     time: 'Time',
@@ -1067,6 +1078,12 @@ export default {
     imageUnitPrice: 'Per-image price',
     imageTotalPrice: 'Image total price',
     imageCount: 'Image count',
+    videoUnitPrice: 'Per-second price',
+    videoTotalPrice: 'Video total price',
+    videoCount: 'Video count',
+    videoDuration: 'Video duration',
+    videoResolution: 'Video resolution',
+    videoResolutionUnknown: 'Unknown resolution',
     imageBillingSize: 'Billing size',
     imageInputSize: 'Input size',
     imageOutputSize: 'Output size',
@@ -1097,7 +1114,20 @@ export default {
     exportExcelSuccess: 'Usage data exported successfully (Excel format)',
     exportExcelFailed: 'Failed to export usage data',
     imageUnit: ' images',
-    userAgent: 'User-Agent'
+    videoUnit: ' videos',
+    userAgent: 'User-Agent',
+    tabs: { usage: 'Usage Details', errors: 'Error Requests', ranking: 'User Ranking' },
+    errors: {
+      category: 'Category',
+      allCategories: 'All categories',
+      allStatuses: 'All status codes',
+      failedToLoad: 'Failed to load error requests',
+      categories: {
+        auth: 'Auth failed', rate_limit: 'Rate limited', quota: 'Balance/Subscription',
+        invalid_request: 'Invalid request', service_unavailable: 'Service unavailable',
+        upstream: 'Upstream error', internal: 'Platform error', cyber: 'Cyber policy'
+      }
+    }
   },
 
   requestLogs: {
@@ -1423,7 +1453,7 @@ export default {
     },
     toolbar: {
       multiplier: 'Multiplier',
-      density: 'Density'
+      tokenUnit: 'Token price unit (per million / per thousand)'
     },
     sort: {
       default: 'Default',
@@ -2063,6 +2093,9 @@ export default {
       spendShort: 'Spend',
       requestsShort: 'Req',
       tokensShort: 'Tok',
+      quickActions: 'Quick Actions',
+      batchImage: 'Batch Image',
+      batchImageDesc: 'Submit jobs and copy agent instructions',
       failedToLoad: 'Failed to load dashboard statistics'
     },
 
@@ -2563,6 +2596,8 @@ export default {
       creating: 'Creating...',
       updating: 'Updating...',
       form: {
+        roleLabel: 'Role',
+        selectRole: 'Select role',
         rpmLimit: 'Requests Per Minute (RPM)',
         rpmLimitPlaceholder: '0 = unlimited',
         rpmLimitHint: 'Max requests per minute for this user; 0 = unlimited. Acts as a fallback only when the group has no rpm_limit set.'
@@ -2954,10 +2989,27 @@ export default {
         title: 'Image Generation Pricing',
         description: 'Configure image generation access and base image prices. Leave empty to use default prices.',
         allowImageGeneration: 'Allow image generation for this group',
+        allowBatchImageGeneration: 'Allow batch image generation for this group',
         independentMultiplier: 'Use independent image multiplier',
         imageMultiplier: 'Image multiplier',
+        batchDiscountMultiplier: 'Batch image discount',
+        batchHoldMultiplier: 'Batch hold price ratio',
+        batchSectionHint: 'Batch image settings only apply to batch jobs: settlement applies the batch discount, and the upfront hold is normal image price × batch hold price ratio. Reference images also create upstream input-token usage, so a batch image discount above 0.5 is recommended.',
+        batchDisabledHint: 'Enable image generation for this group before enabling batch image generation.',
+        batchGeminiOnlyHint: 'Batch image generation is currently available only for Gemini groups.',
         modeHint: 'By default, image billing uses image price × current effective group multiplier. Independent mode uses image price × image multiplier.',
         finalPricePreview: 'Final per-image price preview',
+        notConfigured: 'Not configured'
+      },
+      videoPricing: {
+        title: 'Video Generation Pricing',
+        description:
+          'Configure xAI / Grok video generation prices in USD per second. Empty fields use model defaults: grok-imagine-video is $0.05/s at 480p and $0.07/s at 720p; video-1.5 is $0.08/s at 480p, $0.14/s at 720p, and $0.25/s at 1080p.',
+        independentMultiplier: 'Use independent video multiplier',
+        videoMultiplier: 'Video multiplier',
+        modeHint:
+          'Video cost = per-second price × duration (6/10/12/16/20 seconds; default 6) × video count × multiplier. The group multiplier applies by default; independent mode uses the video multiplier.',
+        finalPricePreview: 'Final per-second price preview',
         notConfigured: 'Not configured'
       },
       modelsList: {
@@ -5483,11 +5535,26 @@ export default {
       billingModeToken: 'Token',
       billingModePerRequest: 'Per Request',
       billingModeImage: 'Image',
+      billingModeVideo: 'Video',
       allBillingModes: 'All Billing Modes',
       ipAddress: 'IP',
       clickToViewBalance: 'Click to view balance history',
       failedToLoadUser: 'Failed to load user info',
       userDeletedBadge: 'Deleted',
+      tokenRanking: {
+        title: 'Token Ranking',
+        rowHint: "View this user's usage details",
+        userCount: '{count} users',
+        columns: {
+          user: 'User',
+          requests: 'Requests',
+          inputTokens: 'Input Tokens',
+          outputTokens: 'Output Tokens',
+          cacheTokens: 'Cache Tokens',
+          totalTokens: 'Total Tokens',
+          cost: 'Cost'
+        }
+      },
       cleanup: {
         button: 'Cleanup',
         title: 'Cleanup Usage Records',
@@ -7505,11 +7572,23 @@ export default {
     updateNow: 'Update Now',
     updating: 'Updating...',
     updateComplete: 'Update Complete',
+    rollbackComplete: 'Rollback Complete',
     updateFailed: 'Update Failed',
     restartRequired: 'Please restart the service to apply the update',
     restartNow: 'Restart Now',
     restarting: 'Restarting...',
-    retry: 'Retry'
+    retry: 'Retry',
+    rollback: 'Version Rollback',
+    rollbackSourceHint: 'Source builds should roll back manually with a Git tag.',
+    noRollbackVersions: 'No older versions are available',
+    loadVersionsFailed: 'Failed to load rollback versions',
+    deployScript: 'Install Script',
+    deployDocker: 'Docker',
+    copyCommand: 'Copy command',
+    rollbackWarning: 'Rollback replaces the current binary and requires a service restart.',
+    rollbackConfirm: 'Rollback to {version}',
+    rollingBack: 'Rolling back...',
+    rollbackFailed: 'Version rollback failed'
   },
 
   // Recharge / Subscription Page

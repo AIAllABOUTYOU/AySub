@@ -204,6 +204,15 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			// 订阅模式：验证订阅限额
 			if subscription != nil {
 				needsMaintenance, validateErr := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+				if needsMaintenance {
+					refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
+					if maintenanceErr != nil {
+						AbortWithError(c, 500, "SUBSCRIPTION_MAINTENANCE_FAILED", "Failed to maintain subscription usage windows")
+						return
+					}
+					subscription = refreshed
+					_, validateErr = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
+				}
 				if validateErr != nil {
 					code := "SUBSCRIPTION_INVALID"
 					status := 403
@@ -216,12 +225,6 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 					auditAPIKeyAuthDenied(c, auditService, apiKey, code, validateErr.Error(), status)
 					AbortWithError(c, status, code, validateErr.Error())
 					return
-				}
-
-				// 窗口维护异步化（不阻塞请求）
-				if needsMaintenance {
-					maintenanceCopy := *subscription
-					subscriptionService.DoWindowMaintenance(&maintenanceCopy)
 				}
 			} else {
 				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
@@ -291,6 +294,17 @@ func abortIfAPIKeyGroupUnavailable(c *gin.Context, apiKey *service.APIKey, audit
 	auditAPIKeyAuthDenied(c, firstSecurityAuditService(auditServices), apiKey, code, message, 403)
 	AbortWithError(c, 403, code, message)
 	return true
+}
+
+func validateAPIKeyGroupAllowed(apiKey *service.APIKey) bool {
+	if apiKey == nil || apiKey.GroupID == nil || apiKey.User == nil || apiKey.Group == nil {
+		return true
+	}
+	group := apiKey.Group
+	if group.IsSubscriptionType() {
+		return true
+	}
+	return apiKey.User.CanBindGroup(group.ID, group.IsExclusive)
 }
 
 func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool) {

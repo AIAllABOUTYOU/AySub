@@ -29,6 +29,9 @@ type testTransport struct {
 func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Rewrite the URL to point to our test server
 	testURL := t.testServerURL + req.URL.Path
+	if req.URL.RawQuery != "" {
+		testURL += "?" + req.URL.RawQuery
+	}
 	newReq, err := http.NewRequestWithContext(req.Context(), req.Method, testURL, req.Body)
 	if err != nil {
 		return nil, err
@@ -260,6 +263,44 @@ func (s *GitHubReleaseServiceSuite) TestFetchLatestRelease_Non200() {
 	_, err := s.client.FetchLatestRelease(context.Background(), "test/repo")
 	require.Error(s.T(), err)
 	require.Contains(s.T(), err.Error(), "404")
+}
+
+func (s *GitHubReleaseServiceSuite) TestFetchRecentReleases_Success() {
+	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(s.T(), "/repos/test/repo/releases", r.URL.Path)
+		require.Equal(s.T(), "15", r.URL.Query().Get("per_page"))
+		require.Equal(s.T(), "application/vnd.github.v3+json", r.Header.Get("Accept"))
+		require.Equal(s.T(), "AySub-Updater", r.Header.Get("User-Agent"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"tag_name":"v0.1.2"},{"tag_name":"v0.1.1","draft":true}]`))
+	}))
+
+	s.client = &githubReleaseClient{
+		httpClient:         &http.Client{Transport: &testTransport{testServerURL: s.srv.URL}},
+		downloadHTTPClient: &http.Client{},
+	}
+
+	releases, err := s.client.FetchRecentReleases(context.Background(), "test/repo", 15)
+	require.NoError(s.T(), err)
+	require.Len(s.T(), releases, 2)
+	require.Equal(s.T(), "v0.1.2", releases[0].TagName)
+	require.True(s.T(), releases[1].Draft)
+}
+
+func (s *GitHubReleaseServiceSuite) TestFetchRecentReleases_ClampsPageSizeAndRejectsNon200() {
+	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(s.T(), "100", r.URL.Query().Get("per_page"))
+		w.WriteHeader(http.StatusForbidden)
+	}))
+
+	s.client = &githubReleaseClient{
+		httpClient:         &http.Client{Transport: &testTransport{testServerURL: s.srv.URL}},
+		downloadHTTPClient: &http.Client{},
+	}
+
+	_, err := s.client.FetchRecentReleases(context.Background(), "test/repo", 1000)
+	require.Error(s.T(), err)
+	require.Contains(s.T(), err.Error(), "403")
 }
 
 func (s *GitHubReleaseServiceSuite) TestFetchLatestRelease_InvalidJSON() {

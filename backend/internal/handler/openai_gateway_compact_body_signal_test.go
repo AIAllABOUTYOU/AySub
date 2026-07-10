@@ -49,6 +49,34 @@ func TestNormalizeOpenAIResponsesCompactRequest_BodySignalPromoted(t *testing.T)
 	seed, exists := c.Get(service.OpenAICompactSessionSeedKeyForTest())
 	require.True(t, exists)
 	require.Equal(t, "pck-signal-1", seed)
+	clientStream, exists := c.Get(service.OpenAICompactClientStreamKeyForTest())
+	require.True(t, exists)
+	require.Equal(t, true, clientStream)
+}
+
+func TestNormalizeOpenAIResponsesCompactRequest_BodySignalStreamFalseNotMarked(t *testing.T) {
+	h := &OpenAIGatewayHandler{}
+	for _, body := range [][]byte{
+		[]byte(`{"model":"gpt-5.5","stream":false,"input":[{"type":"compaction_trigger"}]}`),
+		[]byte(`{"model":"gpt-5.5","input":[{"type":"compaction_trigger"}]}`),
+	} {
+		c := newCompactBodySignalTestContext(t, "/v1/responses", body)
+		_, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
+		require.True(t, ok)
+		_, exists := c.Get(service.OpenAICompactClientStreamKeyForTest())
+		require.False(t, exists)
+	}
+}
+
+func TestNormalizeOpenAIResponsesCompactRequest_PathBasedStreamTrueNotMarked(t *testing.T) {
+	h := &OpenAIGatewayHandler{}
+	body := []byte(`{"model":"gpt-5.5","stream":true,"input":[{"type":"message","role":"user","content":"hello"}]}`)
+	c := newCompactBodySignalTestContext(t, "/v1/responses/compact", body)
+
+	_, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
+	require.True(t, ok)
+	_, exists := c.Get(service.OpenAICompactClientStreamKeyForTest())
+	require.False(t, exists)
 }
 
 func TestNormalizeOpenAIResponsesCompactRequest_BodySignalTrailingSlash(t *testing.T) {

@@ -59,7 +59,21 @@ func TestGetUserBreakdown_GroupIDFilter(t *testing.T) {
 	require.Equal(t, int64(42), repo.capturedDim.GroupID)
 	require.Empty(t, repo.capturedDim.Model)
 	require.Empty(t, repo.capturedDim.Endpoint)
+	require.Empty(t, repo.capturedDim.SortBy)
 	require.Equal(t, 50, repo.capturedLimit) // default limit
+}
+
+func TestGetUserBreakdown_SortBy(t *testing.T) {
+	repo := &userBreakdownRepoCapture{}
+	router := newUserBreakdownRouter(repo)
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/admin/dashboard/user-breakdown?start_date=2026-03-01&end_date=2026-03-16&sort_by=%20total_tokens%20", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "total_tokens", repo.capturedDim.SortBy)
 }
 
 func TestGetUserBreakdown_ModelFilter(t *testing.T) {
@@ -159,8 +173,8 @@ func TestGetUserBreakdown_LimitClamped(t *testing.T) {
 func TestGetUserBreakdown_ResponseFormat(t *testing.T) {
 	repo := &userBreakdownRepoCapture{
 		result: []usagestats.UserBreakdownItem{
-			{UserID: 1, Email: "alice@test.com", Requests: 100, TotalTokens: 50000, Cost: 1.5, ActualCost: 1.2},
-			{UserID: 2, Email: "bob@test.com", Requests: 50, TotalTokens: 25000, Cost: 0.8, ActualCost: 0.6},
+			{UserID: 1, Email: "alice@test.com", Requests: 100, InputTokens: 30000, OutputTokens: 15000, CacheTokens: 5000, TotalTokens: 50000, Cost: 1.5, ActualCost: 1.2},
+			{UserID: 2, Email: "bob@test.com", Requests: 50, InputTokens: 15000, OutputTokens: 8000, CacheTokens: 2000, TotalTokens: 25000, Cost: 0.8, ActualCost: 0.6},
 		},
 	}
 	router := newUserBreakdownRouter(repo)
@@ -187,6 +201,10 @@ func TestGetUserBreakdown_ResponseFormat(t *testing.T) {
 	require.Equal(t, int64(1), resp.Data.Users[0].UserID)
 	require.Equal(t, "alice@test.com", resp.Data.Users[0].Email)
 	require.Equal(t, int64(100), resp.Data.Users[0].Requests)
+	require.Equal(t, int64(30000), resp.Data.Users[0].InputTokens)
+	require.Equal(t, int64(15000), resp.Data.Users[0].OutputTokens)
+	require.Equal(t, int64(5000), resp.Data.Users[0].CacheTokens)
+	require.Equal(t, int64(50000), resp.Data.Users[0].TotalTokens)
 	require.InDelta(t, 1.2, resp.Data.Users[0].ActualCost, 0.001)
 	require.Equal(t, "2026-03-01", resp.Data.StartDate)
 	require.Equal(t, "2026-03-16", resp.Data.EndDate)

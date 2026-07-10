@@ -84,6 +84,9 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
   billing_mode?: string
   sort_by?: string
   sort_order?: 'asc' | 'desc'
+  error_phase?: string | null
+  error_category?: string | null
+  status_code?: number | null
 }
 
 // ==================== API Functions ====================
