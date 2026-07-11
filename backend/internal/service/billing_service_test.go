@@ -169,15 +169,24 @@ func TestGetModelPricing_OpenAICompactAliasesFallback(t *testing.T) {
 func TestGetModelPricing_OpenAIGPT56Fallback(t *testing.T) {
 	svc := newTestBillingService()
 
-	for _, model := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
-		t.Run(model, func(t *testing.T) {
-			pricing, err := svc.GetModelPricing(model)
+	for _, tc := range []struct {
+		model, alias                string
+		input, output, cache, write float64
+	}{{"gpt-5.6-sol", "gpt-5.6", 5e-6, 30e-6, 0.5e-6, 6.25e-6}, {"gpt-5.6-terra", "", 2.5e-6, 15e-6, 0.25e-6, 3.125e-6}, {"gpt-5.6-luna", "", 1e-6, 6e-6, 0.1e-6, 1.25e-6}} {
+		t.Run(tc.model, func(t *testing.T) {
+			pricing, err := svc.GetModelPricing(tc.model)
 			require.NoError(t, err)
 			require.NotNil(t, pricing)
-			require.InDelta(t, 2.5e-6, pricing.InputPricePerToken, 1e-12)
-			require.InDelta(t, 15e-6, pricing.OutputPricePerToken, 1e-12)
-			require.InDelta(t, 0.25e-6, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, tc.input, pricing.InputPricePerToken, 1e-12)
+			require.InDelta(t, tc.output, pricing.OutputPricePerToken, 1e-12)
+			require.InDelta(t, tc.cache, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, tc.write, pricing.CacheCreationPricePerToken, 1e-12)
 			require.Equal(t, 272000, pricing.LongContextInputThreshold)
+			if tc.alias != "" {
+				aliasPricing, err := svc.GetModelPricing(tc.alias)
+				require.NoError(t, err)
+				require.InDelta(t, tc.input, aliasPricing.InputPricePerToken, 1e-12)
+			}
 		})
 	}
 }

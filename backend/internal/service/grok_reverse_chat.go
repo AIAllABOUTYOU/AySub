@@ -419,10 +419,16 @@ func (s *OpenAIGatewayService) ForwardGrokResponses(ctx context.Context, c *gin.
 	responseID := newGrokResponseID()
 	messageID := newGrokResponseMessageID()
 	promptTokens := estimateGrokTextTokens(prompt)
+	var result *OpenAIForwardResult
 	if clientStream {
-		return s.streamGrokWebResponses(c, resp, account, responseID, messageID, originalModel, billingModel, upstreamModel, promptTokens, startTime)
+		result, err = s.streamGrokWebResponses(c, resp, account, responseID, messageID, originalModel, billingModel, upstreamModel, promptTokens, startTime)
+	} else {
+		result, err = s.bufferGrokWebResponses(c, resp, responseID, messageID, originalModel, billingModel, upstreamModel, promptTokens, startTime)
 	}
-	return s.bufferGrokWebResponses(c, resp, responseID, messageID, originalModel, billingModel, upstreamModel, promptTokens, startTime)
+	if result != nil {
+		result.ReasoningEffort = extractOpenAIReasoningEffortFromBody(body, originalModel)
+	}
+	return result, err
 }
 
 func (s *OpenAIGatewayService) ForwardGrokImages(ctx context.Context, c *gin.Context, account *Account, parsed *OpenAIImagesRequest, channelMappedModel string) (*OpenAIForwardResult, error) {

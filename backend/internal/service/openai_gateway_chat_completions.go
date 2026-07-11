@@ -76,6 +76,13 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	if account.IsXAICookie() {
 		return s.ForwardGrokChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
+	restrictionResult := s.detectCodexClientRestriction(c, account, body)
+	logCodexCLIOnlyDetection(ctx, c, account, getAPIKeyIDFromContext(c), restrictionResult, body)
+	if restrictionResult.Enabled && !restrictionResult.Matched {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"type": "forbidden_error", "message": CodexClientRestrictionMessage(restrictionResult)}})
+		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
+	}
 
 	// 入口分流：APIKey 账号 + 强制或已探测确认上游不支持 Responses，走 CC 直转。
 	// 自动模式下标记缺失（未探测）按"现状即证据"原则继续走下方原 Responses 转换路径。

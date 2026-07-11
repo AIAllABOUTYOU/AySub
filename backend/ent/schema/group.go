@@ -45,6 +45,10 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		field.Bool("peak_rate_enabled").Default(false).Comment("是否启用高峰时段倍率"),
+		field.String("peak_start").MaxLen(5).Default("").Comment("高峰开始时间 HH:MM（含），不支持跨天"),
+		field.String("peak_end").MaxLen(5).Default("").Comment("高峰结束时间 HH:MM（不含），不支持跨天"),
+		field.Float("peak_rate_multiplier").SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).Default(1.0).Comment("高峰时段叠加倍率"),
 		field.Bool("is_exclusive").
 			Default(false),
 		field.String("status").

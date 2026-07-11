@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -33,18 +35,33 @@ func isOpenAIAccount(account *Account) bool {
 }
 
 func isOpenAIContextWindowError(message string, body []byte) bool {
-	combined := strings.ToLower(strings.TrimSpace(message))
-	if extracted := strings.ToLower(strings.TrimSpace(extractUpstreamErrorMessage(body))); extracted != "" {
-		if combined != "" {
-			combined += " "
+	match := func(text string) bool {
+		lower := strings.ToLower(strings.TrimSpace(text))
+		if lower == "" {
+			return false
 		}
-		combined += extracted
+		if strings.Contains(lower, "context_too_large") || strings.Contains(lower, "context_length_exceeded") {
+			return true
+		}
+		if strings.Contains(lower, "maximum context length") || strings.Contains(lower, "max context length") {
+			return true
+		}
+		exceeded := strings.Contains(lower, "exceed") || strings.Contains(lower, "too large") || strings.Contains(lower, "too long")
+		if (strings.Contains(lower, "context window") || strings.Contains(lower, "context length")) && exceeded {
+			return true
+		}
+		return strings.Contains(lower, "token limit") && strings.Contains(lower, "context") && exceeded
 	}
-	if combined == "" && len(body) > 0 {
-		combined = strings.ToLower(string(body))
+
+	if match(message) {
+		return true
 	}
-	return (strings.Contains(combined, "exceeds") || strings.Contains(combined, "exceed")) &&
-		(strings.Contains(combined, "context window") || strings.Contains(combined, "maximum context") || strings.Contains(combined, "context length"))
+	for _, path := range []string{"error.message", "response.error.message", "message", "error.code", "response.error.code", "code"} {
+		if match(gjson.GetBytes(body, path).String()) {
+			return true
+		}
+	}
+	return len(body) > 0 && match(string(body))
 }
 
 func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) bool {
@@ -73,6 +90,9 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 
 func (s *OpenAIGatewayService) markOpenAIOAuth429RateLimited(ctx context.Context, account *Account, headers http.Header, responseBody []byte) {
 	if s == nil || !isOpenAIOAuthAccount(account) {
+		return
+	}
+	if account.IsShadow() {
 		return
 	}
 	s.recordOpenAIOAuth429()

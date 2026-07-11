@@ -57,10 +57,10 @@ type SchedulerCache interface {
 	DeleteAccount(ctx context.Context, accountID int64) error
 	// UpdateLastUsed 批量更新账号的最后使用时间。
 	UpdateLastUsed(ctx context.Context, updates map[int64]time.Time) error
-	// TryLockBucket 尝试获取分桶重建锁。
-	TryLockBucket(ctx context.Context, bucket SchedulerBucket, ttl time.Duration) (bool, error)
-	// UnlockBucket 释放分桶重建锁。
-	UnlockBucket(ctx context.Context, bucket SchedulerBucket) error
+	// TryLockBucket 尝试获取分桶重建锁，并返回用于安全释放的 owner token。
+	TryLockBucket(ctx context.Context, bucket SchedulerBucket, ttl time.Duration) (owner string, acquired bool, err error)
+	// UnlockBucket 仅在 owner token 匹配时释放分桶重建锁。
+	UnlockBucket(ctx context.Context, bucket SchedulerBucket, owner string) error
 	// ListBuckets 返回已注册的分桶集合。
 	ListBuckets(ctx context.Context) ([]SchedulerBucket, error)
 	// GetOutboxWatermark 读取 outbox 水位。

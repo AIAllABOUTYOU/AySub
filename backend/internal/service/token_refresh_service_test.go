@@ -96,6 +96,19 @@ type tokenRefresherStub struct {
 	err         error
 }
 
+func TestAntigravityTokenRefresherNeedsRefreshWhenForced(t *testing.T) {
+	account := &Account{
+		ID:       401,
+		Platform: PlatformAntigravity,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"expires_at": time.Now().Add(time.Hour).Format(time.RFC3339),
+		},
+		Extra: map[string]any{antigravityForceTokenRefreshExtraKey: true},
+	}
+	require.True(t, NewAntigravityTokenRefresher(nil).NeedsRefresh(account, 0))
+}
+
 func (r *tokenRefresherStub) CanRefresh(account *Account) bool {
 	return true
 }

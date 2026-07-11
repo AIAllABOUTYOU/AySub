@@ -25,7 +25,7 @@ func TestApplyCustomHeaders(t *testing.T) {
 			},
 		},
 		{
-			name: "应用多个自定义请求头",
+			name: "过滤禁止覆盖的认证头",
 			account: &Account{
 				Extra: map[string]interface{}{
 					"custom_headers": map[string]interface{}{
@@ -37,8 +37,6 @@ func TestApplyCustomHeaders(t *testing.T) {
 			},
 			expectedHeader: map[string]string{
 				"X-Custom-Header": "test-value",
-				"Authorization":   "Bearer token123",
-				"X-API-Key":       "api-key-value",
 			},
 		},
 		{
@@ -90,15 +88,44 @@ func TestApplyCustomHeaders(t *testing.T) {
 	}
 }
 
+func TestApplyCustomHeaders_RemovesAllExistingCasingAndWritesSingleValue(t *testing.T) {
+	account := &Account{Extra: map[string]interface{}{"custom_headers": map[string]interface{}{"x-test": "new"}}}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	req.Header["X-Test"] = []string{"old"}
+	req.Header["x-test"] = []string{"duplicate"}
+	ApplyCustomHeaders(req, account)
+	if got := req.Header.Values("X-Test"); len(got) != 1 || got[0] != "new" {
+		t.Fatalf("expected one normalized value, got %#v", got)
+	}
+}
+
+func TestApplyCustomHeaders_BlocksTransportAndSessionHeaders(t *testing.T) {
+	blocked := []string{"Authorization", "Content-Type", "Connection", "Sec-WebSocket-Key", "session_id", "chatgpt-account-id"}
+	headers := map[string]interface{}{"X-Safe": "ok"}
+	for _, name := range blocked {
+		headers[name] = "unsafe"
+	}
+	req, _ := http.NewRequest("GET", "https://api.example.com", nil)
+	ApplyCustomHeaders(req, &Account{Extra: map[string]interface{}{"custom_headers": headers}})
+	for _, name := range blocked {
+		if req.Header.Get(name) != "" {
+			t.Fatalf("blocked header %s was applied", name)
+		}
+	}
+	if req.Header.Get("X-Safe") != "ok" {
+		t.Fatal("safe header was not applied")
+	}
+}
+
 func TestApplyCustomHeaders_IgnoresInvalidTypes(t *testing.T) {
 	account := &Account{
 		Extra: map[string]interface{}{
 			"custom_headers": map[string]interface{}{
 				"Valid-Header":   "valid-value",
-				"Invalid-Number": 123,           // 应该被忽略
-				"Invalid-Bool":   true,          // 应该被忽略
-				"Empty-Key":      "",            // 应该被忽略
-				"":               "empty-key",   // 应该被忽略
+				"Invalid-Number": 123,         // 应该被忽略
+				"Invalid-Bool":   true,        // 应该被忽略
+				"Empty-Key":      "",          // 应该被忽略
+				"":               "empty-key", // 应该被忽略
 			},
 		},
 	}
@@ -118,5 +145,23 @@ func TestApplyCustomHeaders_IgnoresInvalidTypes(t *testing.T) {
 
 	if req.Header.Get("Invalid-Bool") != "" {
 		t.Errorf("布尔类型的请求头不应该被设置")
+	}
+}
+
+func TestNormalizeCustomHeaders(t *testing.T) {
+	extra := map[string]any{"custom_headers": map[string]any{" X-Test ": " value "}}
+	if err := NormalizeCustomHeaders(extra); err != nil {
+		t.Fatal(err)
+	}
+	got := extra["custom_headers"].(map[string]any)
+	if got["x-test"] != "value" {
+		t.Fatalf("unexpected normalized headers: %#v", got)
+	}
+
+	for _, name := range []string{"Authorization", "Content-Type", "Sec-WebSocket-Key"} {
+		err := NormalizeCustomHeaders(map[string]any{"custom_headers": map[string]any{name: "unsafe"}})
+		if err == nil {
+			t.Fatalf("expected blocked header %s to fail", name)
+		}
 	}
 }

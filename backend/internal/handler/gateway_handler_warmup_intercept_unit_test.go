@@ -47,10 +47,10 @@ func (f *fakeSchedulerCache) DeleteAccount(_ context.Context, _ int64) error    
 func (f *fakeSchedulerCache) UpdateLastUsed(_ context.Context, _ map[int64]time.Time) error {
 	return nil
 }
-func (f *fakeSchedulerCache) TryLockBucket(_ context.Context, _ service.SchedulerBucket, _ time.Duration) (bool, error) {
-	return true, nil
+func (f *fakeSchedulerCache) TryLockBucket(_ context.Context, _ service.SchedulerBucket, _ time.Duration) (string, bool, error) {
+	return "test-owner", true, nil
 }
-func (f *fakeSchedulerCache) UnlockBucket(_ context.Context, _ service.SchedulerBucket) error {
+func (f *fakeSchedulerCache) UnlockBucket(_ context.Context, _ service.SchedulerBucket, _ string) error {
 	return nil
 }
 func (f *fakeSchedulerCache) ListBuckets(_ context.Context) ([]service.SchedulerBucket, error) {

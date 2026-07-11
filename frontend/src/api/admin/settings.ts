@@ -569,12 +569,19 @@ export interface SystemSettings {
   rewrite_message_cache_control: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
-  openai_allow_claude_code_codex_plugin: boolean;
+  min_codex_version: string;
+  max_codex_version: string;
+  codex_cli_only_blacklist: string;
+  codex_cli_only_whitelist: string;
+  codex_cli_only_allow_app_server_clients: boolean;
+  codex_cli_only_engine_fingerprint_signals: string;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
   payment_enabled: boolean;
   risk_control_enabled: boolean;
+  cyber_session_block_enabled: boolean;
+  cyber_session_block_ttl_seconds: number;
   payment_min_amount: number;
   payment_max_amount: number;
   payment_daily_limit: number;
@@ -583,6 +590,7 @@ export interface SystemSettings {
   payment_enabled_types: string[];
   payment_balance_disabled: boolean;
   payment_balance_recharge_multiplier: number;
+  payment_subscription_usd_to_cny_rate: number;
   payment_recharge_fee_rate: number;
   payment_load_balance_strategy: string;
   payment_product_name_prefix: string;
@@ -816,10 +824,17 @@ export interface UpdateSettingsRequest {
   rewrite_message_cache_control?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
-  openai_allow_claude_code_codex_plugin?: boolean;
+  min_codex_version?: string;
+  max_codex_version?: string;
+  codex_cli_only_blacklist?: string;
+  codex_cli_only_whitelist?: string;
+  codex_cli_only_allow_app_server_clients?: boolean;
+  codex_cli_only_engine_fingerprint_signals?: string;
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;
+  cyber_session_block_enabled?: boolean;
+  cyber_session_block_ttl_seconds?: number;
   payment_min_amount?: number;
   payment_max_amount?: number;
   payment_daily_limit?: number;
@@ -828,6 +843,7 @@ export interface UpdateSettingsRequest {
   payment_enabled_types?: string[];
   payment_balance_disabled?: boolean;
   payment_balance_recharge_multiplier?: number;
+  payment_subscription_usd_to_cny_rate?: number;
   payment_recharge_fee_rate?: number;
   payment_load_balance_strategy?: string;
   payment_product_name_prefix?: string;
@@ -1233,6 +1249,7 @@ export interface OpenAIFastPolicyRule {
   service_tier: "all" | "priority" | "flex";
   action: "pass" | "filter" | "block";
   scope: "all" | "oauth" | "apikey" | "bedrock";
+  user_ids?: number[];
   error_message?: string;
   model_whitelist?: string[];
   fallback_action?: "pass" | "filter" | "block";

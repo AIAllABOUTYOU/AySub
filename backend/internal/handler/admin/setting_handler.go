@@ -25,6 +25,20 @@ import (
 // semverPattern 预编译 semver 格式校验正则
 var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
+func chooseString(value *string, fallback string) string {
+	if value != nil {
+		return strings.TrimSpace(*value)
+	}
+	return fallback
+}
+
+func chooseBool(value *bool, fallback bool) bool {
+	if value != nil {
+		return *value
+	}
+	return fallback
+}
+
 // menuItemIDPattern validates custom menu item IDs: alphanumeric, hyphens, underscores only.
 var menuItemIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
@@ -232,6 +246,8 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		DefaultConcurrency:                       settings.DefaultConcurrency,
 		DefaultBalance:                           settings.DefaultBalance,
 		RiskControlEnabled:                       settings.RiskControlEnabled,
+		CyberSessionBlockEnabled:                 settings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds:              settings.CyberSessionBlockTTLSeconds,
 		CheckinEnabled:                           settings.CheckinEnabled,
 		CheckinRewardAmount:                      settings.CheckinRewardAmount,
 		AffiliateRebateRate:                      settings.AffiliateRebateRate,
@@ -262,7 +278,12 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		RewriteMessageCacheControl:               settings.RewriteMessageCacheControl,
 		AntigravityUserAgentVersion:              settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                     settings.OpenAICodexUserAgent,
-		OpenAIAllowClaudeCodeCodexPlugin:         settings.OpenAIAllowClaudeCodeCodexPlugin,
+		MinCodexVersion:                          settings.MinCodexVersion,
+		MaxCodexVersion:                          settings.MaxCodexVersion,
+		CodexCLIOnlyBlacklist:                    settings.CodexCLIOnlyBlacklist,
+		CodexCLIOnlyWhitelist:                    settings.CodexCLIOnlyWhitelist,
+		CodexCLIOnlyAllowAppServerClients:        settings.CodexCLIOnlyAllowAppServerClients,
+		CodexCLIOnlyEngineFingerprintSignals:     settings.CodexCLIOnlyEngineFingerprintSignals,
 		WebSearchEmulationEnabled:                settings.WebSearchEmulationEnabled,
 		PaymentVisibleMethodAlipaySource:         settings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:          settings.PaymentVisibleMethodWxpaySource,
@@ -284,6 +305,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentEnabledTypes:                      paymentCfg.EnabledTypes,
 		PaymentBalanceDisabled:                   paymentCfg.BalanceDisabled,
 		PaymentBalanceRechargeMultiplier:         paymentCfg.BalanceRechargeMultiplier,
+		PaymentSubscriptionUSDToCNYRate:          paymentCfg.SubscriptionUSDToCNYRate,
 		PaymentRechargeFeeRate:                   paymentCfg.RechargeFeeRate,
 		PaymentLoadBalanceStrat:                  paymentCfg.LoadBalanceStrategy,
 		PaymentProductNamePrefix:                 paymentCfg.ProductNamePrefix,
@@ -592,14 +614,19 @@ type UpdateSettingsRequest struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification       *bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough          *bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                   *bool   `json:"enable_cch_signing"`
-	EnableAnthropicCacheTTL1hInjection *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl         *bool   `json:"rewrite_message_cache_control"`
-	AntigravityUserAgentVersion        *string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent               *string `json:"openai_codex_user_agent"`
-	OpenAIAllowClaudeCodeCodexPlugin   *bool   `json:"openai_allow_claude_code_codex_plugin"`
+	EnableFingerprintUnification         *bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough            *bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                     *bool   `json:"enable_cch_signing"`
+	EnableAnthropicCacheTTL1hInjection   *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl           *bool   `json:"rewrite_message_cache_control"`
+	AntigravityUserAgentVersion          *string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                 *string `json:"openai_codex_user_agent"`
+	MinCodexVersion                      *string `json:"min_codex_version"`
+	MaxCodexVersion                      *string `json:"max_codex_version"`
+	CodexCLIOnlyBlacklist                *string `json:"codex_cli_only_blacklist"`
+	CodexCLIOnlyWhitelist                *string `json:"codex_cli_only_whitelist"`
+	CodexCLIOnlyAllowAppServerClients    *bool   `json:"codex_cli_only_allow_app_server_clients"`
+	CodexCLIOnlyEngineFingerprintSignals *string `json:"codex_cli_only_engine_fingerprint_signals"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -628,6 +655,7 @@ type UpdateSettingsRequest struct {
 	PaymentEnabledTypes              []string `json:"payment_enabled_types"`
 	PaymentBalanceDisabled           *bool    `json:"payment_balance_disabled"`
 	PaymentBalanceRechargeMultiplier *float64 `json:"payment_balance_recharge_multiplier"`
+	PaymentSubscriptionUSDToCNYRate  *float64 `json:"payment_subscription_usd_to_cny_rate"`
 	PaymentRechargeFeeRate           *float64 `json:"payment_recharge_fee_rate"`
 	PaymentLoadBalanceStrat          *string  `json:"payment_load_balance_strategy"`
 	PaymentProductNamePrefix         *string  `json:"payment_product_name_prefix"`
@@ -662,7 +690,9 @@ type UpdateSettingsRequest struct {
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
 
 	// 风控中心功能开关
-	RiskControlEnabled *bool `json:"risk_control_enabled"`
+	RiskControlEnabled          *bool `json:"risk_control_enabled"`
+	CyberSessionBlockEnabled    *bool `json:"cyber_session_block_enabled"`
+	CyberSessionBlockTTLSeconds *int  `json:"cyber_session_block_ttl_seconds"`
 
 	// Daily check-in reward feature switch
 	CheckinEnabled         *bool    `json:"checkin_enabled"`
@@ -1496,6 +1526,46 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+	if req.MinCodexVersion != nil {
+		v := strings.TrimSpace(*req.MinCodexVersion)
+		if v != "" && !semverPattern.MatchString(v) {
+			response.Error(c, http.StatusBadRequest, "min_codex_version must be empty or a valid semver")
+			return
+		}
+		req.MinCodexVersion = &v
+	}
+	if req.MaxCodexVersion != nil {
+		v := strings.TrimSpace(*req.MaxCodexVersion)
+		if v != "" && !semverPattern.MatchString(v) {
+			response.Error(c, http.StatusBadRequest, "max_codex_version must be empty or a valid semver")
+			return
+		}
+		req.MaxCodexVersion = &v
+	}
+	minCodexVersion := chooseString(req.MinCodexVersion, previousSettings.MinCodexVersion)
+	maxCodexVersion := chooseString(req.MaxCodexVersion, previousSettings.MaxCodexVersion)
+	if minCodexVersion != "" && maxCodexVersion != "" && service.CompareVersions(maxCodexVersion, minCodexVersion) < 0 {
+		response.Error(c, http.StatusBadRequest, "max_codex_version must be greater than or equal to min_codex_version")
+		return
+	}
+	if req.CodexCLIOnlyBlacklist != nil {
+		if err := service.ValidateCodexClientEntriesJSON(*req.CodexCLIOnlyBlacklist); err != nil {
+			response.Error(c, http.StatusBadRequest, "codex_cli_only_blacklist "+err.Error())
+			return
+		}
+	}
+	if req.CodexCLIOnlyWhitelist != nil {
+		if err := service.ValidateCodexWhitelistEntriesJSON(*req.CodexCLIOnlyWhitelist); err != nil {
+			response.Error(c, http.StatusBadRequest, "codex_cli_only_whitelist "+err.Error())
+			return
+		}
+	}
+	if req.CodexCLIOnlyEngineFingerprintSignals != nil {
+		if err := service.ValidateEngineFingerprintSignalsJSON(*req.CodexCLIOnlyEngineFingerprintSignals); err != nil {
+			response.Error(c, http.StatusBadRequest, "codex_cli_only_engine_fingerprint_signals "+err.Error())
+			return
+		}
+	}
 
 	// 交叉验证：如果同时设置了最低和最高版本号，最高版本号必须 >= 最低版本号
 	if req.MinClaudeCodeVersion != "" && req.MaxClaudeCodeVersion != "" {
@@ -1707,12 +1777,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexUserAgent
 		}(),
-		OpenAIAllowClaudeCodeCodexPlugin: func() bool {
-			if req.OpenAIAllowClaudeCodeCodexPlugin != nil {
-				return *req.OpenAIAllowClaudeCodeCodexPlugin
-			}
-			return previousSettings.OpenAIAllowClaudeCodeCodexPlugin
-		}(),
+		MinCodexVersion:                      minCodexVersion,
+		MaxCodexVersion:                      maxCodexVersion,
+		CodexCLIOnlyBlacklist:                chooseString(req.CodexCLIOnlyBlacklist, previousSettings.CodexCLIOnlyBlacklist),
+		CodexCLIOnlyWhitelist:                chooseString(req.CodexCLIOnlyWhitelist, previousSettings.CodexCLIOnlyWhitelist),
+		CodexCLIOnlyAllowAppServerClients:    chooseBool(req.CodexCLIOnlyAllowAppServerClients, previousSettings.CodexCLIOnlyAllowAppServerClients),
+		CodexCLIOnlyEngineFingerprintSignals: chooseString(req.CodexCLIOnlyEngineFingerprintSignals, previousSettings.CodexCLIOnlyEngineFingerprintSignals),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
 				return strings.TrimSpace(*req.PaymentVisibleMethodAlipaySource)
@@ -1832,6 +1902,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.RiskControlEnabled
 			}
 			return previousSettings.RiskControlEnabled
+		}(),
+		CyberSessionBlockEnabled: func() bool {
+			if req.CyberSessionBlockEnabled != nil {
+				return *req.CyberSessionBlockEnabled
+			}
+			return previousSettings.CyberSessionBlockEnabled
+		}(),
+		CyberSessionBlockTTLSeconds: func() int {
+			if req.CyberSessionBlockTTLSeconds != nil && *req.CyberSessionBlockTTLSeconds > 0 {
+				return *req.CyberSessionBlockTTLSeconds
+			}
+			return previousSettings.CyberSessionBlockTTLSeconds
 		}(),
 		CheckinEnabled: func() bool {
 			if req.CheckinEnabled != nil {
@@ -1961,6 +2043,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			EnabledTypes:              req.PaymentEnabledTypes,
 			BalanceDisabled:           req.PaymentBalanceDisabled,
 			BalanceRechargeMultiplier: req.PaymentBalanceRechargeMultiplier,
+			SubscriptionUSDToCNYRate:  req.PaymentSubscriptionUSDToCNYRate,
 			RechargeFeeRate:           req.PaymentRechargeFeeRate,
 			LoadBalanceStrategy:       req.PaymentLoadBalanceStrat,
 			ProductNamePrefix:         req.PaymentProductNamePrefix,
@@ -2155,7 +2238,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		RewriteMessageCacheControl:               updatedSettings.RewriteMessageCacheControl,
 		AntigravityUserAgentVersion:              updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                     updatedSettings.OpenAICodexUserAgent,
-		OpenAIAllowClaudeCodeCodexPlugin:         updatedSettings.OpenAIAllowClaudeCodeCodexPlugin,
+		MinCodexVersion:                          updatedSettings.MinCodexVersion,
+		MaxCodexVersion:                          updatedSettings.MaxCodexVersion,
+		CodexCLIOnlyBlacklist:                    updatedSettings.CodexCLIOnlyBlacklist,
+		CodexCLIOnlyWhitelist:                    updatedSettings.CodexCLIOnlyWhitelist,
+		CodexCLIOnlyAllowAppServerClients:        updatedSettings.CodexCLIOnlyAllowAppServerClients,
+		CodexCLIOnlyEngineFingerprintSignals:     updatedSettings.CodexCLIOnlyEngineFingerprintSignals,
 		PaymentVisibleMethodAlipaySource:         updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:          updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:        updatedSettings.PaymentVisibleMethodAlipayEnabled,
@@ -2176,6 +2264,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentEnabledTypes:                      updatedPaymentCfg.EnabledTypes,
 		PaymentBalanceDisabled:                   updatedPaymentCfg.BalanceDisabled,
 		PaymentBalanceRechargeMultiplier:         updatedPaymentCfg.BalanceRechargeMultiplier,
+		PaymentSubscriptionUSDToCNYRate:          updatedPaymentCfg.SubscriptionUSDToCNYRate,
 		PaymentRechargeFeeRate:                   updatedPaymentCfg.RechargeFeeRate,
 		PaymentLoadBalanceStrat:                  updatedPaymentCfg.LoadBalanceStrategy,
 		PaymentProductNamePrefix:                 updatedPaymentCfg.ProductNamePrefix,
@@ -2201,7 +2290,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
-		RiskControlEnabled: updatedSettings.RiskControlEnabled,
+		RiskControlEnabled:          updatedSettings.RiskControlEnabled,
+		CyberSessionBlockEnabled:    updatedSettings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds: updatedSettings.CyberSessionBlockTTLSeconds,
 
 		CheckinEnabled:         updatedSettings.CheckinEnabled,
 		CheckinRewardAmount:    updatedSettings.CheckinRewardAmount,
@@ -2242,7 +2333,8 @@ func hasPaymentFields(req UpdateSettingsRequest) bool {
 		req.PaymentMaxAmount != nil || req.PaymentDailyLimit != nil ||
 		req.PaymentOrderTimeoutMin != nil || req.PaymentMaxPendingOrders != nil ||
 		req.PaymentEnabledTypes != nil || req.PaymentBalanceDisabled != nil ||
-		req.PaymentBalanceRechargeMultiplier != nil || req.PaymentRechargeFeeRate != nil ||
+		req.PaymentBalanceRechargeMultiplier != nil || req.PaymentSubscriptionUSDToCNYRate != nil ||
+		req.PaymentRechargeFeeRate != nil ||
 		req.PaymentLoadBalanceStrat != nil || req.PaymentProductNamePrefix != nil ||
 		req.PaymentProductNameSuffix != nil || req.PaymentHelpImageURL != nil ||
 		req.PaymentHelpText != nil || req.PaymentCancelRateLimitEnabled != nil ||
@@ -2645,8 +2737,23 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
 	}
-	if before.OpenAIAllowClaudeCodeCodexPlugin != after.OpenAIAllowClaudeCodeCodexPlugin {
-		changed = append(changed, "openai_allow_claude_code_codex_plugin")
+	if before.MinCodexVersion != after.MinCodexVersion {
+		changed = append(changed, "min_codex_version")
+	}
+	if before.MaxCodexVersion != after.MaxCodexVersion {
+		changed = append(changed, "max_codex_version")
+	}
+	if before.CodexCLIOnlyBlacklist != after.CodexCLIOnlyBlacklist {
+		changed = append(changed, "codex_cli_only_blacklist")
+	}
+	if before.CodexCLIOnlyWhitelist != after.CodexCLIOnlyWhitelist {
+		changed = append(changed, "codex_cli_only_whitelist")
+	}
+	if before.CodexCLIOnlyAllowAppServerClients != after.CodexCLIOnlyAllowAppServerClients {
+		changed = append(changed, "codex_cli_only_allow_app_server_clients")
+	}
+	if before.CodexCLIOnlyEngineFingerprintSignals != after.CodexCLIOnlyEngineFingerprintSignals {
+		changed = append(changed, "codex_cli_only_engine_fingerprint_signals")
 	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")

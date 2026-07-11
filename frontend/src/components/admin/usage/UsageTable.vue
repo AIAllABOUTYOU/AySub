@@ -1,5 +1,21 @@
 <template>
   <div class="card overflow-hidden">
+    <div
+      v-if="showIpGeoToolbar"
+      class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
+    >
+      <span v-if="pendingIpCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
+        {{ t('usage.ipGeo.pending', { count: pendingIpCount }) }}
+      </span>
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400 dark:hover:bg-primary-900/30"
+        :disabled="ipGeoBatchLoading || pendingIpCount === 0"
+        @click="handleBatchFetchIpGeo"
+      >
+        {{ ipGeoBatchLoading ? t('usage.ipGeo.batchFetching') : t('usage.ipGeo.batchFetch') }}
+      </button>
+    </div>
     <div class="overflow-auto">
       <DataTable
         :columns="columns"
@@ -201,7 +217,10 @@
         </template>
 
         <template #cell-ip_address="{ row }">
-          <span v-if="row.ip_address" class="text-sm font-mono text-gray-600 dark:text-gray-400">{{ row.ip_address }}</span>
+          <div v-if="row.ip_address">
+            <span class="text-sm font-mono text-gray-600 dark:text-gray-400">{{ row.ip_address }}</span>
+            <IpGeoCell :ip="row.ip_address" />
+          </div>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
@@ -421,7 +440,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
@@ -470,7 +489,9 @@ function imageUnitPrice(row: AdminUsageLog | null): number {
 
 import DataTable from '@/components/common/DataTable.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 import type { AdminUsageLog } from '@/types'
 import type { Column } from '@/components/common/types'
 
@@ -483,17 +504,43 @@ interface Props {
   defaultSortOrder?: 'asc' | 'desc'
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   loading: false,
   serverSideSort: false,
   defaultSortKey: '',
   defaultSortOrder: 'asc'
 })
-defineEmits<{
+const emit = defineEmits<{
   userClick: [userID: number, email?: string]
   sort: [key: string, order: 'asc' | 'desc']
+  ipGeoBatchFailed: []
 }>()
 const { t } = useI18n()
+const ipGeoBatchLoading = ref(false)
+
+const showIpGeoToolbar = computed(() => props.columns.some((column) => column.key === 'ip_address'))
+
+const currentPageIps = computed(() =>
+  Array.from(new Set(props.data.map((row) => row.ip_address).filter((ip): ip is string => Boolean(ip))))
+)
+
+const pendingIpCount = computed(() => {
+  if (!showIpGeoToolbar.value) return 0
+  return currentPageIps.value.filter((ip) => {
+    const status = getEntry(ip).status
+    return status === 'idle' || status === 'error'
+  }).length
+})
+
+const handleBatchFetchIpGeo = async () => {
+  ipGeoBatchLoading.value = true
+  try {
+    const ok = await fetchBatch(currentPageIps.value)
+    if (!ok) emit('ipGeoBatchFailed')
+  } finally {
+    ipGeoBatchLoading.value = false
+  }
+}
 
 // Tooltip state - cost
 const tooltipVisible = ref(false)
@@ -507,6 +554,7 @@ const tokenTooltipData = ref<AdminUsageLog | null>(null)
 
 const getRequestTypeLabel = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
+  if (requestType === 'cyber') return t('usage.cyber')
   if (requestType === 'ws_v2') return t('usage.ws')
   if (requestType === 'stream') return t('usage.stream')
   if (requestType === 'sync') return t('usage.sync')
@@ -515,6 +563,7 @@ const getRequestTypeLabel = (row: AdminUsageLog): string => {
 
 const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
+  if (requestType === 'cyber') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
   if (requestType === 'ws_v2') return 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'
   if (requestType === 'stream') return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
   if (requestType === 'sync') return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'

@@ -23,6 +23,61 @@ type paymentFulfillmentTestProvider struct {
 	supportedTypes []payment.PaymentType
 }
 
+type paymentFulfillmentAffiliateAccrueCall struct {
+	inviterID     int64
+	inviteeUserID int64
+	amount        float64
+	sourceOrderID *int64
+}
+
+type paymentFulfillmentAffiliateRepoStub struct {
+	AffiliateRepository
+	inviteeSummary *AffiliateSummary
+	inviterSummary *AffiliateSummary
+	accrueCalls    []paymentFulfillmentAffiliateAccrueCall
+}
+
+func (r *paymentFulfillmentAffiliateRepoStub) EnsureUserAffiliate(_ context.Context, userID int64) (*AffiliateSummary, error) {
+	switch {
+	case r.inviteeSummary != nil && r.inviteeSummary.UserID == userID:
+		cp := *r.inviteeSummary
+		return &cp, nil
+	case r.inviterSummary != nil && r.inviterSummary.UserID == userID:
+		cp := *r.inviterSummary
+		return &cp, nil
+	default:
+		return &AffiliateSummary{UserID: userID, AffCode: "AFFTEST", CreatedAt: time.Now().Add(-time.Hour)}, nil
+	}
+}
+
+func (r *paymentFulfillmentAffiliateRepoStub) AccrueQuota(_ context.Context, inviterID, inviteeUserID int64, amount float64, _ int, sourceOrderID *int64) (bool, error) {
+	var sourceCopy *int64
+	if sourceOrderID != nil {
+		v := *sourceOrderID
+		sourceCopy = &v
+	}
+	r.accrueCalls = append(r.accrueCalls, paymentFulfillmentAffiliateAccrueCall{
+		inviterID: inviterID, inviteeUserID: inviteeUserID, amount: amount, sourceOrderID: sourceCopy,
+	})
+	return true, nil
+}
+func (r *paymentFulfillmentAffiliateRepoStub) GetAccruedRebateFromInvitee(context.Context, int64, int64) (float64, error) {
+	return 0, nil
+}
+
+type paymentFulfillmentSettingRepoStub struct {
+	SettingRepository
+	values map[string]string
+}
+
+func (s *paymentFulfillmentSettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	value, ok := s.values[key]
+	if !ok {
+		return "", ErrSettingNotFound
+	}
+	return value, nil
+}
+
 func (p paymentFulfillmentTestProvider) Name() string        { return p.key }
 func (p paymentFulfillmentTestProvider) ProviderKey() string { return p.key }
 func (p paymentFulfillmentTestProvider) SupportedTypes() []payment.PaymentType {
@@ -423,6 +478,66 @@ func TestPaymentAmountToleranceForThreeDecimalCurrency(t *testing.T) {
 	assert.Equal(t, amountToleranceCNY, paymentAmountToleranceForCurrency("JPY"))
 	assert.InDelta(t, 0.0005, paymentAmountToleranceForCurrency("KWD"), 1e-12)
 }
+
+func TestExecuteSubscriptionFulfillmentAppliesAffiliateRebateOnceUsingAmount(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	ensurePaymentAuditOrderActionUniqueIndex(t, ctx, client)
+
+	order := createPaymentFulfillmentSubscriptionOrder(t, ctx, client, OrderStatusPaid, time.Now())
+	order, err := client.PaymentOrder.UpdateOneID(order.ID).
+		SetAmount(9.99).
+		SetPayAmount(73.22).
+		SetFeeRate(2.5).
+		Save(ctx)
+	require.NoError(t, err)
+
+	inviterID := int64(9001)
+	affiliateRepo := &paymentFulfillmentAffiliateRepoStub{
+		inviteeSummary: &AffiliateSummary{UserID: order.UserID, AffCode: "INVITEE", InviterID: &inviterID, CreatedAt: time.Now().Add(-24 * time.Hour)},
+		inviterSummary: &AffiliateSummary{UserID: inviterID, AffCode: "INVITER", CreatedAt: time.Now().Add(-48 * time.Hour)},
+	}
+	settingSvc := NewSettingService(&paymentFulfillmentSettingRepoStub{values: map[string]string{
+		SettingKeyAffiliateEnabled:           "true",
+		SettingKeyAffiliateRebateRate:        "15",
+		SettingKeyAffiliateRebateFreezeHours: "0",
+	}}, nil)
+	groupRepo := &subscriptionGroupRepoStub{
+		group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription},
+	}
+	subRepo := newSubscriptionUserSubRepoStub()
+	svc := &PaymentService{
+		entClient:        client,
+		groupRepo:        groupRepo,
+		subscriptionSvc:  NewSubscriptionService(groupRepo, subRepo, nil, nil, nil),
+		affiliateService: NewAffiliateService(affiliateRepo, settingSvc, nil, nil),
+	}
+
+	require.NoError(t, svc.ExecuteSubscriptionFulfillment(ctx, order.ID))
+	require.Len(t, affiliateRepo.accrueCalls, 1)
+	require.InDelta(t, 1.4985, affiliateRepo.accrueCalls[0].amount, 0.00000001)
+	require.NotNil(t, affiliateRepo.accrueCalls[0].sourceOrderID)
+	require.Equal(t, order.ID, *affiliateRepo.accrueCalls[0].sourceOrderID)
+
+	reloaded, err := client.PaymentOrder.UpdateOneID(order.ID).
+		SetStatus(OrderStatusRecharging).
+		SetUpdatedAt(time.Now().Add(-paymentFulfillmentLeaseDuration - time.Minute)).
+		ClearCompletedAt().
+		Save(ctx)
+	require.NoError(t, err)
+	require.NoError(t, svc.ExecuteSubscriptionFulfillment(ctx, reloaded.ID))
+	require.Len(t, affiliateRepo.accrueCalls, 1)
+
+	applied, err := client.PaymentAuditLog.Query().
+		Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("AFFILIATE_REBATE_APPLIED")).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Contains(t, applied.Detail, `"baseAmount":9.99`)
+	require.Contains(t, applied.Detail, `"rebateAmount":1.4985`)
+}
+
+var _ AffiliateRepository = (*paymentFulfillmentAffiliateRepoStub)(nil)
+var _ SettingRepository = (*paymentFulfillmentSettingRepoStub)(nil)
 
 func TestRetryFulfillmentRejectsFreshRechargingLease(t *testing.T) {
 	ctx := context.Background()

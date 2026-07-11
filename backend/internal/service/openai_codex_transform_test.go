@@ -738,6 +738,37 @@ func TestApplyCodexOAuthTransform_AddsSparkImageUnsupportedInstructions(t *testi
 	require.NotContains(t, instructions, codexImageGenerationBridgeMarker)
 }
 
+func TestStripOpenAIImageGenerationTools_StripsNamespaceFormats(t *testing.T) {
+	reqBody := map[string]any{
+		"tools": []any{
+			map[string]any{"type": "function", "name": "shell"},
+			map[string]any{"type": "namespace", "name": "image_gen"},
+			map[string]any{"type": "namespace", "name": "code_tools"},
+		},
+		"input": []any{
+			map[string]any{"type": "message", "role": "user", "content": "hello"},
+			map[string]any{"type": "additional_tools", "tools": []any{
+				map[string]any{"type": "namespace", "name": "image_gen"},
+				map[string]any{"type": "namespace", "name": "browser_tools"},
+			}},
+			map[string]any{"type": "additional_tools", "tools": []any{map[string]any{"type": "namespace", "name": "image_gen"}}},
+		},
+		"tool_choice": map[string]any{"type": "namespace", "name": "image_gen"},
+	}
+	require.True(t, stripOpenAIImageGenerationTools(reqBody))
+	require.False(t, hasOpenAIImageGenerationTool(reqBody))
+	require.NotContains(t, reqBody, "tool_choice")
+	require.Len(t, reqBody["tools"], 2)
+	require.Len(t, reqBody["input"], 2)
+	require.False(t, stripOpenAIImageGenerationTools(reqBody))
+}
+
+func TestStripOpenAIImageGenerationTools_KeepsCustomImagegenFunctionChoice(t *testing.T) {
+	reqBody := map[string]any{"tool_choice": map[string]any{"function": map[string]any{"name": "imagegen"}}}
+	require.False(t, stripOpenAIImageGenerationTools(reqBody))
+	require.Contains(t, reqBody, "tool_choice")
+}
+
 func TestApplyCodexOAuthTransform_DoesNotAddSparkImageUnsupportedForNonSpark(t *testing.T) {
 	reqBody := map[string]any{
 		"model":        "gpt-5.4",

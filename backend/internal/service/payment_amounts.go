@@ -16,6 +16,14 @@ func normalizeBalanceRechargeMultiplier(multiplier float64) float64 {
 	return multiplier
 }
 
+// A zero rate explicitly disables subscription USD-to-CNY conversion.
+func normalizeSubscriptionUSDToCNYRate(rate float64) float64 {
+	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate < 0 {
+		return 0
+	}
+	return rate
+}
+
 func calculateCreditedBalance(paymentAmount, multiplier float64) float64 {
 	return decimal.NewFromFloat(paymentAmount).
 		Mul(decimal.NewFromFloat(normalizeBalanceRechargeMultiplier(multiplier))).

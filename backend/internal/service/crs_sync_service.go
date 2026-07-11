@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -651,6 +652,9 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
 			_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
 		}
+		if err := propagateAccountProxyToShadows(ctx, s.accountRepo, existing.ID, existing.ProxyID); err != nil {
+			slog.Warn("crs_sync_propagate_proxy_to_shadows_failed", "account_id", existing.ID, "error", err)
+		}
 
 		item.Action = "updated"
 		result.Updated++
@@ -749,6 +753,17 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		existing.Extra = mergeMap(existing.Extra, extra)
+		if shadows, shadowErr := s.accountRepo.ListShadowsByParent(ctx, existing.ID); shadowErr != nil {
+			item.Action, item.Error = "failed", "check spark shadows failed: "+shadowErr.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		} else if len(shadows) > 0 {
+			item.Action, item.Error = "failed", "delete the Spark shadow before converting the parent account to API key"
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
 		existing.Name = defaultName(src.Name, src.ID)
 		existing.Platform = PlatformOpenAI
 		existing.Type = AccountTypeAPIKey

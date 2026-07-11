@@ -42,6 +42,34 @@ type OpenAIGenerateAuthURLRequest struct {
 	RedirectURI string `json:"redirect_uri"`
 }
 
+type CreateShadowRequest struct {
+	Name        string  `json:"name"`
+	Priority    int     `json:"priority"`
+	Concurrency int     `json:"concurrency"`
+	GroupIDs    []int64 `json:"group_ids"`
+}
+
+func (h *OpenAIOAuthHandler) CreateShadow(c *gin.Context) {
+	parentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req CreateShadowRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	shadow, err := h.adminService.CreateShadow(c.Request.Context(), parentID, service.ShadowOptions{
+		Name: req.Name, Priority: req.Priority, Concurrency: req.Concurrency, GroupIDs: req.GroupIDs,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromServiceShallow(shadow))
+}
+
 // GenerateAuthURL generates OpenAI OAuth authorization URL
 // POST /api/v1/admin/openai/generate-auth-url
 func (h *OpenAIOAuthHandler) GenerateAuthURL(c *gin.Context) {
@@ -160,6 +188,10 @@ func (h *OpenAIOAuthHandler) RefreshAccountToken(c *gin.Context) {
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
+		return
+	}
+	if account.IsCredentialShadow() {
+		response.BadRequest(c, "Cannot refresh spark shadow account; credentials are managed by the parent account")
 		return
 	}
 

@@ -304,3 +304,15 @@ func TestSetOpenAIFastPolicySettings_Validation(t *testing.T) {
 	require.Len(t, got.Rules, 1)
 	require.Equal(t, OpenAIFastTierPriority, got.Rules[0].ServiceTier)
 }
+
+func TestEvaluateOpenAIFastPolicyUserScopePrecedesGlobal(t *testing.T) {
+	settings := &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{
+		{ServiceTier: OpenAIFastTierPriority, Action: BetaPolicyActionBlock, Scope: BetaPolicyScopeAll},
+		{ServiceTier: OpenAIFastTierPriority, Action: BetaPolicyActionPass, Scope: BetaPolicyScopeAll, UserIDs: []int64{42}},
+	}}
+	account := &Account{Type: AccountTypeOAuth}
+	action, _ := evaluateOpenAIFastPolicyWithSettings(settings, account, "gpt-5.6-sol", OpenAIFastTierPriority, 42)
+	require.Equal(t, BetaPolicyActionPass, action)
+	action, _ = evaluateOpenAIFastPolicyWithSettings(settings, account, "gpt-5.6-sol", OpenAIFastTierPriority, 7)
+	require.Equal(t, BetaPolicyActionBlock, action)
+}

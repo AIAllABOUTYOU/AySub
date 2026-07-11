@@ -81,6 +81,7 @@ func (s *OpenAIGatewayService) ForwardEmbeddings(
 	if customUA := account.GetOpenAIUserAgent(); customUA != "" {
 		upstreamReq.Header.Set("user-agent", customUA)
 	}
+	ApplyCustomHeaders(upstreamReq, account)
 
 	proxyURL := ""
 	if account.Proxy != nil {

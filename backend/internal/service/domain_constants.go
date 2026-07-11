@@ -9,6 +9,9 @@ import (
 
 // Status constants
 const (
+	QuotaDimensionGlobal = "global"
+	QuotaDimensionSpark  = "spark"
+
 	StatusActive   = domain.StatusActive
 	StatusDisabled = domain.StatusDisabled
 	StatusError    = domain.StatusError
@@ -142,6 +145,7 @@ const (
 	SubscriptionStatusActive    = domain.SubscriptionStatusActive
 	SubscriptionStatusExpired   = domain.SubscriptionStatusExpired
 	SubscriptionStatusSuspended = domain.SubscriptionStatusSuspended
+	SubscriptionStatusRevoked   = domain.SubscriptionStatusRevoked
 )
 
 // LinuxDoConnectSyntheticEmailDomain 是 LinuxDo Connect 用户的合成邮箱后缀（RFC 保留域名）。
@@ -174,11 +178,13 @@ const (
 	SettingKeyAffiliateRebateDurationDays              = "affiliate_rebate_duration_days"               // 返利有效期（天，0=永久）
 	SettingKeyAffiliateRebatePerInviteeCap             = "affiliate_rebate_per_invitee_cap"             // 单人返利上限（0=无上限）
 	SettingKeyRiskControlEnabled                       = "risk_control_enabled"                         // 是否启用风控中心入口与审计链路
-	SettingKeyContentModerationConfig                  = "content_moderation_config"                    // 内容审计配置（JSON）
-	SettingKeyLoginAgreementEnabled                    = "login_agreement_enabled"                      // 登录前是否要求同意条款
-	SettingKeyLoginAgreementMode                       = "login_agreement_mode"                         // 条款确认展示模式：modal / checkbox
-	SettingKeyLoginAgreementUpdatedAt                  = "login_agreement_updated_at"                   // 条款更新日期（展示用）
-	SettingKeyLoginAgreementDocuments                  = "login_agreement_documents"                    // 条款文档列表（JSON，Markdown 内容）
+	SettingKeyCyberSessionBlockEnabled                 = "cyber_session_block_enabled"
+	SettingKeyCyberSessionBlockTTLSeconds              = "cyber_session_block_ttl_seconds"
+	SettingKeyContentModerationConfig                  = "content_moderation_config"  // 内容审计配置（JSON）
+	SettingKeyLoginAgreementEnabled                    = "login_agreement_enabled"    // 登录前是否要求同意条款
+	SettingKeyLoginAgreementMode                       = "login_agreement_mode"       // 条款确认展示模式：modal / checkbox
+	SettingKeyLoginAgreementUpdatedAt                  = "login_agreement_updated_at" // 条款更新日期（展示用）
+	SettingKeyLoginAgreementDocuments                  = "login_agreement_documents"  // 条款文档列表（JSON，Markdown 内容）
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址
@@ -485,9 +491,16 @@ const (
 	// SettingKeyOpenAICodexUserAgent OpenAI Codex 完整 User-Agent（空值使用内置默认）
 	// 当客户端 UA 被识别为浏览器（Chrome/Firefox/Safari/Edge 等）时，转发给 OpenAI 上游前会替换为此值，
 	// 用于避免 Cloudflare 对浏览器型 UA 的质询拦截。
-	SettingKeyOpenAICodexUserAgent = "openai_codex_user_agent"
-	// SettingKeyOpenAIAllowClaudeCodeCodexPlugin 全局开关：是否额外放行 Claude Code 的 Codex 插件（默认 false）。
-	// 仅在账号 codex_cli_only 开启时生效；开启后无需逐账号配置 codex_cli_only_allowed_clients。
+	SettingKeyOpenAICodexUserAgent                   = "openai_codex_user_agent"
+	SettingKeyMinCodexVersion                        = "min_codex_version"
+	SettingKeyMaxCodexVersion                        = "max_codex_version"
+	SettingKeyCodexCLIOnlyBlacklist                  = "codex_cli_only_blacklist"
+	SettingKeyCodexCLIOnlyWhitelist                  = "codex_cli_only_whitelist"
+	SettingKeyCodexCLIOnlyAllowAppServerClients      = "codex_cli_only_allow_app_server_clients"
+	SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint = "codex_cli_only_allow_body_engine_fingerprint"
+	SettingKeyCodexCLIOnlyEngineFingerprintSignals   = "codex_cli_only_engine_fingerprint_signals"
+	// SettingKeyOpenAIAllowClaudeCodeCodexPlugin 已废弃：历史全局开关只作为升级迁移输入读取。
+	// 新运行时统一使用 SettingKeyCodexCLIOnlyWhitelist，避免出现第二策略数据源。
 	SettingKeyOpenAIAllowClaudeCodeCodexPlugin = "openai_allow_claude_code_codex_plugin"
 
 	// 余额不足提醒

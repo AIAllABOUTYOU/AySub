@@ -1,24 +1,31 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 )
 
 type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfig
 type GroupModelsListConfig = domain.GroupModelsListConfig
 
 type Group struct {
-	ID             int64
-	Name           string
-	Description    string
-	Platform       string
-	RateMultiplier float64
-	IsExclusive    bool
-	Status         string
-	Hydrated       bool // indicates the group was loaded from a trusted repository source
+	ID                 int64
+	Name               string
+	Description        string
+	Platform           string
+	RateMultiplier     float64
+	PeakRateEnabled    bool
+	PeakStart          string
+	PeakEnd            string
+	PeakRateMultiplier float64
+	IsExclusive        bool
+	Status             string
+	Hydrated           bool // indicates the group was loaded from a trusted repository source
 
 	SubscriptionType    string
 	DailyLimitUSD       *float64
@@ -187,4 +194,96 @@ func matchModelPattern(pattern, model string) bool {
 	}
 
 	return false
+}
+
+func parsePeakMinutes(value string) (int, bool) {
+	colon := strings.IndexByte(value, ':')
+	if (colon != 1 && colon != 2) || len(value)-colon-1 != 2 {
+		return 0, false
+	}
+	hour, minute := 0, 0
+	for i := 0; i < colon; i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return 0, false
+		}
+		hour = hour*10 + int(value[i]-'0')
+	}
+	for i := colon + 1; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return 0, false
+		}
+		minute = minute*10 + int(value[i]-'0')
+	}
+	if hour > 23 || minute > 59 {
+		return 0, false
+	}
+	return hour*60 + minute, true
+}
+
+func (g *Group) PeakMultiplierAt(now time.Time) float64 {
+	if g == nil || !g.IsSubscriptionType() || !g.PeakRateEnabled {
+		return 1
+	}
+	start, startOK := parsePeakMinutes(g.PeakStart)
+	end, endOK := parsePeakMinutes(g.PeakEnd)
+	if !startOK || !endOK || start >= end {
+		return 1
+	}
+	local := now.In(timezone.Location())
+	minute := local.Hour()*60 + local.Minute()
+	if minute >= start && minute < end {
+		return g.PeakRateMultiplier
+	}
+	return 1
+}
+
+func ValidatePeakRateConfig(subscriptionType string, enabled bool, start, end string, multiplier float64) error {
+	if !enabled {
+		return nil
+	}
+	if subscriptionType != SubscriptionTypeSubscription {
+		return errors.New("高峰时段倍率仅支持订阅类型分组")
+	}
+	startMinute, startOK := parsePeakMinutes(start)
+	if !startOK {
+		return fmt.Errorf("peak_start 格式应为 HH:MM，got %q", start)
+	}
+	endMinute, endOK := parsePeakMinutes(end)
+	if !endOK {
+		return fmt.Errorf("peak_end 格式应为 HH:MM，got %q", end)
+	}
+	if startMinute >= endMinute {
+		return errors.New("peak_end 必须大于 peak_start（不支持跨天）")
+	}
+	if multiplier < 0 {
+		return errors.New("peak_rate_multiplier 不能为负")
+	}
+	return nil
+}
+
+func NormalizePeakRateConfig(subscriptionType string, enabled bool, start, end string, multiplier float64) (bool, string, string, float64) {
+	if subscriptionType != SubscriptionTypeSubscription {
+		return false, "", "", 1
+	}
+	if !enabled {
+		if _, ok := parsePeakMinutes(start); !ok {
+			start = ""
+		}
+		if _, ok := parsePeakMinutes(end); !ok {
+			end = ""
+		}
+		if multiplier < 0 {
+			multiplier = 1
+		}
+	}
+	return enabled, start, end, multiplier
+}
+
+func computePeakAwareMultipliers(apiKey *APIKey, base float64, now time.Time) (text, image float64) {
+	image = resolveImageRateMultiplier(apiKey, base)
+	peak := 1.0
+	if apiKey != nil && apiKey.Group != nil {
+		peak = apiKey.Group.PeakMultiplierAt(now)
+	}
+	return base * peak, image
 }

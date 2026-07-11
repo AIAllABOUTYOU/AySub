@@ -60,3 +60,19 @@ func TestAccount_IsAnthropicAPIKeyPassthroughEnabled(t *testing.T) {
 		require.False(t, openai.IsAnthropicAPIKeyPassthroughEnabled())
 	})
 }
+
+func TestAccount_GetAnthropicAPIKeyAuthScheme(t *testing.T) {
+	require.Equal(t, AnthropicAPIKeyAuthSchemeXAPIKey, (&Account{Platform: PlatformAnthropic, Type: AccountTypeAPIKey}).GetAnthropicAPIKeyAuthScheme())
+	require.Equal(t, AnthropicAPIKeyAuthSchemeAuthorizationBearer, (&Account{
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeAPIKey,
+		Extra: map[string]any{
+			anthropicAPIKeyAuthSchemeExtraKey: AnthropicAPIKeyAuthSchemeAuthorizationBearer,
+		},
+	}).GetAnthropicAPIKeyAuthScheme())
+	require.Equal(t, AnthropicAPIKeyAuthSchemeXAPIKey, (&Account{
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeAPIKey,
+		Extra:    map[string]any{anthropicAPIKeyAuthSchemeExtraKey: "bearer"},
+	}).GetAnthropicAPIKeyAuthScheme())
+}

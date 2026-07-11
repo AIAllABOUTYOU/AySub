@@ -675,10 +675,11 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 		userAgent      string
 		originator     string
 		wantOriginator string
+		wantUA         string
 	}{
-		{name: "desktop originator preserved", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
-		{name: "vscode originator preserved", originator: "codex_vscode", wantOriginator: "codex_vscode"},
-		{name: "official ua fallback to codex_cli_rs", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
+		{name: "missing ua falls back", originator: "Codex Desktop", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
+		{name: "official ua pairs originator", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop", wantUA: "Codex Desktop/1.2.3"},
+		{name: "mismatch repaired", userAgent: "codex-tui/0.140.2 (Mac OS X; arm64) (codex-tui; 0.140.2)", originator: "codex_cli_rs", wantOriginator: "codex-tui", wantUA: "codex-tui/0.140.2 (Mac OS X; arm64) (codex-tui; 0.140.2)"},
 	}
 
 	for _, tt := range tests {
@@ -743,6 +744,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.Equal(t, tt.wantOriginator, captureDialer.lastHeaders.Get("originator"))
+			require.Equal(t, tt.wantUA, captureDialer.lastHeaders.Get("user-agent"))
 		})
 	}
 }

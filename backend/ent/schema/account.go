@@ -193,6 +193,14 @@ func (Account) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			MaxLen(20),
+		field.Int64("parent_account_id").
+			Optional().
+			Nillable().
+			Comment("Parent account id for a linked Spark shadow account."),
+		field.Enum("quota_dimension").
+			Values("global", "spark").
+			Default("global").
+			Comment("Quota dimension used by normal and linked Spark shadow accounts."),
 	}
 }
 
@@ -209,6 +217,11 @@ func (Account) Edges() []ent.Edge {
 		edge.To("proxy", Proxy.Type).
 			Field("proxy_id").
 			Unique(),
+		edge.To("children", Account.Type).
+			Annotations(entsql.OnDelete(entsql.Restrict)).
+			From("parent").
+			Field("parent_account_id").
+			Unique(),
 		// usage_logs: 该账户的使用日志
 		edge.To("usage_logs", UsageLog.Type),
 	}
@@ -222,6 +235,7 @@ func (Account) Indexes() []ent.Index {
 		index.Fields("type"),                // 按认证类型筛选
 		index.Fields("status"),              // 按状态筛选
 		index.Fields("proxy_id"),            // 按代理筛选
+		index.Fields("parent_account_id"),   // 按母账号查询影子账号
 		index.Fields("priority"),            // 按优先级排序
 		index.Fields("last_used_at"),        // 按最后使用时间排序
 		index.Fields("schedulable"),         // 筛选可调度账户

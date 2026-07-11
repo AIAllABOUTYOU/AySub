@@ -735,7 +735,7 @@ func TestForwardGrokResponsesNonStreaming(t *testing.T) {
 		},
 		Concurrency: 1,
 	}
-	body := []byte(`{"model":"grok-4.20-auto","stream":false,"input":"hi"}`)
+	body := []byte(`{"model":"grok-4.20-auto","stream":false,"input":"hi","reasoning_effort":"high"}`)
 
 	result, err := svc.Forward(c.Request.Context(), c, account, body)
 	require.NoError(t, err)
@@ -743,6 +743,8 @@ func TestForwardGrokResponsesNonStreaming(t *testing.T) {
 	require.Equal(t, "grok-resp-1", result.RequestID)
 	require.Equal(t, "grok-4.20-auto", result.Model)
 	require.False(t, result.Stream)
+	require.NotNil(t, result.ReasoningEffort)
+	require.Equal(t, "high", *result.ReasoningEffort)
 
 	raw := rec.Body.String()
 	require.Equal(t, http.StatusOK, rec.Code)

@@ -13,6 +13,8 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+var ErrSparkShadowResetNotSupported = infraerrors.New(http.StatusConflict, "SPARK_SHADOW_RESET_NOT_SUPPORTED", "spark shadow account does not support credit reset; reset the parent account")
+
 var (
 	chatGPTUsageURL                 = "https://chatgpt.com/backend-api/wham/usage"
 	chatGPTRateLimitResetCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
@@ -21,6 +23,7 @@ var (
 
 const (
 	openaiQuotaUpstreamTimeout = 20 * time.Second
+	openaiQuotaCodexBeta       = "codex-1"
 	openaiQuotaCodexOriginator = "Codex Desktop"
 	openaiQuotaCodexLanguage   = "zh-CN"
 )
@@ -46,7 +49,12 @@ type OpenAIAdditionalRateLimit struct {
 }
 
 type OpenAIRateLimitResetCredits struct {
-	AvailableCount int `json:"available_count"`
+	AvailableCount int                                `json:"available_count"`
+	Credits        []OpenAIRateLimitResetCreditDetail `json:"credits,omitempty"`
+}
+
+type OpenAIRateLimitResetCreditDetail struct {
+	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
 type OpenAIQuotaUsage struct {
@@ -140,7 +148,25 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	}
 
 	payload.FetchedAt = time.Now().Unix()
+	if payload.RateLimitResetCredits != nil && payload.RateLimitResetCredits.AvailableCount > 0 {
+		credits, detailErr := s.queryResetCreditsWithPreparedAccount(ctx, accessToken, chatGPTAccountID, proxyURL, accountID)
+		if detailErr != nil {
+			slog.Warn("openai_quota_reset_credit_details_failed", "account_id", accountID, "error", detailErr)
+		} else {
+			payload.RateLimitResetCredits.Credits = sanitizeResetCreditExpirations(credits.Credits)
+		}
+	}
 	return &payload, nil
+}
+
+func sanitizeResetCreditExpirations(credits []OpenAIQuotaResetCredit) []OpenAIRateLimitResetCreditDetail {
+	result := make([]OpenAIRateLimitResetCreditDetail, 0, len(credits))
+	for _, credit := range credits {
+		if expiresAt := strings.TrimSpace(credit.ExpiresAt); expiresAt != "" {
+			result = append(result, OpenAIRateLimitResetCreditDetail{ExpiresAt: expiresAt})
+		}
+	}
+	return result
 }
 
 func (s *OpenAIQuotaService) QueryResetCredits(ctx context.Context, accountID int64) (*OpenAIQuotaResetCreditsDetail, error) {
@@ -152,6 +178,15 @@ func (s *OpenAIQuotaService) QueryResetCredits(ctx context.Context, accountID in
 }
 
 func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (*OpenAIQuotaResetResult, error) {
+	if s.accountRepo != nil {
+		account, loadErr := s.accountRepo.GetByID(ctx, accountID)
+		if loadErr != nil {
+			return nil, infraerrors.Newf(http.StatusNotFound, "OPENAI_QUOTA_ACCOUNT_NOT_FOUND", "account not found: %v", loadErr)
+		}
+		if account != nil && account.IsShadow() {
+			return nil, ErrSparkShadowResetNotSupported
+		}
+	}
 	accessToken, chatGPTAccountID, proxyURL, err := s.prepareUpstreamCall(ctx, accountID)
 	if err != nil {
 		return nil, err
@@ -249,6 +284,13 @@ func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID 
 	if account.Type != AccountTypeOAuth {
 		return "", "", "", infraerrors.New(http.StatusBadRequest, "OPENAI_QUOTA_INVALID_TYPE", "account is not an OAuth account")
 	}
+	if account.IsShadow() {
+		resolved, resolveErr := resolveCredentialAccount(ctx, s.accountRepo, account)
+		if resolveErr != nil {
+			return "", "", "", infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_SHADOW_RESOLVE_FAILED", "failed to resolve shadow account: %v", resolveErr)
+		}
+		account = resolved
+	}
 
 	chatGPTAccountID = strings.TrimSpace(account.GetCredential("chatgpt_account_id"))
 	if chatGPTAccountID == "" {
@@ -284,6 +326,7 @@ func buildCodexCommonHeaders(accessToken, chatGPTAccountID string) map[string]st
 	return map[string]string{
 		"authorization":      "Bearer " + accessToken,
 		"chatgpt-account-id": chatGPTAccountID,
+		"openai-beta":        openaiQuotaCodexBeta,
 		"oai-language":       openaiQuotaCodexLanguage,
 		"originator":         openaiQuotaCodexOriginator,
 		"accept":             "application/json",
@@ -292,6 +335,65 @@ func buildCodexCommonHeaders(accessToken, chatGPTAccountID string) map[string]st
 		"sec-fetch-dest":     "empty",
 		"priority":           "u=4, i",
 	}
+}
+
+func buildCodexSparkWindowExtraUpdates(usage *OpenAIQuotaUsage, now time.Time) map[string]any {
+	if usage == nil {
+		return nil
+	}
+	var spark *OpenAIRateLimit
+	for i := range usage.AdditionalRateLimits {
+		if usage.AdditionalRateLimits[i].MeteredFeature == "codex_bengalfox" {
+			spark = usage.AdditionalRateLimits[i].RateLimit
+			break
+		}
+	}
+	if spark == nil {
+		return nil
+	}
+	snapshot := &OpenAICodexUsageSnapshot{}
+	if window := spark.PrimaryWindow; window != nil {
+		used, reset, minutes := window.UsedPercent, int(window.ResetAfterSeconds), int(window.LimitWindowSeconds/60)
+		snapshot.PrimaryUsedPercent, snapshot.PrimaryResetAfterSeconds, snapshot.PrimaryWindowMinutes = &used, &reset, &minutes
+	}
+	if window := spark.SecondaryWindow; window != nil {
+		used, reset, minutes := window.UsedPercent, int(window.ResetAfterSeconds), int(window.LimitWindowSeconds/60)
+		snapshot.SecondaryUsedPercent, snapshot.SecondaryResetAfterSeconds, snapshot.SecondaryWindowMinutes = &used, &reset, &minutes
+	}
+	normalized := snapshot.Normalize()
+	if normalized == nil {
+		return nil
+	}
+	updates := make(map[string]any)
+	if normalized.Used5hPercent != nil {
+		updates["codex_5h_used_percent"] = *normalized.Used5hPercent
+	}
+	if normalized.Reset5hSeconds != nil {
+		updates["codex_5h_reset_after_seconds"] = *normalized.Reset5hSeconds
+	}
+	if normalized.Window5hMinutes != nil {
+		updates["codex_5h_window_minutes"] = *normalized.Window5hMinutes
+	}
+	if normalized.Used7dPercent != nil {
+		updates["codex_7d_used_percent"] = *normalized.Used7dPercent
+	}
+	if normalized.Reset7dSeconds != nil {
+		updates["codex_7d_reset_after_seconds"] = *normalized.Reset7dSeconds
+	}
+	if normalized.Window7dMinutes != nil {
+		updates["codex_7d_window_minutes"] = *normalized.Window7dMinutes
+	}
+	if resetAt := codexResetAtRFC3339(now, normalized.Reset5hSeconds); resetAt != nil {
+		updates["codex_5h_reset_at"] = *resetAt
+	}
+	if resetAt := codexResetAtRFC3339(now, normalized.Reset7dSeconds); resetAt != nil {
+		updates["codex_7d_reset_at"] = *resetAt
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	updates["codex_usage_updated_at"] = now.Format(time.RFC3339)
+	return updates
 }
 
 func generateRedeemRequestID() (string, error) {

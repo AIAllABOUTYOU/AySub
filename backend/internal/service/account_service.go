@@ -74,6 +74,7 @@ type AccountRepository interface {
 	IncrementQuotaUsed(ctx context.Context, id int64, amount float64) error
 	// ResetQuotaUsed 重置 API Key 账号所有维度的配额用量为 0
 	ResetQuotaUsed(ctx context.Context, id int64) error
+	ListShadowsByParent(ctx context.Context, parentID int64) ([]*Account, error)
 }
 
 // AccountBulkUpdate describes the fields that can be updated in a bulk operation.

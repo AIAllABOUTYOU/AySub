@@ -339,6 +339,14 @@ func (s *stubAdminService) ListAccounts(ctx context.Context, page, pageSize int,
 	return s.accounts, int64(len(s.accounts)), nil
 }
 
+func (s *stubAdminService) ListAccountsForSchedulerScoreFilter(context.Context, string, string, string, string, int64, string) ([]service.Account, error) {
+	return nil, nil
+}
+
+func (s *stubAdminService) ListOpenAISchedulableAccountsForSchedulerScore(context.Context, *int64) ([]service.Account, error) {
+	return nil, nil
+}
+
 func (s *stubAdminService) GetAccount(ctx context.Context, id int64) (*service.Account, error) {
 	account := service.Account{ID: id, Name: "account", Status: service.StatusActive}
 	return &account, nil
@@ -652,6 +660,10 @@ func (s *stubAdminService) AdminResetAPIKeyRateLimitUsage(ctx context.Context, k
 
 func (s *stubAdminService) ResetAccountQuota(ctx context.Context, id int64) error {
 	return nil
+}
+
+func (s *stubAdminService) CreateShadow(ctx context.Context, parentID int64, opts service.ShadowOptions) (*service.Account, error) {
+	return &service.Account{ID: parentID + 1, ParentAccountID: &parentID, QuotaDimension: service.QuotaDimensionSpark}, nil
 }
 
 func (s *stubAdminService) EnsureOpenAIPrivacy(ctx context.Context, account *service.Account) string {

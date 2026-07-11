@@ -43,6 +43,7 @@ export async function list(
     search?: string
     privacy_mode?: string
     lite?: string
+    include_scheduler_score?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   },
@@ -223,6 +224,14 @@ export async function getById(id: number): Promise<Account> {
  */
 export async function create(accountData: CreateAccountRequest): Promise<Account> {
   const { data } = await apiClient.post<Account>('/admin/accounts', accountData)
+  return data
+}
+
+export async function createSparkShadow(
+  parentId: number,
+  options: { name?: string; priority?: number; concurrency?: number; group_ids?: number[] } = {}
+): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${parentId}/shadow`, options)
   return data
 }
 
@@ -862,6 +871,7 @@ export interface OpenAIAdditionalRateLimit {
 
 export interface OpenAIRateLimitResetCredits {
   available_count: number
+  credits?: Array<{ expires_at?: string }>
 }
 
 export interface OpenAIQuotaUsage {
@@ -923,6 +933,7 @@ export const accountsAPI = {
   runInspection,
   getById,
   create,
+	createSparkShadow,
   update,
   checkMixedChannelRisk,
   delete: deleteAccount,

@@ -30,6 +30,10 @@ type accountRepoStub struct {
 	deletedIDs []int64 // 记录已删除的账号 ID 列表
 }
 
+func (s *accountRepoStub) ListShadowsByParent(context.Context, int64) ([]*Account, error) {
+	return nil, nil
+}
+
 // 以下方法在本测试中不应被调用，使用 panic 确保测试失败时能快速定位问题
 
 func (s *accountRepoStub) Create(ctx context.Context, account *Account) error {

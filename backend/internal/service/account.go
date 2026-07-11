@@ -51,6 +51,8 @@ type Account struct {
 	SessionWindowStart  *time.Time
 	SessionWindowEnd    *time.Time
 	SessionWindowStatus string
+	ParentAccountID     *int64
+	QuotaDimension      string
 
 	Proxy         *Proxy
 	AccountGroups []AccountGroup
@@ -64,6 +66,21 @@ type Account struct {
 	modelMappingCacheRawPtr         uintptr
 	modelMappingCacheRawLen         int
 	modelMappingCacheRawSig         uint64
+}
+
+func (a *Account) IsShadow() bool {
+	return a != nil && a.ParentAccountID != nil
+}
+
+func (a *Account) IsCredentialShadow() bool {
+	return a.IsShadow()
+}
+
+func (a *Account) QuotaDimensionOrDefault() string {
+	if a == nil || strings.TrimSpace(a.QuotaDimension) == "" {
+		return QuotaDimensionGlobal
+	}
+	return strings.TrimSpace(a.QuotaDimension)
 }
 
 type OpenAIEndpointCapability string
@@ -89,6 +106,20 @@ type TempUnschedulableRule struct {
 
 func (a *Account) IsActive() bool {
 	return a.Status == StatusActive
+}
+
+func (a *Account) IsCredentialUsableForShadow() bool {
+	if a == nil || !a.IsActive() {
+		return false
+	}
+	now := time.Now()
+	if a.AutoPauseOnExpired && a.ExpiresAt != nil && !now.Before(*a.ExpiresAt) {
+		return false
+	}
+	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
+		return false
+	}
+	return true
 }
 
 // BillingRateMultiplier 返回账号计费倍率。
@@ -1143,6 +1174,34 @@ func (a *Account) GetChatGPTAccountID() string {
 	return a.GetCredential("chatgpt_account_id")
 }
 
+func (a *Account) IsChatGPTAccountFedRAMP() bool {
+	if !a.IsOpenAIOAuth() || a.Credentials == nil {
+		return false
+	}
+	value, ok := a.Credentials["chatgpt_account_is_fedramp"]
+	if !ok || value == nil {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		return err == nil && parsed
+	case json.Number:
+		parsed, err := strconv.ParseBool(v.String())
+		return err == nil && parsed
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	default:
+		return false
+	}
+}
+
 // GetCustomHeaders returns the custom HTTP headers configured for this account.
 // Returns nil if no custom headers are configured.
 func (a *Account) GetCustomHeaders() map[string]string {
@@ -1602,36 +1661,12 @@ func (a *Account) IsCodexCLIOnlyEnabled() bool {
 	return ok && enabled
 }
 
-// GetCodexCLIOnlyAllowedClients 返回 codex_cli_only 之上额外放行的命名客户端预设 ID 列表。
-// 仅 OpenAI OAuth 账号生效；缺失或类型不符时返回空。预设 ID 的具体匹配规则由
-// openai 包的 registry 固化，配置只能引用预设键、不能自定义规则。
-func (a *Account) GetCodexCLIOnlyAllowedClients() []string {
-	if a == nil || !a.IsOpenAIOAuth() || a.Extra == nil {
-		return nil
+func (a *Account) IsCodexCLIOnlyAppServerAllowed() bool {
+	if a == nil || !a.IsCodexCLIOnlyEnabled() || a.Extra == nil {
+		return false
 	}
-	raw, ok := a.Extra["codex_cli_only_allowed_clients"]
-	if !ok || raw == nil {
-		return nil
-	}
-	switch v := raw.(type) {
-	case []string:
-		result := make([]string, 0, len(v))
-		for _, s := range v {
-			if strings.TrimSpace(s) != "" {
-				result = append(result, s)
-			}
-		}
-		return result
-	case []any:
-		result := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-				result = append(result, s)
-			}
-		}
-		return result
-	}
-	return nil
+	enabled, ok := a.Extra["codex_cli_only_allow_app_server"].(bool)
+	return ok && enabled
 }
 
 // WindowCostSchedulability 窗口费用调度状态

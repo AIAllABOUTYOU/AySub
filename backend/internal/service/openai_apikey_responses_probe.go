@@ -99,6 +99,7 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
+	ApplyCustomHeaders(req, account)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

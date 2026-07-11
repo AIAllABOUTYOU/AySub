@@ -1185,6 +1185,49 @@
                   </div>
                 </div>
 
+                <div class="mt-3">
+                  <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {{ t("admin.settings.openaiFastPolicy.userIds") }}
+                  </label>
+                  <p class="mb-2 text-xs text-gray-400 dark:text-gray-500">
+                    {{ t("admin.settings.openaiFastPolicy.userIdsHint") }}
+                  </p>
+                  <div
+                    v-for="(_, userIDIndex) in rule.user_ids || []"
+                    :key="userIDIndex"
+                    class="mb-1.5 flex items-center gap-2"
+                  >
+                    <input
+                      v-model.number="rule.user_ids![userIDIndex]"
+                      type="number"
+                      min="1"
+                      step="1"
+                      class="input input-sm flex-1"
+                      :placeholder="t('admin.settings.openaiFastPolicy.userIdPlaceholder')"
+                    />
+                    <button
+                      type="button"
+                      class="shrink-0 rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+                      :title="t('admin.settings.openaiFastPolicy.removeUserId')"
+                      @click="removeOpenAIFastPolicyUserID(rule, userIDIndex)"
+                    >
+                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                    @click="addOpenAIFastPolicyUserID(rule)"
+                  >
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    {{ t("admin.settings.openaiFastPolicy.addUserId") }}
+                  </button>
+                </div>
+
                 <!-- Error Message (only when action=block) -->
                 <div v-if="rule.action === 'block'" class="mt-3">
                   <label
@@ -3800,6 +3843,189 @@
             </div>
           </div>
 
+          <!-- Codex Settings -->
+          <div class="card">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.gatewayForwarding.codexHardeningTitle") }}
+              </h2>
+            </div>
+            <div class="space-y-4 p-6">
+              <div>
+                <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                  {{ t("admin.settings.gatewayForwarding.codexClientRestrictionTitle") }}
+                </h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexHardeningDesc") }}
+                </p>
+              </div>
+
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.minCodexVersion") }}
+                  </label>
+                  <input
+                    v-model="form.min_codex_version"
+                    type="text"
+                    class="input w-full font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.minCodexVersionPlaceholder')"
+                  />
+                </div>
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.maxCodexVersion") }}
+                  </label>
+                  <input
+                    v-model="form.max_codex_version"
+                    type="text"
+                    class="input w-full font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.maxCodexVersionPlaceholder')"
+                  />
+                </div>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.gatewayForwarding.codexVersionHint") }}
+              </p>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.gatewayForwarding.codexFingerprintSignals") }}
+                </label>
+                <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexFingerprintSignalsDesc") }}
+                </p>
+                <div
+                  v-for="(row, index) in codexFingerprintRows"
+                  :key="`codex-fp-${index}`"
+                  class="mb-2 grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)_auto_auto] sm:items-center"
+                >
+                  <select v-model="row.type" class="input w-full text-sm">
+                    <option value="header_exact">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderExact") }}</option>
+                    <option value="header_prefix">{{ t("admin.settings.gatewayForwarding.codexFpTypeHeaderPrefix") }}</option>
+                    <option value="body_path">{{ t("admin.settings.gatewayForwarding.codexFpTypeBodyPath") }}</option>
+                  </select>
+                  <input
+                    v-model="row.match"
+                    type="text"
+                    class="input min-w-0 font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.codexFpMatchPlaceholder')"
+                  />
+                  <label class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
+                    <input v-model="row.required" type="checkbox" />
+                    {{ t("admin.settings.gatewayForwarding.codexFpRequired") }}
+                  </label>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    @click="removeCodexFingerprintRow(index)"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                  </button>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" @click="addCodexFingerprintRow">
+                  {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                </button>
+                <p v-if="codexFingerprintNoRequired" class="mt-2 text-xs text-amber-600 dark:text-amber-500">
+                  {{ t("admin.settings.gatewayForwarding.codexFingerprintNoRequiredWarn") }}
+                </p>
+              </div>
+
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.codexAllowAppServer") }}
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexAllowAppServerDesc") }}
+                  </p>
+                </div>
+                <Toggle v-model="form.codex_cli_only_allow_app_server_clients" />
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.gatewayForwarding.codexBlacklist") }}
+                </label>
+                <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexBlacklistDesc") }}
+                </p>
+                <div
+                  v-for="(row, index) in codexBlacklistRows"
+                  :key="`codex-bl-${index}`"
+                  class="mb-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]"
+                >
+                  <input
+                    v-model="row.originator"
+                    type="text"
+                    class="input min-w-0 font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.codexOriginatorPlaceholder')"
+                  />
+                  <input
+                    v-model="row.uaContains"
+                    type="text"
+                    class="input min-w-0 font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.codexUaContainsPlaceholder')"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    @click="removeCodexBlacklistRow(index)"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                  </button>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" @click="addCodexBlacklistRow">
+                  {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                </button>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.gatewayForwarding.codexWhitelist") }}
+                </label>
+                <p class="mb-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.codexWhitelistDesc") }}
+                </p>
+                <div
+                  v-for="(row, index) in codexWhitelistRows"
+                  :key="`codex-wl-${index}`"
+                  class="mb-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto_auto] sm:items-center"
+                >
+                  <input
+                    v-model="row.originator"
+                    type="text"
+                    class="input min-w-0 font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.codexOriginatorPlaceholder')"
+                  />
+                  <input
+                    v-model="row.uaContains"
+                    type="text"
+                    class="input min-w-0 font-mono text-sm"
+                    :placeholder="t('admin.settings.gatewayForwarding.codexUaContainsPlaceholder')"
+                  />
+                  <label
+                    class="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400"
+                    :title="t('admin.settings.gatewayForwarding.codexWhitelistSkipFingerprintTooltip')"
+                  >
+                    <input v-model="row.skipEngineFingerprint" type="checkbox" />
+                    {{ t("admin.settings.gatewayForwarding.codexWhitelistSkipFingerprint") }}
+                  </label>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    @click="removeCodexWhitelistRow(index)"
+                  >
+                    {{ t("admin.settings.gatewayForwarding.codexRemoveRow") }}
+                  </button>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" @click="addCodexWhitelistRow">
+                  {{ t("admin.settings.gatewayForwarding.codexAddRow") }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Gateway Scheduling Settings -->
           <div class="card">
             <div
@@ -4025,18 +4251,6 @@
                 </p>
               </div>
 
-              <!-- 是否允许在 Claude Code 中使用 Codex 插件（全局开关） -->
-              <div class="flex items-center justify-between">
-                <div class="pr-4">
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {{ t("admin.settings.gatewayForwarding.openaiAllowClaudeCodeCodexPlugin") }}
-                  </label>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.gatewayForwarding.openaiAllowClaudeCodeCodexPluginDesc") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.openai_allow_claude_code_codex_plugin" />
-              </div>
             </div>
           </div>
           <!-- Web Search Emulation -->
@@ -5534,6 +5748,21 @@
               </div>
               <Toggle v-model="form.risk_control_enabled" />
             </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.riskControl.cyberSessionBlock') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.riskControl.cyberSessionBlockHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.cyber_session_block_enabled" />
+            </div>
+            <div v-if="form.cyber_session_block_enabled">
+              <label class="input-label">{{ t('admin.settings.features.riskControl.cyberSessionBlockTTL') }}</label>
+              <input v-model.number="form.cyber_session_block_ttl_seconds" type="number" min="60" step="60" class="input" />
+            </div>
           </div>
         </div>
 
@@ -6121,6 +6350,34 @@
                             1
                           ).toFixed(2),
                         })
+                      }}
+                    </p>
+                  </div>
+                  <div>
+                    <label class="input-label">{{
+                      t("admin.settings.payment.subscriptionUsdToCnyRate")
+                    }}</label>
+                    <input
+                      :value="form.payment_subscription_usd_to_cny_rate || ''"
+                      @input="
+                        form.payment_subscription_usd_to_cny_rate =
+                          parseFloat(
+                            ($event.target as HTMLInputElement).value,
+                          ) || 0
+                      "
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      class="input"
+                      :placeholder="
+                        t(
+                          'admin.settings.payment.subscriptionUsdToCnyRateDisabled',
+                        )
+                      "
+                    />
+                    <p class="mt-0.5 text-xs text-gray-400">
+                      {{
+                        t("admin.settings.payment.subscriptionUsdToCnyRateHint")
                       }}
                     </p>
                   </div>
@@ -6988,6 +7245,12 @@ import {
   normalizeRegistrationEmailSuffixDomains,
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
+import {
+  defaultFingerprintSignalRows,
+  parseFingerprintSignalsToRows,
+  serializeFingerprintRowsToJSON,
+  type FingerprintSignalRow,
+} from "./codexFingerprintSignals";
 
 const { t, locale } = useI18n();
 const appStore = useAppStore();
@@ -7291,6 +7554,8 @@ const form = reactive<SettingsForm>({
   checkin_reward_max_amount: 0,
   payment_enabled: false,
   risk_control_enabled: false,
+  cyber_session_block_enabled: false,
+  cyber_session_block_ttl_seconds: 3600,
   payment_min_amount: 1,
   payment_max_amount: 10000,
   payment_daily_limit: 50000,
@@ -7298,6 +7563,7 @@ const form = reactive<SettingsForm>({
   payment_order_timeout_minutes: 30,
   payment_balance_disabled: false,
   payment_balance_recharge_multiplier: 1,
+  payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
   payment_enabled_types: [],
   payment_help_image_url: "",
@@ -7450,7 +7716,12 @@ const form = reactive<SettingsForm>({
   rewrite_message_cache_control: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
-  openai_allow_claude_code_codex_plugin: false,
+  min_codex_version: "",
+  max_codex_version: "",
+  codex_cli_only_blacklist: "",
+  codex_cli_only_whitelist: "",
+  codex_cli_only_allow_app_server_clients: false,
+  codex_cli_only_engine_fingerprint_signals: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -8135,6 +8406,96 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
   return deduped;
 }
 
+interface CodexClientRow {
+  originator: string;
+  uaContains: string;
+  skipEngineFingerprint?: boolean;
+}
+
+const codexBlacklistRows = ref<CodexClientRow[]>([]);
+const codexWhitelistRows = ref<CodexClientRow[]>([]);
+const codexFingerprintRows = ref<FingerprintSignalRow[]>([]);
+const codexFingerprintNoRequired = computed(
+  () => !codexFingerprintRows.value.some((row) => row.required),
+);
+
+function addCodexFingerprintRow(): void {
+  codexFingerprintRows.value.push({
+    type: "header_exact",
+    match: "",
+    required: false,
+  });
+}
+
+function removeCodexFingerprintRow(index: number): void {
+  codexFingerprintRows.value.splice(index, 1);
+}
+
+function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
+  if (!raw || !raw.trim()) return [];
+  try {
+    const entries = JSON.parse(raw);
+    if (!Array.isArray(entries)) return [];
+    return entries.map((entry) => ({
+      originator:
+        typeof entry?.originator === "string" ? entry.originator : "",
+      uaContains: Array.isArray(entry?.ua_contains)
+        ? entry.ua_contains
+            .filter((value: unknown) => typeof value === "string")
+            .join(", ")
+        : "",
+      skipEngineFingerprint: entry?.skip_engine_fingerprint === true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function serializeCodexRowsToJSON(rows: CodexClientRow[]): string {
+  const entries = rows
+    .map((row) => {
+      const entry: {
+        originator: string;
+        ua_contains: string[];
+        skip_engine_fingerprint?: boolean;
+      } = {
+        originator: row.originator.trim(),
+        ua_contains: row.uaContains
+          .split(",")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0),
+      };
+      if (row.skipEngineFingerprint) {
+        entry.skip_engine_fingerprint = true;
+      }
+      return entry;
+    })
+    .filter(
+      (entry) => entry.originator !== "" || entry.ua_contains.length > 0,
+    );
+  return entries.length > 0 ? JSON.stringify(entries) : "";
+}
+
+function addCodexBlacklistRow(): void {
+  codexBlacklistRows.value.push({ originator: "", uaContains: "" });
+}
+
+function removeCodexBlacklistRow(index: number): void {
+  codexBlacklistRows.value.splice(index, 1);
+}
+
+function addCodexWhitelistRow(): void {
+  codexWhitelistRows.value.push({
+    originator: "",
+    uaContains: "",
+    skipEngineFingerprint: false,
+  });
+}
+
+function removeCodexWhitelistRow(index: number): void {
+  codexWhitelistRows.value.splice(index, 1);
+}
+
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -8148,6 +8509,18 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    codexBlacklistRows.value = parseCodexEntriesToRows(
+      form.codex_cli_only_blacklist,
+    );
+    codexWhitelistRows.value = parseCodexEntriesToRows(
+      form.codex_cli_only_whitelist,
+    );
+    codexFingerprintRows.value =
+      form.codex_cli_only_engine_fingerprint_signals.trim() !== ""
+        ? parseFingerprintSignalsToRows(
+            form.codex_cli_only_engine_fingerprint_signals,
+          )
+        : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
@@ -8256,6 +8629,7 @@ async function loadSettings() {
       openaiFastPolicyForm.rules =
         settings.openai_fast_policy_settings.rules.map((rule) => ({
           ...rule,
+          user_ids: rule.user_ids ? [...rule.user_ids] : [],
           model_whitelist: rule.model_whitelist
             ? [...rule.model_whitelist]
             : [],
@@ -8660,10 +9034,23 @@ async function saveSettings() {
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
-      openai_allow_claude_code_codex_plugin: form.openai_allow_claude_code_codex_plugin,
+      min_codex_version: form.min_codex_version?.trim() || "",
+      max_codex_version: form.max_codex_version?.trim() || "",
+      codex_cli_only_blacklist: serializeCodexRowsToJSON(
+        codexBlacklistRows.value,
+      ),
+      codex_cli_only_whitelist: serializeCodexRowsToJSON(
+        codexWhitelistRows.value,
+      ),
+      codex_cli_only_allow_app_server_clients:
+        form.codex_cli_only_allow_app_server_clients,
+      codex_cli_only_engine_fingerprint_signals:
+        serializeFingerprintRowsToJSON(codexFingerprintRows.value),
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,
+      cyber_session_block_enabled: form.cyber_session_block_enabled,
+      cyber_session_block_ttl_seconds: Math.max(60, Number(form.cyber_session_block_ttl_seconds) || 3600),
       payment_min_amount: Number(form.payment_min_amount) || 0,
       payment_max_amount: Number(form.payment_max_amount) || 0,
       payment_daily_limit: Number(form.payment_daily_limit) || 0,
@@ -8673,6 +9060,8 @@ async function saveSettings() {
       payment_balance_disabled: form.payment_balance_disabled,
       payment_balance_recharge_multiplier:
         Number(form.payment_balance_recharge_multiplier) || 1,
+      payment_subscription_usd_to_cny_rate:
+        Number(form.payment_subscription_usd_to_cny_rate) || 0,
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,
       payment_enabled_types: form.payment_enabled_types,
       payment_load_balance_strategy: form.payment_load_balance_strategy,
@@ -8731,6 +9120,7 @@ async function saveSettings() {
             service_tier: rule.service_tier,
             action: rule.action,
             scope: rule.scope,
+            user_ids: normalizeOpenAIFastPolicyUserIDs(rule.user_ids),
             error_message:
               rule.action === "block" ? rule.error_message : undefined,
             model_whitelist: hasWhitelist ? whitelist : undefined,
@@ -8812,6 +9202,7 @@ async function saveSettings() {
       openaiFastPolicyForm.rules =
         updated.openai_fast_policy_settings.rules.map((rule) => ({
           ...rule,
+          user_ids: rule.user_ids ? [...rule.user_ids] : [],
           model_whitelist: rule.model_whitelist
             ? [...rule.model_whitelist]
             : [],
@@ -9223,6 +9614,7 @@ function addOpenAIFastPolicyRule() {
     service_tier: "priority",
     action: "filter",
     scope: "all",
+    user_ids: [],
     error_message: "",
     model_whitelist: [],
     fallback_action: "pass",
@@ -9232,6 +9624,20 @@ function addOpenAIFastPolicyRule() {
 
 function removeOpenAIFastPolicyRule(index: number) {
   openaiFastPolicyForm.rules.splice(index, 1);
+}
+
+function addOpenAIFastPolicyUserID(rule: OpenAIFastPolicyRule) {
+  if (!rule.user_ids) rule.user_ids = [];
+  rule.user_ids.push(0);
+}
+
+function removeOpenAIFastPolicyUserID(rule: OpenAIFastPolicyRule, index: number) {
+  rule.user_ids?.splice(index, 1);
+}
+
+function normalizeOpenAIFastPolicyUserIDs(userIDs?: number[]) {
+  const normalized = [...new Set((userIDs || []).filter((id) => Number.isInteger(id) && id > 0))];
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function addOpenAIFastPolicyModelPattern(rule: OpenAIFastPolicyRule) {

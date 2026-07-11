@@ -75,9 +75,12 @@ type AdminService interface {
 
 	// Account management
 	ListAccounts(ctx context.Context, page, pageSize int, platform, accountType, status, search string, groupID int64, privacyMode string, sortBy, sortOrder string) ([]Account, int64, error)
+	ListAccountsForSchedulerScoreFilter(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, error)
+	ListOpenAISchedulableAccountsForSchedulerScore(ctx context.Context, groupID *int64) ([]Account, error)
 	GetAccount(ctx context.Context, id int64) (*Account, error)
 	GetAccountsByIDs(ctx context.Context, ids []int64) ([]*Account, error)
 	CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error)
+	CreateShadow(ctx context.Context, parentID int64, opts ShadowOptions) (*Account, error)
 	UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error)
 	// UpdateAccountExtra 仅对 Extra 做 JSONB 增量合并（key 级覆盖），不会影响其它字段或运行态键。
 	// 用于刷新流程持久化 account_uuid / org_uuid 等少量键，避免被全量快照覆盖。
@@ -209,6 +212,10 @@ type CreateGroupInput struct {
 	AllowBatchImageGeneration    bool
 	ImageRateIndependent         bool
 	ImageRateMultiplier          *float64
+	PeakRateEnabled              bool
+	PeakStart                    string
+	PeakEnd                      string
+	PeakRateMultiplier           *float64
 	ImagePrice1K                 *float64
 	ImagePrice2K                 *float64
 	ImagePrice4K                 *float64
@@ -258,6 +265,10 @@ type UpdateGroupInput struct {
 	AllowBatchImageGeneration    *bool
 	ImageRateIndependent         *bool
 	ImageRateMultiplier          *float64
+	PeakRateEnabled              *bool
+	PeakStart                    *string
+	PeakEnd                      *string
+	PeakRateMultiplier           *float64
 	ImagePrice1K                 *float64
 	ImagePrice2K                 *float64
 	ImagePrice4K                 *float64
@@ -414,6 +425,13 @@ type BulkUpdateAccountsResult struct {
 type BatchDeleteAccountsInput struct {
 	AccountIDs []int64
 	Filters    *BulkUpdateAccountFilters
+}
+
+type ShadowOptions struct {
+	Name        string  `json:"name"`
+	GroupIDs    []int64 `json:"group_ids"`
+	Priority    int     `json:"priority"`
+	Concurrency int     `json:"concurrency"`
 }
 
 type BatchDeleteAccountResult struct {
@@ -1915,6 +1933,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		}
 		videoRateMultiplier = *input.VideoRateMultiplier
 	}
+	peakRateMultiplier := 1.0
+	if input.PeakRateMultiplier != nil {
+		peakRateMultiplier = *input.PeakRateMultiplier
+	}
+	peakEnabled, peakStart, peakEnd, peakRateMultiplier := NormalizePeakRateConfig(subscriptionType, input.PeakRateEnabled, input.PeakStart, input.PeakEnd, peakRateMultiplier)
+	if err := ValidatePeakRateConfig(subscriptionType, peakEnabled, peakStart, peakEnd, peakRateMultiplier); err != nil {
+		return nil, err
+	}
 	batchImageDiscountMultiplier := defaultBatchImageDiscountMultiplier
 	if input.BatchImageDiscountMultiplier != nil {
 		if *input.BatchImageDiscountMultiplier < 0 {
@@ -1993,6 +2019,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		Description:                     input.Description,
 		Platform:                        platform,
 		RateMultiplier:                  input.RateMultiplier,
+		PeakRateEnabled:                 peakEnabled,
+		PeakStart:                       peakStart,
+		PeakEnd:                         peakEnd,
+		PeakRateMultiplier:              peakRateMultiplier,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
 		SubscriptionType:                subscriptionType,
@@ -2186,6 +2216,26 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	group.DailyLimitUSD = normalizeLimit(input.DailyLimitUSD)
 	group.WeeklyLimitUSD = normalizeLimit(input.WeeklyLimitUSD)
 	group.MonthlyLimitUSD = normalizeLimit(input.MonthlyLimitUSD)
+	peakEnabled := group.PeakRateEnabled
+	if input.PeakRateEnabled != nil {
+		peakEnabled = *input.PeakRateEnabled
+	}
+	peakStart := group.PeakStart
+	if input.PeakStart != nil {
+		peakStart = *input.PeakStart
+	}
+	peakEnd := group.PeakEnd
+	if input.PeakEnd != nil {
+		peakEnd = *input.PeakEnd
+	}
+	peakMultiplier := group.PeakRateMultiplier
+	if input.PeakRateMultiplier != nil {
+		peakMultiplier = *input.PeakRateMultiplier
+	}
+	group.PeakRateEnabled, group.PeakStart, group.PeakEnd, group.PeakRateMultiplier = NormalizePeakRateConfig(group.SubscriptionType, peakEnabled, peakStart, peakEnd, peakMultiplier)
+	if err := ValidatePeakRateConfig(group.SubscriptionType, group.PeakRateEnabled, group.PeakStart, group.PeakEnd, group.PeakRateMultiplier); err != nil {
+		return nil, err
+	}
 	// 图片生成计费配置：负数表示清除（使用默认价格）
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
@@ -2763,6 +2813,29 @@ func (s *adminServiceImpl) ListAccounts(ctx context.Context, page, pageSize int,
 	return accounts, result.Total, nil
 }
 
+func (s *adminServiceImpl) ListAccountsForSchedulerScoreFilter(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil
+	}
+	repo, ok := s.accountRepo.(interface {
+		ListAllWithFilters(context.Context, string, string, string, string, int64, string) ([]Account, error)
+	})
+	if !ok {
+		return nil, nil
+	}
+	return repo.ListAllWithFilters(ctx, platform, accountType, status, search, groupID, privacyMode)
+}
+
+func (s *adminServiceImpl) ListOpenAISchedulableAccountsForSchedulerScore(ctx context.Context, groupID *int64) ([]Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil
+	}
+	if groupID != nil {
+		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, PlatformOpenAI)
+	}
+	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, PlatformOpenAI)
+}
+
 func (s *adminServiceImpl) GetAccount(ctx context.Context, id int64) (*Account, error) {
 	return s.accountRepo.GetByID(ctx, id)
 }
@@ -2781,6 +2854,9 @@ func (s *adminServiceImpl) GetAccountsByIDs(ctx context.Context, ids []int64) ([
 }
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	if err := NormalizeCustomHeaders(input.Extra); err != nil {
+		return nil, err
+	}
 	// 绑定分组
 	groupIDs := input.GroupIDs
 	// 如果没有指定分组,自动绑定对应平台的默认分组
@@ -2885,11 +2961,34 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 }
 
 func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error) {
+	if err := NormalizeCustomHeaders(input.Extra); err != nil {
+		return nil, err
+	}
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	wasOveragesEnabled := account.IsOveragesEnabled()
+	if account.IsShadow() {
+		if input.Type != "" && input.Type != account.Type {
+			return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_TYPE_IMMUTABLE", "spark shadow account type cannot be changed")
+		}
+		if input.ProxyID != nil {
+			return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_PROXY_INHERITED", "spark shadow proxy is inherited from its parent")
+		}
+		if !isAllowedSparkShadowCredentialsUpdate(input.Credentials) {
+			return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_CREDENTIALS_FORBIDDEN", "spark shadow credentials only support model mappings")
+		}
+		input.Credentials = sanitizeSparkShadowCredentials(input.Credentials)
+	} else if input.Type != "" && input.Type != account.Type && input.Type != AccountTypeOAuth {
+		shadows, listErr := s.accountRepo.ListShadowsByParent(ctx, id)
+		if listErr != nil {
+			return nil, listErr
+		}
+		if len(shadows) > 0 {
+			return nil, infraerrors.New(http.StatusConflict, "SPARK_SHADOW_PARENT_TYPE_REQUIRED", "delete the Spark shadow before changing the parent account type")
+		}
+	}
 
 	if input.Name != "" {
 		account.Name = input.Name
@@ -2996,6 +3095,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err := s.accountRepo.Update(ctx, account); err != nil {
 		return nil, err
 	}
+	if input.ProxyID != nil && !account.IsShadow() {
+		if err := s.propagateProxyToShadows(ctx, id, account.ProxyID); err != nil {
+			return nil, err
+		}
+	}
 
 	// 绑定分组
 	if input.GroupIDs != nil {
@@ -3048,15 +3152,33 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 
 	needMixedChannelCheck := input.GroupIDs != nil && !input.SkipMixedChannelCheck
+	var cachedTargets []*Account
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck {
+		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
+		if err != nil {
+			return nil, err
+		}
+		cachedTargets = loaded
+	}
+	if len(input.Credentials) > 0 {
+		for _, account := range cachedTargets {
+			if account != nil && account.IsCredentialShadow() {
+				return nil, infraerrors.Newf(http.StatusBadRequest, "SPARK_SHADOW_NO_CREDENTIALS", "spark shadow account %d cannot hold credentials", account.ID)
+			}
+		}
+	}
+	if input.ProxyID != nil {
+		for _, account := range cachedTargets {
+			if account != nil && account.IsCredentialShadow() {
+				return nil, infraerrors.Newf(http.StatusBadRequest, "SPARK_SHADOW_PROXY_INHERITED", "spark shadow account %d proxy is inherited from its parent", account.ID)
+			}
+		}
+	}
 
 	// 预加载账号平台信息（混合渠道检查需要）。
 	platformByID := map[int64]string{}
 	if needMixedChannelCheck {
-		accounts, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
-		if err != nil {
-			return nil, err
-		}
-		for _, account := range accounts {
+		for _, account := range cachedTargets {
 			if account != nil {
 				platformByID[account.ID] = account.Platform
 			}
@@ -3227,10 +3349,98 @@ func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filte
 }
 
 func (s *adminServiceImpl) DeleteAccount(ctx context.Context, id int64) error {
+	shadows, err := s.accountRepo.ListShadowsByParent(ctx, id)
+	if err != nil {
+		return fmt.Errorf("list spark shadows for cascade delete: %w", err)
+	}
+	for _, shadow := range shadows {
+		if err := s.accountRepo.Delete(ctx, shadow.ID); err != nil {
+			return fmt.Errorf("cascade delete spark shadow %d: %w", shadow.ID, err)
+		}
+	}
 	if err := s.accountRepo.Delete(ctx, id); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opts ShadowOptions) (*Account, error) {
+	parent, err := s.accountRepo.GetByID(ctx, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("get parent account: %w", err)
+	}
+	if !parent.IsOpenAIOAuth() {
+		return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_INVALID_PARENT", "spark shadow requires an OpenAI OAuth parent account")
+	}
+	if parent.IsShadow() {
+		return nil, infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_PARENT_IS_SHADOW", "spark shadow parent must be a real account")
+	}
+	shadows, err := s.accountRepo.ListShadowsByParent(ctx, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("check existing spark shadows: %w", err)
+	}
+	if len(shadows) > 0 {
+		return nil, infraerrors.New(http.StatusConflict, "SPARK_SHADOW_ALREADY_EXISTS", "parent account already has a spark shadow account")
+	}
+
+	groupIDs := append([]int64(nil), opts.GroupIDs...)
+	if len(groupIDs) > 0 {
+		if err := s.validateGroupIDsExist(ctx, groupIDs); err != nil {
+			return nil, err
+		}
+	} else if len(parent.GroupIDs) > 0 {
+		groupIDs = append(groupIDs, parent.GroupIDs...)
+	} else if s.groupRepo != nil {
+		groups, listErr := s.groupRepo.ListActiveByPlatform(ctx, PlatformOpenAI)
+		if listErr == nil {
+			for _, group := range groups {
+				if group.Name == PlatformOpenAI+"-default" {
+					groupIDs = []int64{group.ID}
+					break
+				}
+			}
+		}
+	}
+
+	name := strings.TrimSpace(opts.Name)
+	if name == "" {
+		name = parent.Name + " (Spark)"
+	}
+	if runes := []rune(name); len(runes) > 100 {
+		name = string(runes[:100])
+	}
+	concurrency := opts.Concurrency
+	if concurrency <= 0 {
+		concurrency = parent.Concurrency
+	}
+	priority := opts.Priority
+	if priority <= 0 {
+		priority = parent.Priority
+	}
+	shadow := &Account{
+		Name: name, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive,
+		Credentials:     map[string]any{"model_mapping": defaultSparkShadowModelMapping()},
+		ParentAccountID: &parentID, QuotaDimension: QuotaDimensionSpark,
+		ProxyID: parent.ProxyID, Priority: priority, Concurrency: concurrency, Schedulable: true,
+	}
+	if err := s.accountRepo.Create(ctx, shadow); err != nil {
+		if existing, queryErr := s.accountRepo.ListShadowsByParent(ctx, parentID); queryErr == nil && len(existing) > 0 {
+			return nil, infraerrors.New(http.StatusConflict, "SPARK_SHADOW_ALREADY_EXISTS", "parent account already has a spark shadow account")
+		}
+		return nil, fmt.Errorf("create spark shadow: %w", err)
+	}
+	if len(groupIDs) > 0 {
+		if err := s.accountRepo.BindGroups(ctx, shadow.ID, groupIDs); err != nil {
+			_ = s.accountRepo.Delete(context.WithoutCancel(ctx), shadow.ID)
+			return nil, fmt.Errorf("bind groups for spark shadow: %w", err)
+		}
+		shadow.GroupIDs = groupIDs
+	}
+	return shadow, nil
+}
+
+func (s *adminServiceImpl) propagateProxyToShadows(ctx context.Context, parentID int64, proxyID *int64) error {
+	return propagateAccountProxyToShadows(ctx, s.accountRepo, parentID, proxyID)
 }
 
 func (s *adminServiceImpl) BatchDeleteAccounts(ctx context.Context, input *BatchDeleteAccountsInput) (*BatchDeleteAccountsResult, error) {
@@ -4065,12 +4275,22 @@ func (e *MixedChannelError) Error() string {
 }
 
 func (s *adminServiceImpl) ResetAccountQuota(ctx context.Context, id int64) error {
+	account, err := s.accountRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if account.IsCredentialShadow() {
+		return infraerrors.New(http.StatusBadRequest, "SPARK_SHADOW_NO_QUOTA_RESET", "cannot reset quota for a Spark shadow account")
+	}
 	return s.accountRepo.ResetQuotaUsed(ctx, id)
 }
 
 // EnsureOpenAIPrivacy 检查 OpenAI OAuth 账号是否已设置 privacy_mode，
 // 未设置则调用 disableOpenAITraining 并持久化到 Extra，返回设置的 mode 值。
 func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Account) string {
+	if account.IsCredentialShadow() {
+		return ""
+	}
 	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return ""
 	}
@@ -4104,6 +4324,9 @@ func (s *adminServiceImpl) EnsureOpenAIPrivacy(ctx context.Context, account *Acc
 
 // ForceOpenAIPrivacy 强制重新设置 OpenAI OAuth 账号隐私，无论当前状态。
 func (s *adminServiceImpl) ForceOpenAIPrivacy(ctx context.Context, account *Account) string {
+	if account.IsCredentialShadow() {
+		return ""
+	}
 	if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth {
 		return ""
 	}

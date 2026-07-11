@@ -1955,6 +1955,24 @@ func TestDefaultOpenAIAccountScheduler_IsAccountTransportCompatible_Branches(t *
 	require.True(t, scheduler.isAccountTransportCompatible(account, OpenAIUpstreamTransportResponsesWebsocketV2))
 }
 
+func TestBuildOpenAIAccountSchedulerScoreSnapshotUsesRuntimeScoring(t *testing.T) {
+	accounts := []*Account{
+		{ID: 1, Priority: 0, Concurrency: 10},
+		{ID: 2, Priority: 10, Concurrency: 10},
+	}
+	loads := map[int64]*AccountLoadInfo{
+		1: {AccountID: 1, LoadRate: 10, WaitingCount: 0},
+		2: {AccountID: 2, LoadRate: 90, WaitingCount: 4},
+	}
+
+	scores := BuildOpenAIAccountSchedulerScoreSnapshot(accounts, loads)
+	require.Len(t, scores, 2)
+	require.Greater(t, scores[1].BaseScore, scores[2].BaseScore)
+	require.Equal(t, scores[1].BaseScore, scores[1].StickyScore)
+	require.True(t, scores[1].StickyScoreInfinity)
+	require.False(t, scores[1].StickyWeightedEnabled)
+}
+
 func int64PtrForTest(v int64) *int64 {
 	return &v
 }

@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -21,9 +23,11 @@ const (
 	schedulerVersionPrefix      = "sched:ver:"
 	schedulerSnapshotPrefix     = "sched:"
 	schedulerLockPrefix         = "sched:lock:"
+	schedulerLockIndexKey       = "sched:lock:index"
 
 	defaultSchedulerSnapshotMGetChunkSize  = 128
 	defaultSchedulerSnapshotWriteChunkSize = 256
+	schedulerLockCleanupBatchSize          = 1000
 
 	// snapshotGraceTTLSeconds 旧快照过期的宽限期（秒）。
 	// 替代立即 DEL，让正在读取旧版本的 reader 有足够时间完成 ZRANGE。
@@ -66,6 +70,48 @@ if currentActive ~= false and currentActive ~= ARGV[1] then
 end
 
 return 1
+`)
+
+	// acquireSchedulerLockScript 使用 Redis 时间获取带 TTL 的 owner lock。
+	// 返回 {是否获取成功, 观测到的锁到期 Unix 毫秒}；争锁失败也返回当前持有者的
+	// 到期时间，使丢失的索引项能在下一次争用时自动回填。
+	acquireSchedulerLockScript = redis.NewScript(`
+redis.replicate_commands()
+local current = redis.call('GET', KEYS[1])
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+if current ~= false then
+	local pttl = redis.call('PTTL', KEYS[1])
+	if pttl and pttl > 0 then
+		return {0, now + pttl}
+	end
+	return {0, now}
+end
+redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
+return {1, now + tonumber(ARGV[2])}
+`)
+
+	// releaseSchedulerLockScript 只释放 owner 匹配的锁，避免旧 rebuild 在锁过期后
+	// 删除另一个 worker 已重新获取的新锁。
+	releaseSchedulerLockScript = redis.NewScript(`
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+	return redis.call('DEL', KEYS[1])
+end
+return 0
+`)
+
+	// reconcileSchedulerLockScript 校验到期索引候选的真实锁状态。
+	// 返回 {-2,0}=锁不存在，{-1,0}=无 TTL 异常锁已删除，{1,pttl}=锁仍存活。
+	reconcileSchedulerLockScript = redis.NewScript(`
+local pttl = redis.call('PTTL', KEYS[1])
+if pttl == -2 then
+	return {-2, 0}
+end
+if pttl == -1 then
+	redis.call('DEL', KEYS[1])
+	return {-1, 0}
+end
+return {1, pttl}
 `)
 )
 
@@ -277,30 +323,195 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
 	return err
 }
 
-func (c *schedulerCache) TryLockBucket(ctx context.Context, bucket service.SchedulerBucket, ttl time.Duration) (bool, error) {
+func (c *schedulerCache) TryLockBucket(ctx context.Context, bucket service.SchedulerBucket, ttl time.Duration) (string, bool, error) {
+	if ttl <= 0 {
+		return "", false, nil
+	}
 	key := schedulerBucketKey(schedulerLockPrefix, bucket)
-	return c.rdb.SetNX(ctx, key, time.Now().UnixNano(), ttl).Result()
+	owner := uuid.NewString()
+	result, err := acquireSchedulerLockScript.Run(ctx, c.rdb, []string{key}, owner, ttl.Milliseconds()).Result()
+	if err != nil {
+		return "", false, err
+	}
+	acquired, err := schedulerScriptInt64At(result, 0)
+	if err != nil {
+		return "", false, fmt.Errorf("parse scheduler lock result: %w", err)
+	}
+	expireAtMs, err := schedulerScriptInt64At(result, 1)
+	if err != nil {
+		return "", false, fmt.Errorf("parse scheduler lock expiry: %w", err)
+	}
+	if expireAtMs > 0 {
+		if err := c.rdb.ZAdd(ctx, schedulerLockIndexKey, redis.Z{
+			Score:  float64(expireAtMs),
+			Member: bucket.String(),
+		}).Err(); err != nil {
+			logger.LegacyPrintf("repository.scheduler_cache", "Warning: update lock index for bucket %s failed: %v", bucket.String(), err)
+		}
+	}
+	if acquired != 1 {
+		return "", false, nil
+	}
+	return owner, true, nil
 }
 
-func (c *schedulerCache) UnlockBucket(ctx context.Context, bucket service.SchedulerBucket) error {
+func (c *schedulerCache) UnlockBucket(ctx context.Context, bucket service.SchedulerBucket, owner string) error {
+	if owner == "" {
+		return nil
+	}
 	key := schedulerBucketKey(schedulerLockPrefix, bucket)
-	return c.rdb.Del(ctx, key).Err()
+	released, err := releaseSchedulerLockScript.Run(ctx, c.rdb, []string{key}, owner).Int()
+	if err != nil {
+		return err
+	}
+	if released == 1 {
+		if err := c.rdb.ZRem(ctx, schedulerLockIndexKey, bucket.String()).Err(); err != nil {
+			logger.LegacyPrintf("repository.scheduler_cache", "Warning: remove lock index for bucket %s failed: %v", bucket.String(), err)
+		}
+	}
+	return nil
 }
 
 func (c *schedulerCache) ListBuckets(ctx context.Context) ([]service.SchedulerBucket, error) {
+	if _, err := c.reconcileExpiredBucketLocks(ctx, schedulerLockCleanupBatchSize); err != nil {
+		return nil, err
+	}
 	raw, err := c.rdb.SMembers(ctx, schedulerBucketSetKey).Result()
 	if err != nil {
 		return nil, err
 	}
 	out := make([]service.SchedulerBucket, 0, len(raw))
+	stale := make([]any, 0)
+	type bucketState struct {
+		bucket service.SchedulerBucket
+		member string
+		ready  *redis.StringCmd
+		active *redis.StringCmd
+	}
+	states := make([]bucketState, 0, len(raw))
+	pipe := c.rdb.Pipeline()
 	for _, entry := range raw {
 		bucket, ok := service.ParseSchedulerBucket(entry)
 		if !ok {
+			stale = append(stale, entry)
 			continue
 		}
-		out = append(out, bucket)
+		states = append(states, bucketState{
+			bucket: bucket,
+			member: entry,
+			ready:  pipe.Get(ctx, schedulerBucketKey(schedulerReadyPrefix, bucket)),
+			active: pipe.Get(ctx, schedulerBucketKey(schedulerActivePrefix, bucket)),
+		})
+	}
+	if len(states) > 0 {
+		if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+			return nil, err
+		}
+	}
+	for _, state := range states {
+		ready, readyErr := state.ready.Result()
+		active, activeErr := state.active.Result()
+		if readyErr != nil && readyErr != redis.Nil {
+			return nil, readyErr
+		}
+		if activeErr != nil && activeErr != redis.Nil {
+			return nil, activeErr
+		}
+		if ready != "1" || active == "" {
+			stale = append(stale, state.member)
+			continue
+		}
+		out = append(out, state.bucket)
+	}
+	if len(stale) > 0 {
+		if err := c.rdb.SRem(ctx, schedulerBucketSetKey, stale...).Err(); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
+}
+
+func (c *schedulerCache) reconcileExpiredBucketLocks(ctx context.Context, maxCount int64) (int, error) {
+	if maxCount <= 0 {
+		return 0, nil
+	}
+	now, err := c.rdb.Time(ctx).Result()
+	if err != nil {
+		return 0, fmt.Errorf("get scheduler redis time: %w", err)
+	}
+	nowMs := now.UnixMilli()
+	members, err := c.rdb.ZRangeByScore(ctx, schedulerLockIndexKey, &redis.ZRangeBy{
+		Min:   "-inf",
+		Max:   strconv.FormatInt(nowMs, 10),
+		Count: maxCount,
+	}).Result()
+	if err != nil {
+		return 0, fmt.Errorf("read scheduler lock index: %w", err)
+	}
+
+	cleaned := 0
+	for _, member := range members {
+		bucket, ok := service.ParseSchedulerBucket(member)
+		if !ok {
+			c.removeSchedulerLockIndexMember(ctx, member)
+			continue
+		}
+		result, err := reconcileSchedulerLockScript.Run(ctx, c.rdb, []string{schedulerBucketKey(schedulerLockPrefix, bucket)}).Result()
+		if err != nil {
+			return cleaned, fmt.Errorf("reconcile scheduler lock %s: %w", member, err)
+		}
+		status, err := schedulerScriptInt64At(result, 0)
+		if err != nil {
+			return cleaned, fmt.Errorf("parse scheduler reconcile status: %w", err)
+		}
+		pttl, err := schedulerScriptInt64At(result, 1)
+		if err != nil {
+			return cleaned, fmt.Errorf("parse scheduler reconcile pttl: %w", err)
+		}
+		switch status {
+		case -2:
+			c.removeSchedulerLockIndexMember(ctx, member)
+		case -1:
+			c.removeSchedulerLockIndexMember(ctx, member)
+			cleaned++
+		case 1:
+			if err := c.rdb.ZAdd(ctx, schedulerLockIndexKey, redis.Z{
+				Score:  float64(nowMs + pttl),
+				Member: member,
+			}).Err(); err != nil {
+				logger.LegacyPrintf("repository.scheduler_cache", "Warning: reschedule lock index member %s failed: %v", member, err)
+			}
+		}
+	}
+	return cleaned, nil
+}
+
+func (c *schedulerCache) removeSchedulerLockIndexMember(ctx context.Context, member string) {
+	if err := c.rdb.ZRem(ctx, schedulerLockIndexKey, member).Err(); err != nil {
+		logger.LegacyPrintf("repository.scheduler_cache", "Warning: remove lock index member %s failed: %v", member, err)
+	}
+}
+
+func schedulerScriptInt64At(result any, index int) (int64, error) {
+	values, ok := result.([]any)
+	if !ok {
+		return 0, fmt.Errorf("expected redis script array, got %T", result)
+	}
+	if index < 0 || index >= len(values) {
+		return 0, fmt.Errorf("redis script array missing index %d", index)
+	}
+	switch value := values[index].(type) {
+	case int64:
+		return value, nil
+	case int:
+		return int64(value), nil
+	case string:
+		return strconv.ParseInt(value, 10, 64)
+	case []byte:
+		return strconv.ParseInt(string(value), 10, 64)
+	default:
+		return 0, fmt.Errorf("unexpected redis script value type %T", values[index])
+	}
 }
 
 func (c *schedulerCache) GetOutboxWatermark(ctx context.Context) (int64, error) {
@@ -449,6 +660,8 @@ func buildSchedulerMetadataAccount(account service.Account) service.Account {
 		SessionWindowStart:      account.SessionWindowStart,
 		SessionWindowEnd:        account.SessionWindowEnd,
 		SessionWindowStatus:     account.SessionWindowStatus,
+		ParentAccountID:         account.ParentAccountID,
+		QuotaDimension:          account.QuotaDimension,
 		AccountGroups:           filterSchedulerAccountGroups(account.AccountGroups),
 		GroupIDs:                filterSchedulerGroupIDs(account.GroupIDs, account.AccountGroups),
 		Credentials:             filterSchedulerCredentials(account.Credentials),
@@ -516,7 +729,7 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
 	if len(credentials) == 0 {
 		return nil
 	}
-	keys := []string{"model_mapping", "api_key", "project_id", "oauth_type"}
+	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type"}
 	filtered := make(map[string]any)
 	for _, key := range keys {
 		if value, ok := credentials[key]; ok && value != nil {

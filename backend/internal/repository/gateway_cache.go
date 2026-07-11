@@ -51,3 +51,16 @@ func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64
 	key := buildSessionKey(groupID, sessionHash)
 	return c.rdb.Del(ctx, key).Err()
 }
+
+var _ service.CyberSessionBlockStore = (*gatewayCache)(nil)
+
+const cyberSessionBlockPrefix = "cyber_session_block:"
+
+func (c *gatewayCache) SetCyberSessionBlocked(ctx context.Context, key string, ttl time.Duration) error {
+	return c.rdb.Set(ctx, cyberSessionBlockPrefix+key, "1", ttl).Err()
+}
+
+func (c *gatewayCache) IsCyberSessionBlocked(ctx context.Context, key string) (bool, error) {
+	n, err := c.rdb.Exists(ctx, cyberSessionBlockPrefix+key).Result()
+	return n > 0, err
+}

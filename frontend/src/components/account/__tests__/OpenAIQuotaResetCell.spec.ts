@@ -124,4 +124,27 @@ describe('OpenAIQuotaResetCell', () => {
 
     expect(resetOpenAIQuota).toHaveBeenCalledWith(1)
   })
+
+  it('shows reset credit expirations returned by quota query', async () => {
+    queryOpenAIQuota.mockResolvedValue({
+      rate_limit_reset_credits: {
+        available_count: 2,
+        credits: [
+          { expires_at: '2026-07-13T04:05:06Z' },
+          { expires_at: '2026-07-12T04:05:06Z' }
+        ]
+      }
+    })
+
+    const wrapper = mount(OpenAIQuotaResetCell, {
+      props: { account: makeAccount() },
+      global: { stubs: { ConfirmDialog: ConfirmDialogStub } }
+    })
+
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.expiresAt')
+    expect(wrapper.text()).toContain('2026')
+  })
 })

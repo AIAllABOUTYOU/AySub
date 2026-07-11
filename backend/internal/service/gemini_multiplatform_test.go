@@ -21,6 +21,10 @@ type mockAccountRepoForGemini struct {
 	listByPlatformFunc func(ctx context.Context, platforms []string) ([]Account, error)
 }
 
+func (m *mockAccountRepoForGemini) ListShadowsByParent(context.Context, int64) ([]*Account, error) {
+	return nil, nil
+}
+
 func (m *mockAccountRepoForGemini) GetByID(ctx context.Context, id int64) (*Account, error) {
 	if acc, ok := m.accountsByID[id]; ok {
 		return acc, nil

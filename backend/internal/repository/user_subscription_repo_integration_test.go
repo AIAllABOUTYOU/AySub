@@ -326,6 +326,71 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByStatus() {
 	s.Require().Equal(service.SubscriptionStatusExpired, subs[0].Status)
 }
 
+func (s *UserSubscriptionRepoSuite) TestList_RevokedSoftDeleteVisibility() {
+	user := s.mustCreateUser("revoked-list@test.com", service.RoleUser)
+	activeGroup := s.mustCreateGroup("g-revoked-list-active")
+	expiredGroup := s.mustCreateGroup("g-revoked-list-expired")
+	suspendedGroup := s.mustCreateGroup("g-revoked-list-suspended")
+	revokedGroup := s.mustCreateGroup("g-revoked-list-revoked")
+
+	active := s.mustCreateSubscription(user.ID, activeGroup.ID, func(c *dbent.UserSubscriptionCreate) {
+		c.SetExpiresAt(time.Now().Add(24 * time.Hour))
+	})
+	expired := s.mustCreateSubscription(user.ID, expiredGroup.ID, func(c *dbent.UserSubscriptionCreate) {
+		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
+	})
+	suspended := s.mustCreateSubscription(user.ID, suspendedGroup.ID, func(c *dbent.UserSubscriptionCreate) {
+		c.SetStatus(service.SubscriptionStatusSuspended)
+	})
+	revoked := s.mustCreateSubscription(user.ID, revokedGroup.ID, nil)
+	s.Require().NoError(s.repo.Delete(s.ctx, revoked.ID), "soft delete revoked subscription")
+
+	params := pagination.PaginationParams{Page: 1, PageSize: 10}
+	revokedSubs, revokedPage, err := s.repo.List(
+		s.ctx, params, nil, nil, service.SubscriptionStatusRevoked, "", "", "",
+	)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(1), revokedPage.Total)
+	s.Require().Len(revokedSubs, 1)
+	s.Require().Equal(revoked.ID, revokedSubs[0].ID)
+	s.Require().Equal(service.SubscriptionStatusRevoked, revokedSubs[0].Status)
+	s.Require().NotNil(revokedSubs[0].DeletedAt)
+
+	allSubs, allPage, err := s.repo.List(s.ctx, params, nil, nil, "", "", "", "")
+	s.Require().NoError(err)
+	s.Require().Equal(int64(4), allPage.Total)
+	s.Require().Len(allSubs, 4)
+	allByID := make(map[int64]service.UserSubscription, len(allSubs))
+	for _, sub := range allSubs {
+		allByID[sub.ID] = sub
+	}
+	s.Require().Equal(service.SubscriptionStatusActive, allByID[active.ID].Status)
+	s.Require().Equal(service.SubscriptionStatusExpired, allByID[expired.ID].Status)
+	s.Require().Equal(service.SubscriptionStatusSuspended, allByID[suspended.ID].Status)
+	s.Require().Equal(service.SubscriptionStatusRevoked, allByID[revoked.ID].Status)
+	s.Require().NotNil(allByID[revoked.ID].DeletedAt)
+
+	for _, tc := range []struct {
+		status string
+		wantID int64
+	}{
+		{status: service.SubscriptionStatusActive, wantID: active.ID},
+		{status: service.SubscriptionStatusExpired, wantID: expired.ID},
+		{status: service.SubscriptionStatusSuspended, wantID: suspended.ID},
+	} {
+		s.Run(tc.status, func() {
+			subs, page, err := s.repo.List(s.ctx, params, nil, nil, tc.status, "", "", "")
+			s.Require().NoError(err)
+			s.Require().Equal(int64(1), page.Total)
+			s.Require().Len(subs, 1)
+			s.Require().Equal(tc.wantID, subs[0].ID)
+			s.Require().NotEqual(revoked.ID, subs[0].ID)
+			s.Require().Nil(subs[0].DeletedAt)
+		})
+	}
+}
+
 // --- Usage tracking ---
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage() {

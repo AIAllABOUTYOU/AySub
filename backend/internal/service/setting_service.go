@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/imroc/req/v3"
 	"golang.org/x/sync/singleflight"
 )
@@ -146,16 +147,15 @@ const openAICodexUserAgentCacheTTL = 60 * time.Second
 const openAICodexUserAgentErrorTTL = 5 * time.Second
 const openAICodexUserAgentDBTimeout = 5 * time.Second
 
-// cachedOpenAIAllowCodexPlugin Codex 插件放行开关缓存（进程内缓存，60s TTL）。
-// IsOpenAIAllowClaudeCodeCodexPluginEnabled 在每个 codex_cli_only 账号的网关请求热路径上被调用，避免每次访问 DB。
-type cachedOpenAIAllowCodexPlugin struct {
-	value     bool
-	expiresAt int64 // unix nano
+type cachedCyberSessionBlockRuntime struct {
+	enabled   bool
+	ttl       time.Duration
+	expiresAt int64
 }
 
-const openAIAllowCodexPluginCacheTTL = 60 * time.Second
-const openAIAllowCodexPluginErrorTTL = 5 * time.Second
-const openAIAllowCodexPluginDBTimeout = 5 * time.Second
+const cyberSessionBlockRuntimeCacheTTL = 60 * time.Second
+const cyberSessionBlockRuntimeErrorTTL = 5 * time.Second
+const cyberSessionBlockRuntimeDBTimeout = 5 * time.Second
 
 const openAIQuotaAutoPauseSettingsCacheTTL = 60 * time.Second
 const openAIQuotaAutoPauseSettingsErrorTTL = 5 * time.Second
@@ -174,19 +174,21 @@ type WebSearchManagerBuilder func(cfg *WebSearchEmulationConfig, proxyURLs map[i
 
 // SettingService 系统设置服务
 type SettingService struct {
-	settingRepo                 SettingRepository
-	defaultSubGroupReader       DefaultSubscriptionGroupReader
-	proxyRepo                   ProxyRepository // for resolving websearch provider proxy URLs
-	cfg                         *config.Config
-	onUpdate                    func() // Callback when settings are updated (for cache invalidation)
-	version                     string // Application version
-	webSearchManagerBuilder     WebSearchManagerBuilder
-	antigravityUAVersionCache   atomic.Value // *cachedAntigravityUserAgentVersion
-	antigravityUAVersionSF      singleflight.Group
-	openAICodexUACache          atomic.Value // *cachedOpenAICodexUserAgent
-	openAICodexUASF             singleflight.Group
-	openAIAllowCodexPluginCache atomic.Value // *cachedOpenAIAllowCodexPlugin
-	openAIAllowCodexPluginSF    singleflight.Group
+	settingRepo                   SettingRepository
+	defaultSubGroupReader         DefaultSubscriptionGroupReader
+	proxyRepo                     ProxyRepository // for resolving websearch provider proxy URLs
+	cfg                           *config.Config
+	onUpdate                      func() // Callback when settings are updated (for cache invalidation)
+	version                       string // Application version
+	webSearchManagerBuilder       WebSearchManagerBuilder
+	antigravityUAVersionCache     atomic.Value // *cachedAntigravityUserAgentVersion
+	antigravityUAVersionSF        singleflight.Group
+	openAICodexUACache            atomic.Value // *cachedOpenAICodexUserAgent
+	openAICodexUASF               singleflight.Group
+	codexRestrictionPolicyCache   atomic.Value // *cachedCodexRestrictionPolicy
+	codexRestrictionPolicySF      singleflight.Group
+	cyberSessionBlockRuntimeCache atomic.Value
+	cyberSessionBlockRuntimeSF    singleflight.Group
 
 	// openAIQuotaAutoPauseSettingsCache holds the most recently observed quota auto-pause
 	// settings. GetOpenAIQuotaAutoPauseSettings reads this atomic.Value on the request hot
@@ -692,6 +694,39 @@ func (s *SettingService) GetFrontendURL(ctx context.Context) string {
 	return s.cfg.Server.FrontendURL
 }
 
+func (s *SettingService) GetCyberSessionBlockRuntime(ctx context.Context) (bool, time.Duration) {
+	if cached, ok := s.cyberSessionBlockRuntimeCache.Load().(*cachedCyberSessionBlockRuntime); ok && cached != nil && time.Now().UnixNano() < cached.expiresAt {
+		return cached.enabled, cached.ttl
+	}
+	result, _, _ := s.cyberSessionBlockRuntimeSF.Do("cyber_session_block_runtime", func() (any, error) {
+		if cached, ok := s.cyberSessionBlockRuntimeCache.Load().(*cachedCyberSessionBlockRuntime); ok && cached != nil && time.Now().UnixNano() < cached.expiresAt {
+			return cached, nil
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cyberSessionBlockRuntimeDBTimeout)
+		defer cancel()
+		enabledValue, enabledErr := s.settingRepo.GetValue(dbCtx, SettingKeyCyberSessionBlockEnabled)
+		ttlValue, ttlErr := s.settingRepo.GetValue(dbCtx, SettingKeyCyberSessionBlockTTLSeconds)
+		if enabledErr != nil && !errors.Is(enabledErr, ErrSettingNotFound) {
+			entry := &cachedCyberSessionBlockRuntime{ttl: time.Hour, expiresAt: time.Now().Add(cyberSessionBlockRuntimeErrorTTL).UnixNano()}
+			s.cyberSessionBlockRuntimeCache.Store(entry)
+			return entry, nil
+		}
+		ttl := time.Hour
+		if ttlErr == nil {
+			if seconds, err := strconv.Atoi(strings.TrimSpace(ttlValue)); err == nil && seconds > 0 {
+				ttl = time.Duration(seconds) * time.Second
+			}
+		}
+		entry := &cachedCyberSessionBlockRuntime{enabled: enabledErr == nil && strings.TrimSpace(enabledValue) == "true", ttl: ttl, expiresAt: time.Now().Add(cyberSessionBlockRuntimeCacheTTL).UnixNano()}
+		s.cyberSessionBlockRuntimeCache.Store(entry)
+		return entry, nil
+	})
+	if entry, ok := result.(*cachedCyberSessionBlockRuntime); ok && entry != nil {
+		return entry.enabled, entry.ttl
+	}
+	return false, time.Hour
+}
+
 // GetPublicSettings 获取公开设置（无需登录）
 func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings, error) {
 	keys := []string{
@@ -1111,54 +1146,6 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 	return fallback
 }
 
-// IsOpenAIAllowClaudeCodeCodexPluginEnabled 全局开关：是否额外放行 Claude Code 的 Codex 插件（默认关闭）。
-// 仅在调用方已确认账号 codex_cli_only 开启时读取，避免对非受限账号产生无谓查询。
-// 使用进程内 atomic.Value 缓存（60s TTL），避免在每个网关请求热路径上访问 DB。
-func (s *SettingService) IsOpenAIAllowClaudeCodeCodexPluginEnabled(ctx context.Context) bool {
-	if cached, ok := s.openAIAllowCodexPluginCache.Load().(*cachedOpenAIAllowCodexPlugin); ok && cached != nil {
-		if time.Now().UnixNano() < cached.expiresAt {
-			return cached.value
-		}
-	}
-	result, _, _ := s.openAIAllowCodexPluginSF.Do("openai_allow_codex_plugin_enabled", func() (any, error) {
-		if cached, ok := s.openAIAllowCodexPluginCache.Load().(*cachedOpenAIAllowCodexPlugin); ok && cached != nil {
-			if time.Now().UnixNano() < cached.expiresAt {
-				return cached.value, nil
-			}
-		}
-		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openAIAllowCodexPluginDBTimeout)
-		defer cancel()
-		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAIAllowClaudeCodeCodexPlugin)
-		if err != nil {
-			if errors.Is(err, ErrSettingNotFound) {
-				// 设置不存在 → 默认关闭，正常 TTL 缓存
-				s.openAIAllowCodexPluginCache.Store(&cachedOpenAIAllowCodexPlugin{
-					value:     false,
-					expiresAt: time.Now().Add(openAIAllowCodexPluginCacheTTL).UnixNano(),
-				})
-				return false, nil
-			}
-			slog.Warn("failed to get openai_allow_claude_code_codex_plugin setting", "error", err)
-			// DB 错误 → 安全默认关闭，短 TTL 快速重试
-			s.openAIAllowCodexPluginCache.Store(&cachedOpenAIAllowCodexPlugin{
-				value:     false,
-				expiresAt: time.Now().Add(openAIAllowCodexPluginErrorTTL).UnixNano(),
-			})
-			return false, nil
-		}
-		enabled := value == "true"
-		s.openAIAllowCodexPluginCache.Store(&cachedOpenAIAllowCodexPlugin{
-			value:     enabled,
-			expiresAt: time.Now().Add(openAIAllowCodexPluginCacheTTL).UnixNano(),
-		})
-		return enabled, nil
-	})
-	if val, ok := result.(bool); ok {
-		return val
-	}
-	return false
-}
-
 // SetOnUpdateCallback sets a callback function to be called when settings are updated
 // This is used for cache invalidation (e.g., HTML cache in frontend server)
 func (s *SettingService) SetOnUpdateCallback(callback func()) {
@@ -1245,6 +1232,8 @@ type PublicSettingsInjectionPayload struct {
 	AvailableChannelsEnabled             bool `json:"available_channels_enabled"`
 	AffiliateEnabled                     bool `json:"affiliate_enabled"`
 	RiskControlEnabled                   bool `json:"risk_control_enabled"`
+	CyberSessionBlockEnabled             bool `json:"cyber_session_block_enabled"`
+	CyberSessionBlockTTLSeconds          int  `json:"cyber_session_block_ttl_seconds"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -1314,6 +1303,8 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
+		CyberSessionBlockEnabled:             settings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds:          settings.CyberSessionBlockTTLSeconds,
 	}, nil
 }
 
@@ -1992,6 +1983,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// 风控中心功能开关
 	updates[SettingKeyRiskControlEnabled] = strconv.FormatBool(settings.RiskControlEnabled)
+	updates[SettingKeyCyberSessionBlockEnabled] = strconv.FormatBool(settings.CyberSessionBlockEnabled)
+	if settings.CyberSessionBlockTTLSeconds > 0 {
+		updates[SettingKeyCyberSessionBlockTTLSeconds] = strconv.Itoa(settings.CyberSessionBlockTTLSeconds)
+	}
 
 	// Daily check-in reward feature switch
 	updates[SettingKeyCheckinEnabled] = strconv.FormatBool(settings.CheckinEnabled)
@@ -2031,7 +2026,12 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyRewriteMessageCacheControl] = strconv.FormatBool(settings.RewriteMessageCacheControl)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
-	updates[SettingKeyOpenAIAllowClaudeCodeCodexPlugin] = strconv.FormatBool(settings.OpenAIAllowClaudeCodeCodexPlugin)
+	updates[SettingKeyMinCodexVersion] = strings.TrimSpace(settings.MinCodexVersion)
+	updates[SettingKeyMaxCodexVersion] = strings.TrimSpace(settings.MaxCodexVersion)
+	updates[SettingKeyCodexCLIOnlyBlacklist] = strings.TrimSpace(settings.CodexCLIOnlyBlacklist)
+	updates[SettingKeyCodexCLIOnlyWhitelist] = strings.TrimSpace(settings.CodexCLIOnlyWhitelist)
+	updates[SettingKeyCodexCLIOnlyAllowAppServerClients] = strconv.FormatBool(settings.CodexCLIOnlyAllowAppServerClients)
+	updates[SettingKeyCodexCLIOnlyEngineFingerprintSignals] = strings.TrimSpace(settings.CodexCLIOnlyEngineFingerprintSignals)
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -2176,6 +2176,7 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     codexUA,
 		expiresAt: time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 	})
+	s.invalidateCodexRestrictionPolicy()
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		enabled:   settings.OpenAIAdvancedSchedulerEnabled,
@@ -2195,11 +2196,6 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	if s.cfg != nil {
 		s.cfg.SetTrustForwardedIPForAPIKeyACL(settings.APIKeyACLTrustForwardedIP)
 	}
-	s.openAIAllowCodexPluginSF.Forget("openai_allow_codex_plugin_enabled")
-	s.openAIAllowCodexPluginCache.Store(&cachedOpenAIAllowCodexPlugin{
-		value:     settings.OpenAIAllowClaudeCodeCodexPlugin,
-		expiresAt: time.Now().Add(openAIAllowCodexPluginCacheTTL).UnixNano(),
-	})
 	if s.onUpdate != nil {
 		s.onUpdate() // Invalidate cache after settings update
 	}
@@ -2961,7 +2957,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAffiliateEnabled: "false",
 
 		// 风控中心功能（默认关闭，显式启用）
-		SettingKeyRiskControlEnabled: "false",
+		SettingKeyRiskControlEnabled:          "false",
+		SettingKeyCyberSessionBlockEnabled:    "false",
+		SettingKeyCyberSessionBlockTTLSeconds: "3600",
 
 		// Daily check-in reward feature (default disabled; reward defaults to 0)
 		SettingKeyCheckinEnabled:         "false",
@@ -2975,16 +2973,22 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMaxClaudeCodeVersion: "",
 
 		// 分组隔离（默认不允许未分组 Key 调度）
-		SettingKeyAllowUngroupedKeyScheduling:        "false",
-		SettingKeyEnableAnthropicCacheTTL1hInjection: "false",
-		SettingKeyRewriteMessageCacheControl:         strconv.FormatBool(s.defaultRewriteMessageCacheControl()),
-		SettingKeyAntigravityUserAgentVersion:        "",
-		SettingKeyOpenAICodexUserAgent:               "",
-		SettingPaymentVisibleMethodAlipaySource:      "",
-		SettingPaymentVisibleMethodWxpaySource:       "",
-		SettingPaymentVisibleMethodAlipayEnabled:     "false",
-		SettingPaymentVisibleMethodWxpayEnabled:      "false",
-		openAIAdvancedSchedulerSettingKey:            "false",
+		SettingKeyAllowUngroupedKeyScheduling:          "false",
+		SettingKeyEnableAnthropicCacheTTL1hInjection:   "false",
+		SettingKeyRewriteMessageCacheControl:           strconv.FormatBool(s.defaultRewriteMessageCacheControl()),
+		SettingKeyAntigravityUserAgentVersion:          "",
+		SettingKeyOpenAICodexUserAgent:                 "",
+		SettingKeyMinCodexVersion:                      "",
+		SettingKeyMaxCodexVersion:                      "",
+		SettingKeyCodexCLIOnlyBlacklist:                "",
+		SettingKeyCodexCLIOnlyWhitelist:                "",
+		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
+		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
+		SettingPaymentVisibleMethodAlipaySource:        "",
+		SettingPaymentVisibleMethodWxpaySource:         "",
+		SettingPaymentVisibleMethodAlipayEnabled:       "false",
+		SettingPaymentVisibleMethodWxpayEnabled:        "false",
+		openAIAdvancedSchedulerSettingKey:              "false",
 	}
 
 	return s.settingRepo.SetMultiple(ctx, defaults)
@@ -3485,6 +3489,11 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// 风控中心功能（默认关闭，严格 true 才启用）
 	result.RiskControlEnabled = settings[SettingKeyRiskControlEnabled] == "true"
+	result.CyberSessionBlockEnabled = settings[SettingKeyCyberSessionBlockEnabled] == "true"
+	result.CyberSessionBlockTTLSeconds = 3600
+	if value, err := strconv.Atoi(strings.TrimSpace(settings[SettingKeyCyberSessionBlockTTLSeconds])); err == nil && value > 0 {
+		result.CyberSessionBlockTTLSeconds = value
+	}
 
 	// Daily check-in reward feature（默认关闭；奖励金额小于 0 时归零）
 	result.CheckinEnabled = settings[SettingKeyCheckinEnabled] == "true"
@@ -3519,7 +3528,15 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
-	result.OpenAIAllowClaudeCodeCodexPlugin = settings[SettingKeyOpenAIAllowClaudeCodeCodexPlugin] == "true"
+	result.MinCodexVersion = strings.TrimSpace(settings[SettingKeyMinCodexVersion])
+	result.MaxCodexVersion = strings.TrimSpace(settings[SettingKeyMaxCodexVersion])
+	result.CodexCLIOnlyBlacklist = strings.TrimSpace(settings[SettingKeyCodexCLIOnlyBlacklist])
+	result.CodexCLIOnlyWhitelist = strings.TrimSpace(settings[SettingKeyCodexCLIOnlyWhitelist])
+	result.CodexCLIOnlyAllowAppServerClients = settings[SettingKeyCodexCLIOnlyAllowAppServerClients] == "true"
+	result.CodexCLIOnlyEngineFingerprintSignals = strings.TrimSpace(settings[SettingKeyCodexCLIOnlyEngineFingerprintSignals])
+	if result.CodexCLIOnlyEngineFingerprintSignals == "" {
+		result.CodexCLIOnlyEngineFingerprintSignals = openai.DefaultEngineFingerprintSignalsJSON()
+	}
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {
@@ -4943,6 +4960,16 @@ func (s *SettingService) SetOpenAIFastPolicySettings(ctx context.Context, settin
 		}
 		if !validScopes[rule.Scope] {
 			return fmt.Errorf("rule[%d]: invalid scope %q", i, rule.Scope)
+		}
+		seenUserIDs := make(map[int64]struct{}, len(rule.UserIDs))
+		for j, userID := range rule.UserIDs {
+			if userID <= 0 {
+				return fmt.Errorf("rule[%d]: user_ids[%d] must be positive", i, j)
+			}
+			if _, exists := seenUserIDs[userID]; exists {
+				return fmt.Errorf("rule[%d]: user_ids[%d] duplicates user_id %d", i, j, userID)
+			}
+			seenUserIDs[userID] = struct{}{}
 		}
 		for j, pattern := range rule.ModelWhitelist {
 			trimmed := strings.TrimSpace(pattern)

@@ -37,6 +37,7 @@ const (
 	ContentModerationActionHashBlock    = "hash_block"
 	ContentModerationActionKeywordBlock = "keyword_block"
 	ContentModerationActionError        = "error"
+	ContentModerationActionCyberPolicy  = "cyber_policy"
 
 	contentModerationKeywordCategory = "keyword"
 
@@ -133,66 +134,68 @@ func ContentModerationCategories() []string {
 }
 
 type ContentModerationConfig struct {
-	Enabled              bool                         `json:"enabled"`
-	Mode                 string                       `json:"mode"`
-	BaseURL              string                       `json:"base_url"`
-	Model                string                       `json:"model"`
-	APIKey               string                       `json:"api_key,omitempty"`
-	APIKeys              []string                     `json:"api_keys,omitempty"`
-	TimeoutMS            int                          `json:"timeout_ms"`
-	SampleRate           int                          `json:"sample_rate"`
-	AllGroups            bool                         `json:"all_groups"`
-	GroupIDs             []int64                      `json:"group_ids"`
-	RecordNonHits        bool                         `json:"record_non_hits"`
-	Thresholds           map[string]float64           `json:"thresholds"`
-	WorkerCount          int                          `json:"worker_count"`
-	QueueSize            int                          `json:"queue_size"`
-	BlockStatus          int                          `json:"block_status"`
-	BlockMessage         string                       `json:"block_message"`
-	EmailOnHit           bool                         `json:"email_on_hit"`
-	AutoBanEnabled       bool                         `json:"auto_ban_enabled"`
-	BanThreshold         int                          `json:"ban_threshold"`
-	ViolationWindowHours int                          `json:"violation_window_hours"`
-	RetryCount           int                          `json:"retry_count"`
-	HitRetentionDays     int                          `json:"hit_retention_days"`
-	NonHitRetentionDays  int                          `json:"non_hit_retention_days"`
-	PreHashCheckEnabled  bool                         `json:"pre_hash_check_enabled"`
-	BlockedKeywords      []string                     `json:"blocked_keywords"`
-	KeywordBlockingMode  string                       `json:"keyword_blocking_mode"`
-	ModelFilter          ContentModerationModelFilter `json:"model_filter"`
+	Enabled                        bool                         `json:"enabled"`
+	Mode                           string                       `json:"mode"`
+	BaseURL                        string                       `json:"base_url"`
+	Model                          string                       `json:"model"`
+	APIKey                         string                       `json:"api_key,omitempty"`
+	APIKeys                        []string                     `json:"api_keys,omitempty"`
+	TimeoutMS                      int                          `json:"timeout_ms"`
+	SampleRate                     int                          `json:"sample_rate"`
+	AllGroups                      bool                         `json:"all_groups"`
+	GroupIDs                       []int64                      `json:"group_ids"`
+	RecordNonHits                  bool                         `json:"record_non_hits"`
+	Thresholds                     map[string]float64           `json:"thresholds"`
+	WorkerCount                    int                          `json:"worker_count"`
+	QueueSize                      int                          `json:"queue_size"`
+	BlockStatus                    int                          `json:"block_status"`
+	BlockMessage                   string                       `json:"block_message"`
+	EmailOnHit                     bool                         `json:"email_on_hit"`
+	AutoBanEnabled                 bool                         `json:"auto_ban_enabled"`
+	BanThreshold                   int                          `json:"ban_threshold"`
+	ViolationWindowHours           int                          `json:"violation_window_hours"`
+	RetryCount                     int                          `json:"retry_count"`
+	HitRetentionDays               int                          `json:"hit_retention_days"`
+	NonHitRetentionDays            int                          `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            bool                         `json:"pre_hash_check_enabled"`
+	BlockedKeywords                []string                     `json:"blocked_keywords"`
+	KeywordBlockingMode            string                       `json:"keyword_blocking_mode"`
+	ModelFilter                    ContentModerationModelFilter `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount bool                         `json:"cyber_policy_exclude_from_ban_count"`
 }
 
 type ContentModerationConfigView struct {
-	Enabled              bool                            `json:"enabled"`
-	Mode                 string                          `json:"mode"`
-	BaseURL              string                          `json:"base_url"`
-	Model                string                          `json:"model"`
-	APIKeyConfigured     bool                            `json:"api_key_configured"`
-	APIKeyMasked         string                          `json:"api_key_masked"`
-	APIKeyCount          int                             `json:"api_key_count"`
-	APIKeyMasks          []string                        `json:"api_key_masks"`
-	APIKeyStatuses       []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
-	TimeoutMS            int                             `json:"timeout_ms"`
-	SampleRate           int                             `json:"sample_rate"`
-	AllGroups            bool                            `json:"all_groups"`
-	GroupIDs             []int64                         `json:"group_ids"`
-	RecordNonHits        bool                            `json:"record_non_hits"`
-	Thresholds           map[string]float64              `json:"thresholds"`
-	WorkerCount          int                             `json:"worker_count"`
-	QueueSize            int                             `json:"queue_size"`
-	BlockStatus          int                             `json:"block_status"`
-	BlockMessage         string                          `json:"block_message"`
-	EmailOnHit           bool                            `json:"email_on_hit"`
-	AutoBanEnabled       bool                            `json:"auto_ban_enabled"`
-	BanThreshold         int                             `json:"ban_threshold"`
-	ViolationWindowHours int                             `json:"violation_window_hours"`
-	RetryCount           int                             `json:"retry_count"`
-	HitRetentionDays     int                             `json:"hit_retention_days"`
-	NonHitRetentionDays  int                             `json:"non_hit_retention_days"`
-	PreHashCheckEnabled  bool                            `json:"pre_hash_check_enabled"`
-	BlockedKeywords      []string                        `json:"blocked_keywords"`
-	KeywordBlockingMode  string                          `json:"keyword_blocking_mode"`
-	ModelFilter          ContentModerationModelFilter    `json:"model_filter"`
+	Enabled                        bool                            `json:"enabled"`
+	Mode                           string                          `json:"mode"`
+	BaseURL                        string                          `json:"base_url"`
+	Model                          string                          `json:"model"`
+	APIKeyConfigured               bool                            `json:"api_key_configured"`
+	APIKeyMasked                   string                          `json:"api_key_masked"`
+	APIKeyCount                    int                             `json:"api_key_count"`
+	APIKeyMasks                    []string                        `json:"api_key_masks"`
+	APIKeyStatuses                 []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
+	TimeoutMS                      int                             `json:"timeout_ms"`
+	SampleRate                     int                             `json:"sample_rate"`
+	AllGroups                      bool                            `json:"all_groups"`
+	GroupIDs                       []int64                         `json:"group_ids"`
+	RecordNonHits                  bool                            `json:"record_non_hits"`
+	Thresholds                     map[string]float64              `json:"thresholds"`
+	WorkerCount                    int                             `json:"worker_count"`
+	QueueSize                      int                             `json:"queue_size"`
+	BlockStatus                    int                             `json:"block_status"`
+	BlockMessage                   string                          `json:"block_message"`
+	EmailOnHit                     bool                            `json:"email_on_hit"`
+	AutoBanEnabled                 bool                            `json:"auto_ban_enabled"`
+	BanThreshold                   int                             `json:"ban_threshold"`
+	ViolationWindowHours           int                             `json:"violation_window_hours"`
+	RetryCount                     int                             `json:"retry_count"`
+	HitRetentionDays               int                             `json:"hit_retention_days"`
+	NonHitRetentionDays            int                             `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            bool                            `json:"pre_hash_check_enabled"`
+	BlockedKeywords                []string                        `json:"blocked_keywords"`
+	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
+	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -250,36 +253,37 @@ type ContentModerationTestAuditResult struct {
 }
 
 type UpdateContentModerationConfigInput struct {
-	Enabled              *bool                         `json:"enabled"`
-	Mode                 *string                       `json:"mode"`
-	BaseURL              *string                       `json:"base_url"`
-	Model                *string                       `json:"model"`
-	APIKey               *string                       `json:"api_key"`
-	APIKeys              *[]string                     `json:"api_keys"`
-	APIKeysMode          string                        `json:"api_keys_mode"`
-	DeleteAPIKeyHashes   *[]string                     `json:"delete_api_key_hashes"`
-	ClearAPIKey          bool                          `json:"clear_api_key"`
-	TimeoutMS            *int                          `json:"timeout_ms"`
-	SampleRate           *int                          `json:"sample_rate"`
-	AllGroups            *bool                         `json:"all_groups"`
-	GroupIDs             *[]int64                      `json:"group_ids"`
-	RecordNonHits        *bool                         `json:"record_non_hits"`
-	Thresholds           *map[string]float64           `json:"thresholds"`
-	WorkerCount          *int                          `json:"worker_count"`
-	QueueSize            *int                          `json:"queue_size"`
-	BlockStatus          *int                          `json:"block_status"`
-	BlockMessage         *string                       `json:"block_message"`
-	EmailOnHit           *bool                         `json:"email_on_hit"`
-	AutoBanEnabled       *bool                         `json:"auto_ban_enabled"`
-	BanThreshold         *int                          `json:"ban_threshold"`
-	ViolationWindowHours *int                          `json:"violation_window_hours"`
-	RetryCount           *int                          `json:"retry_count"`
-	HitRetentionDays     *int                          `json:"hit_retention_days"`
-	NonHitRetentionDays  *int                          `json:"non_hit_retention_days"`
-	PreHashCheckEnabled  *bool                         `json:"pre_hash_check_enabled"`
-	BlockedKeywords      *[]string                     `json:"blocked_keywords"`
-	KeywordBlockingMode  *string                       `json:"keyword_blocking_mode"`
-	ModelFilter          *ContentModerationModelFilter `json:"model_filter"`
+	Enabled                        *bool                         `json:"enabled"`
+	Mode                           *string                       `json:"mode"`
+	BaseURL                        *string                       `json:"base_url"`
+	Model                          *string                       `json:"model"`
+	APIKey                         *string                       `json:"api_key"`
+	APIKeys                        *[]string                     `json:"api_keys"`
+	APIKeysMode                    string                        `json:"api_keys_mode"`
+	DeleteAPIKeyHashes             *[]string                     `json:"delete_api_key_hashes"`
+	ClearAPIKey                    bool                          `json:"clear_api_key"`
+	TimeoutMS                      *int                          `json:"timeout_ms"`
+	SampleRate                     *int                          `json:"sample_rate"`
+	AllGroups                      *bool                         `json:"all_groups"`
+	GroupIDs                       *[]int64                      `json:"group_ids"`
+	RecordNonHits                  *bool                         `json:"record_non_hits"`
+	Thresholds                     *map[string]float64           `json:"thresholds"`
+	WorkerCount                    *int                          `json:"worker_count"`
+	QueueSize                      *int                          `json:"queue_size"`
+	BlockStatus                    *int                          `json:"block_status"`
+	BlockMessage                   *string                       `json:"block_message"`
+	EmailOnHit                     *bool                         `json:"email_on_hit"`
+	AutoBanEnabled                 *bool                         `json:"auto_ban_enabled"`
+	BanThreshold                   *int                          `json:"ban_threshold"`
+	ViolationWindowHours           *int                          `json:"violation_window_hours"`
+	RetryCount                     *int                          `json:"retry_count"`
+	HitRetentionDays               *int                          `json:"hit_retention_days"`
+	NonHitRetentionDays            *int                          `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            *bool                         `json:"pre_hash_check_enabled"`
+	BlockedKeywords                *[]string                     `json:"blocked_keywords"`
+	KeywordBlockingMode            *string                       `json:"keyword_blocking_mode"`
+	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
 }
 
 type ContentModerationModelFilter struct {
@@ -462,7 +466,7 @@ type ContentModerationClearHashesResult struct {
 type ContentModerationRepository interface {
 	CreateLog(ctx context.Context, log *ContentModerationLog) error
 	ListLogs(ctx context.Context, filter ContentModerationLogFilter) ([]ContentModerationLog, *pagination.PaginationResult, error)
-	CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time) (int, error)
+	CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error)
 	CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error)
 }
 
@@ -648,6 +652,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.RecordNonHits != nil {
 		cfg.RecordNonHits = *input.RecordNonHits
+	}
+	if input.CyberPolicyExcludeFromBanCount != nil {
+		cfg.CyberPolicyExcludeFromBanCount = *input.CyberPolicyExcludeFromBanCount
 	}
 	if input.Thresholds != nil {
 		cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), *input.Thresholds)
@@ -1646,7 +1653,7 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	count := 1
 	if s.repo != nil && cfg.ViolationWindowHours > 0 {
 		since := time.Now().Add(-time.Duration(cfg.ViolationWindowHours) * time.Hour)
-		if n, err := s.repo.CountFlaggedByUserSince(ctx, *log.UserID, since); err == nil {
+		if n, err := s.repo.CountFlaggedByUserSince(ctx, *log.UserID, since, cfg.CyberPolicyExcludeFromBanCount); err == nil {
 			count = n + 1
 		}
 	}
@@ -1832,6 +1839,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 			Type:   ContentModerationModelFilterAll,
 			Models: []string{},
 		},
+		CyberPolicyExcludeFromBanCount: false,
 	}
 }
 
@@ -2128,36 +2136,37 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		apiKeyMasked = masks[0]
 	}
 	return &ContentModerationConfigView{
-		Enabled:              cfg.Enabled,
-		Mode:                 cfg.Mode,
-		BaseURL:              cfg.BaseURL,
-		Model:                cfg.Model,
-		APIKeyConfigured:     len(keys) > 0,
-		APIKeyMasked:         apiKeyMasked,
-		APIKeyCount:          len(keys),
-		APIKeyMasks:          masks,
-		APIKeyStatuses:       s.apiKeyStatuses(keys),
-		TimeoutMS:            cfg.TimeoutMS,
-		SampleRate:           cfg.SampleRate,
-		AllGroups:            cfg.AllGroups,
-		GroupIDs:             append([]int64(nil), cfg.GroupIDs...),
-		RecordNonHits:        cfg.RecordNonHits,
-		Thresholds:           cloneFloatMap(cfg.Thresholds),
-		WorkerCount:          cfg.WorkerCount,
-		QueueSize:            cfg.QueueSize,
-		BlockStatus:          cfg.BlockStatus,
-		BlockMessage:         cfg.BlockMessage,
-		EmailOnHit:           cfg.EmailOnHit,
-		AutoBanEnabled:       cfg.AutoBanEnabled,
-		BanThreshold:         cfg.BanThreshold,
-		ViolationWindowHours: cfg.ViolationWindowHours,
-		RetryCount:           cfg.RetryCount,
-		HitRetentionDays:     cfg.HitRetentionDays,
-		NonHitRetentionDays:  cfg.NonHitRetentionDays,
-		PreHashCheckEnabled:  cfg.PreHashCheckEnabled,
-		BlockedKeywords:      append([]string(nil), cfg.BlockedKeywords...),
-		KeywordBlockingMode:  cfg.KeywordBlockingMode,
-		ModelFilter:          cloneContentModerationModelFilter(cfg.ModelFilter),
+		Enabled:                        cfg.Enabled,
+		Mode:                           cfg.Mode,
+		BaseURL:                        cfg.BaseURL,
+		Model:                          cfg.Model,
+		APIKeyConfigured:               len(keys) > 0,
+		APIKeyMasked:                   apiKeyMasked,
+		APIKeyCount:                    len(keys),
+		APIKeyMasks:                    masks,
+		APIKeyStatuses:                 s.apiKeyStatuses(keys),
+		TimeoutMS:                      cfg.TimeoutMS,
+		SampleRate:                     cfg.SampleRate,
+		AllGroups:                      cfg.AllGroups,
+		GroupIDs:                       append([]int64(nil), cfg.GroupIDs...),
+		RecordNonHits:                  cfg.RecordNonHits,
+		Thresholds:                     cloneFloatMap(cfg.Thresholds),
+		WorkerCount:                    cfg.WorkerCount,
+		QueueSize:                      cfg.QueueSize,
+		BlockStatus:                    cfg.BlockStatus,
+		BlockMessage:                   cfg.BlockMessage,
+		EmailOnHit:                     cfg.EmailOnHit,
+		AutoBanEnabled:                 cfg.AutoBanEnabled,
+		BanThreshold:                   cfg.BanThreshold,
+		ViolationWindowHours:           cfg.ViolationWindowHours,
+		RetryCount:                     cfg.RetryCount,
+		HitRetentionDays:               cfg.HitRetentionDays,
+		NonHitRetentionDays:            cfg.NonHitRetentionDays,
+		PreHashCheckEnabled:            cfg.PreHashCheckEnabled,
+		BlockedKeywords:                append([]string(nil), cfg.BlockedKeywords...),
+		KeywordBlockingMode:            cfg.KeywordBlockingMode,
+		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
+		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
 	}
 }
 
@@ -2684,4 +2693,53 @@ func maskSecretTail(secret string) string {
 		return "****"
 	}
 	return strings.Repeat("*", 8) + secret[len(secret)-4:]
+}
+
+type CyberPolicyRecordInput struct {
+	RequestID       string
+	UserID          int64
+	UserEmail       string
+	APIKeyID        int64
+	APIKeyName      string
+	GroupID         *int64
+	GroupName       string
+	Endpoint        string
+	Model           string
+	UpstreamMessage string
+	UpstreamBody    string
+	UpstreamStatus  int
+	UpstreamInTok   int
+	UpstreamOutTok  int
+}
+
+func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, input CyberPolicyRecordInput) {
+	if s == nil || s.repo == nil || !s.isRiskControlEnabled(ctx) {
+		return
+	}
+	cfg, err := s.loadConfig(ctx)
+	if err != nil {
+		slog.Warn("content_moderation.cyber_load_config_failed", "error", err)
+		cfg = defaultContentModerationConfig()
+	}
+	var userID *int64
+	if input.UserID > 0 {
+		userID = &input.UserID
+	}
+	var apiKeyID *int64
+	if input.APIKeyID > 0 {
+		apiKeyID = &input.APIKeyID
+	}
+	errorText := strings.TrimSpace(input.UpstreamMessage + "\n" + input.UpstreamBody)
+	if input.UpstreamInTok > 0 || input.UpstreamOutTok > 0 {
+		errorText += fmt.Sprintf("\nupstream_usage=in:%d,out:%d", input.UpstreamInTok, input.UpstreamOutTok)
+	}
+	log := &ContentModerationLog{
+		RequestID: input.RequestID, UserID: userID, UserEmail: input.UserEmail,
+		APIKeyID: apiKeyID, APIKeyName: input.APIKeyName, GroupID: cloneInt64Ptr(input.GroupID),
+		GroupName: input.GroupName, Endpoint: input.Endpoint, Provider: PlatformOpenAI,
+		Model: input.Model, Mode: "post_upstream", Action: ContentModerationActionCyberPolicy,
+		Flagged: true, HighestCategory: "cyber_policy", HighestScore: 1,
+		Error: trimRunes(redactContentModerationSecrets(errorText), maxModerationExcerptRunes*4), CreatedAt: time.Now(),
+	}
+	s.persistContentModerationLog(ctx, cfg, log, "", false, !cfg.CyberPolicyExcludeFromBanCount)
 }

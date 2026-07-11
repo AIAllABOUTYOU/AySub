@@ -26,6 +26,11 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}
+	credentialAccount, resolveErr := resolveCredentialAccount(ctx, s.accountRepo, account)
+	if resolveErr != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_SHADOW_RESOLVE_FAILED", "resolve shadow parent: %v", resolveErr)
+	}
+	account = credentialAccount
 	accessToken := strings.TrimSpace(account.GetOpenAIAccessToken())
 	if accessToken == "" {
 		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")

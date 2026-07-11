@@ -99,7 +99,9 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 
-		RiskControlEnabled: settings.RiskControlEnabled,
+		RiskControlEnabled:          settings.RiskControlEnabled,
+		CyberSessionBlockEnabled:    settings.CyberSessionBlockEnabled,
+		CyberSessionBlockTTLSeconds: settings.CyberSessionBlockTTLSeconds,
 
 		CheckinEnabled:         settings.CheckinEnabled,
 		CheckinRewardAmount:    settings.CheckinRewardAmount,

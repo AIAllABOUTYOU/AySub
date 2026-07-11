@@ -90,13 +90,17 @@ type APIKey struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	Description        string  `json:"description"`
+	Platform           string  `json:"platform"`
+	RateMultiplier     float64 `json:"rate_multiplier"`
+	PeakRateEnabled    bool    `json:"peak_rate_enabled"`
+	PeakStart          string  `json:"peak_start"`
+	PeakEnd            string  `json:"peak_end"`
+	PeakRateMultiplier float64 `json:"peak_rate_multiplier"`
+	IsExclusive        bool    `json:"is_exclusive"`
+	Status             string  `json:"status"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
@@ -200,9 +204,16 @@ type Account struct {
 	TempUnschedulableUntil  *time.Time `json:"temp_unschedulable_until"`
 	TempUnschedulableReason string     `json:"temp_unschedulable_reason"`
 
-	SessionWindowStart  *time.Time `json:"session_window_start"`
-	SessionWindowEnd    *time.Time `json:"session_window_end"`
-	SessionWindowStatus string     `json:"session_window_status"`
+	SessionWindowStart          *time.Time `json:"session_window_start"`
+	SessionWindowEnd            *time.Time `json:"session_window_end"`
+	SessionWindowStatus         string     `json:"session_window_status"`
+	ParentAccountID             *int64     `json:"parent_account_id,omitempty"`
+	QuotaDimension              string     `json:"quota_dimension,omitempty"`
+	ParentEmail                 string     `json:"parent_email,omitempty"`
+	ParentPlanType              string     `json:"parent_plan_type,omitempty"`
+	ParentPrivacyMode           string     `json:"parent_privacy_mode,omitempty"`
+	ParentSubscriptionExpiresAt string     `json:"parent_subscription_expires_at,omitempty"`
+	ParentChatGPTAccountID      string     `json:"parent_chatgpt_account_id,omitempty"`
 
 	// 5h窗口费用控制（仅 Anthropic OAuth/SetupToken 账号有效）
 	// 从 extra 字段提取，方便前端显示和编辑

@@ -537,7 +537,7 @@ func (s *SchedulerSnapshotService) rebuildBucket(ctx context.Context, bucket Sch
 	if s.cache == nil {
 		return ErrSchedulerCacheNotReady
 	}
-	ok, err := s.cache.TryLockBucket(ctx, bucket, 30*time.Second)
+	lockOwner, ok, err := s.cache.TryLockBucket(ctx, bucket, 30*time.Second)
 	if err != nil {
 		return err
 	}
@@ -545,7 +545,7 @@ func (s *SchedulerSnapshotService) rebuildBucket(ctx context.Context, bucket Sch
 		return nil
 	}
 	defer func() {
-		_ = s.cache.UnlockBucket(ctx, bucket)
+		_ = s.cache.UnlockBucket(ctx, bucket, lockOwner)
 	}()
 
 	rebuildCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

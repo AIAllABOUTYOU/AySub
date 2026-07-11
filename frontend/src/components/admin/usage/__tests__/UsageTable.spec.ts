@@ -1,3 +1,11 @@
+const ipGeoMocks = vi.hoisted(() => ({
+  getEntry: vi.fn(() => ({ status: 'idle' as const })),
+  fetchOne: vi.fn(),
+  fetchBatch: vi.fn(),
+}))
+
+vi.mock('@/utils/ipGeoLookup', () => ipGeoMocks)
+
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -320,6 +328,106 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('Per-image price')
     expect(text).toContain('not recorded')
     expect(text).not.toContain('(2K)')
+  })
+})
+
+describe('admin UsageTable IP geolocation batch toolbar', () => {
+  const DataTableStubWithIp = {
+    props: ['data'],
+    template: `
+      <div>
+        <div v-for="row in data" :key="row.request_id">
+          <slot name="cell-ip_address" :row="row" />
+        </div>
+      </div>
+    `,
+  }
+
+  beforeEach(() => {
+    ipGeoMocks.getEntry.mockReset()
+    ipGeoMocks.fetchOne.mockReset()
+    ipGeoMocks.fetchBatch.mockReset()
+    ipGeoMocks.getEntry.mockReturnValue({ status: 'idle' })
+  })
+
+  it('does not render the batch toolbar when the ip_address column is not visible', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ request_id: 'r1', ip_address: '8.8.8.8' }],
+        loading: false,
+        columns: [],
+      },
+      global: { stubs: { DataTable: DataTableStubWithIp, EmptyState: true, Teleport: true } },
+    })
+    expect(wrapper.text()).not.toContain('usage.ipGeo.batchFetch')
+  })
+
+  it('renders the batch toolbar with a pending count when the ip_address column is visible', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { request_id: 'r1', ip_address: '8.8.8.8' },
+          { request_id: 'r2', ip_address: '8.8.8.8' },
+          { request_id: 'r3', ip_address: '1.1.1.1' },
+        ],
+        loading: false,
+        columns: [{ key: 'ip_address', label: 'IP' }],
+      },
+      global: { stubs: { DataTable: DataTableStubWithIp, EmptyState: true, Teleport: true } },
+    })
+    expect(wrapper.text()).toContain('usage.ipGeo.pending')
+    expect((wrapper.find('button').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('fetches deduplicated current-page IPs', async () => {
+    ipGeoMocks.fetchBatch.mockResolvedValue(true)
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          { request_id: 'r1', ip_address: '8.8.8.8' },
+          { request_id: 'r2', ip_address: '8.8.8.8' },
+          { request_id: 'r3', ip_address: '1.1.1.1' },
+        ],
+        loading: false,
+        columns: [{ key: 'ip_address', label: 'IP' }],
+      },
+      global: { stubs: { DataTable: DataTableStubWithIp, EmptyState: true, Teleport: true } },
+    })
+    await wrapper.find('button').trigger('click')
+    expect(ipGeoMocks.fetchBatch).toHaveBeenCalledWith(['8.8.8.8', '1.1.1.1'])
+    expect(wrapper.emitted('ipGeoBatchFailed')).toBeUndefined()
+  })
+
+  it('emits ipGeoBatchFailed on a network-level batch failure', async () => {
+    ipGeoMocks.fetchBatch.mockResolvedValue(false)
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ request_id: 'r1', ip_address: '8.8.8.8' }],
+        loading: false,
+        columns: [{ key: 'ip_address', label: 'IP' }],
+      },
+      global: { stubs: { DataTable: DataTableStubWithIp, EmptyState: true, Teleport: true } },
+    })
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.emitted('ipGeoBatchFailed')).toHaveLength(1)
+  })
+
+  it('renders IpGeoCell content for IP address cells', () => {
+    ipGeoMocks.getEntry.mockReturnValue({
+      status: 'success',
+      label: 'CN · Guangdong · Shenzhen',
+      detail: {},
+    })
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ request_id: 'r1', ip_address: '121.35.47.43' }],
+        loading: false,
+        columns: [{ key: 'ip_address', label: 'IP' }],
+      },
+      global: { stubs: { DataTable: DataTableStubWithIp, EmptyState: true, Teleport: true } },
+    })
+    expect(wrapper.text()).toContain('121.35.47.43')
+    expect(wrapper.text()).toContain('CN · Guangdong · Shenzhen')
   })
 })
 

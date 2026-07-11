@@ -52,6 +52,12 @@
       </button>
     </div>
 
+    <div v-if="resetCreditExpirations.length" class="space-y-0.5 text-[10px] text-gray-600 dark:text-gray-300">
+      <div v-for="(expiresAt, index) in resetCreditExpirations" :key="`${expiresAt}-${index}`">
+        {{ t('admin.accounts.openaiQuotaReset.expiresAt', { time: formatResetCreditExpiry(expiresAt) }) }}
+      </div>
+    </div>
+
     <div v-if="error" class="text-[10px] text-red-600 dark:text-red-400" :title="error">
       {{ truncatedError }}
     </div>
@@ -97,9 +103,28 @@ const error = ref<string | null>(null)
 const data = ref<OpenAIQuotaUsage | null>(null)
 const resetMessage = ref<string | null>(null)
 const showResetConfirm = ref(false)
+const isShadow = computed(() => props.account.parent_account_id != null)
 
 const availableResetCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
-const canReset = computed(() => availableResetCount.value > 0)
+const resetCreditExpirations = computed(() =>
+  (data.value?.rate_limit_reset_credits?.credits ?? [])
+    .map((credit) => credit.expires_at?.trim() ?? '')
+    .filter(Boolean)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+)
+const canReset = computed(() => !isShadow.value && availableResetCount.value > 0)
+
+const formatResetCreditExpiry = (value: string): string => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
+}
 
 const countButtonTitle = computed(() => {
   if (!data.value) return t('admin.accounts.openaiQuotaReset.countTooltipLoad')
@@ -107,6 +132,7 @@ const countButtonTitle = computed(() => {
 })
 
 const resetButtonTitle = computed(() => {
+	if (isShadow.value) return t('admin.accounts.openaiQuotaReset.resetTooltipShadow')
   if (!data.value) return t('admin.accounts.openaiQuotaReset.resetTooltipNeedQuery')
   if (!canReset.value) return t('admin.accounts.openaiQuotaReset.resetTooltipNoCredits')
   return t('admin.accounts.openaiQuotaReset.resetTooltipReady')
@@ -148,7 +174,8 @@ async function handleQuery() {
 
 function openResetConfirm() {
   if (resetting.value || loading.value) return
-  if (!canReset.value) {
+	if (isShadow.value) return
+	if (!canReset.value) {
     error.value = t('admin.accounts.openaiQuotaReset.noCreditsAvailable')
     return
   }
@@ -158,7 +185,8 @@ function openResetConfirm() {
 async function confirmReset() {
   showResetConfirm.value = false
   if (resetting.value) return
-  if (!canReset.value) {
+	if (isShadow.value) return
+	if (!canReset.value) {
     error.value = t('admin.accounts.openaiQuotaReset.noCreditsAvailable')
     return
   }

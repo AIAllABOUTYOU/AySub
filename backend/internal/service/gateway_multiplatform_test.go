@@ -27,6 +27,10 @@ type mockAccountRepoForPlatform struct {
 	getByIDCalls     int
 }
 
+func (m *mockAccountRepoForPlatform) ListShadowsByParent(context.Context, int64) ([]*Account, error) {
+	return nil, nil
+}
+
 func (m *mockAccountRepoForPlatform) GetByID(ctx context.Context, id int64) (*Account, error) {
 	m.getByIDCalls++
 	if acc, ok := m.accountsByID[id]; ok {

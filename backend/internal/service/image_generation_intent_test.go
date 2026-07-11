@@ -92,6 +92,14 @@ func TestIsImageGenerationIntent(t *testing.T) {
 	}
 }
 
+func TestIsImageGenerationIntent_NamespaceToolChoice(t *testing.T) {
+	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-5.5", []byte(`{"tool_choice":{"type":"namespace","name":"image_gen"}}`)))
+	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-5.5", []byte(`{"tool_choice":{"type":"namespace","namespace":"image_gen"}}`)))
+	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-5.5", []byte(`{"tool_choice":{"tool":{"type":"namespace","name":"image_gen"}}}`)))
+	require.False(t, IsImageGenerationIntent("/v1/responses", "gpt-5.5", []byte(`{"tool_choice":{"function":{"name":"imagegen"}}}`)))
+	require.False(t, IsImageGenerationIntent("/v1/responses", "gpt-5.5", []byte(`{"tools":[{"type":"namespace","name":"media_tools","tools":[{"type":"function","name":"imagegen"}]}]}`)))
+}
+
 func TestIsImageGenerationIntentMap_NamespaceImageGen(t *testing.T) {
 	tests := []struct {
 		name    string

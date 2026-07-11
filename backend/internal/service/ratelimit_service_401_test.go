@@ -21,6 +21,12 @@ type rateLimitAccountRepoStub struct {
 	lastCredentials        map[string]any
 	lastErrorMsg           string
 	lastTempReason         string
+	lastExtraUpdates       map[string]any
+}
+
+func (r *rateLimitAccountRepoStub) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	r.lastExtraUpdates = updates
+	return nil
 }
 
 func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, errorMsg string) error {
@@ -106,9 +112,7 @@ func TestRateLimitService_HandleUpstreamError_OAuth401SetsTempUnschedulable(t *t
 		require.Len(t, invalidator.accounts, 1)
 	})
 
-	t.Run("antigravity_401_uses_SetError", func(t *testing.T) {
-		// Antigravity 401 由 applyErrorPolicy 的 temp_unschedulable_rules 控制，
-		// HandleUpstreamError 中走 SetError 路径。
+	t.Run("antigravity_401_marks_force_refresh", func(t *testing.T) {
 		repo := &rateLimitAccountRepoStub{}
 		invalidator := &tokenCacheInvalidatorRecorder{}
 		service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
@@ -117,14 +121,19 @@ func TestRateLimitService_HandleUpstreamError_OAuth401SetsTempUnschedulable(t *t
 			ID:       100,
 			Platform: PlatformAntigravity,
 			Type:     AccountTypeOAuth,
+			Credentials: map[string]any{
+				"refresh_token": "ag-refresh-token",
+			},
 		}
 
 		shouldDisable := service.HandleUpstreamError(context.Background(), account, 401, http.Header{}, []byte("unauthorized"))
 
 		require.True(t, shouldDisable)
-		require.Equal(t, 1, repo.setErrorCalls)
-		require.Equal(t, 0, repo.tempCalls)
-		require.Empty(t, invalidator.accounts)
+		require.Equal(t, 0, repo.setErrorCalls)
+		require.Equal(t, 1, repo.tempCalls)
+		require.Len(t, invalidator.accounts, 1)
+		require.Equal(t, true, repo.lastExtraUpdates[antigravityForceTokenRefreshExtraKey])
+		require.True(t, accountNeedsAntigravityForceTokenRefresh(account))
 	})
 }
 

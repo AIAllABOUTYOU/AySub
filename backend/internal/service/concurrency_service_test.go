@@ -102,7 +102,6 @@ func (c *stubConcurrencyCacheForTest) GetUsersLoadBatch(_ context.Context, _ []U
 func (c *stubConcurrencyCacheForTest) CleanupExpiredAccountSlots(_ context.Context, _ int64) error {
 	return c.cleanupErr
 }
-
 func (c *stubConcurrencyCacheForTest) CleanupStaleProcessSlots(_ context.Context, _ string) error {
 	return c.cleanupErr
 }

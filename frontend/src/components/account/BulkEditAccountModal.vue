@@ -486,6 +486,48 @@
         </div>
       </div>
 
+      <!-- Custom request headers -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="flex items-center justify-between">
+          <div class="flex-1 pr-4">
+            <label class="input-label mb-0" for="bulk-edit-custom-headers-enabled">
+              {{ t('admin.accounts.customHeaders') }}
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.customHeadersDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="enableCustomHeaders"
+            id="bulk-edit-custom-headers-enabled"
+            type="checkbox"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div v-if="enableCustomHeaders" class="mt-3 space-y-3">
+          <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="customHeadersEnabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+            {{ customHeadersEnabled ? t('common.enabled') : t('common.disabled') }}
+          </label>
+          <p class="text-xs text-amber-600 dark:text-amber-400">
+            {{ customHeadersEnabled ? t('admin.accounts.bulkEdit.customHeadersReplaceHint') : t('admin.accounts.bulkEdit.customHeadersClearHint') }}
+          </p>
+          <template v-if="customHeadersEnabled">
+            <div v-for="(header, index) in customHeaders" :key="index" class="flex items-center gap-2">
+              <input v-model="header.key" type="text" class="input flex-1" :placeholder="t('admin.accounts.customHeadersKeyPlaceholder')" />
+              <input v-model="header.value" type="text" class="input flex-1" :placeholder="t('admin.accounts.customHeadersValuePlaceholder')" />
+              <button type="button" class="rounded p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" :title="t('common.delete')" @click="removeCustomHeader(index)">
+                <Icon name="trash" size="sm" />
+              </button>
+            </div>
+            <button type="button" class="btn btn-secondary w-full" @click="addCustomHeader">
+              <Icon name="plus" size="sm" class="mr-1" />
+              {{ t('admin.accounts.customHeadersAdd') }}
+            </button>
+          </template>
+        </div>
+      </div>
+
       <!-- Proxy -->
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -742,44 +784,44 @@
         </div>
       </div>
 
-      <!-- OpenAI OAuth: 额外放行 Claude Code 的 Codex 插件 -->
+      <!-- OpenAI OAuth: Codex app-server -->
       <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
           <label
-            id="bulk-edit-openai-codex-allow-claude-code-label"
+            id="bulk-edit-openai-codex-app-server-label"
             class="input-label mb-0"
-            for="bulk-edit-openai-codex-allow-claude-code-enabled"
+            for="bulk-edit-openai-codex-app-server-enabled"
           >
-            {{ t('admin.accounts.openai.codexCLIOnlyAllowClaudeCode') }}
+            {{ t('admin.accounts.openai.codexCLIOnlyAppServer') }}
           </label>
           <input
-            v-model="enableCodexCLIOnlyAllowClaudeCode"
-            id="bulk-edit-openai-codex-allow-claude-code-enabled"
+            v-model="enableCodexCLIOnlyAppServer"
+            id="bulk-edit-openai-codex-app-server-enabled"
             type="checkbox"
-            aria-controls="bulk-edit-openai-codex-allow-claude-code"
+            aria-controls="bulk-edit-openai-codex-app-server"
             class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
           />
         </div>
         <div
-          id="bulk-edit-openai-codex-allow-claude-code"
-          :class="!enableCodexCLIOnlyAllowClaudeCode && 'pointer-events-none opacity-50'"
+          id="bulk-edit-openai-codex-app-server"
+          :class="!enableCodexCLIOnlyAppServer && 'pointer-events-none opacity-50'"
         >
           <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.accounts.openai.codexCLIOnlyAllowClaudeCodeDesc') }}
+            {{ t('admin.accounts.openai.codexCLIOnlyAppServerDesc') }}
           </p>
           <button
-            id="bulk-edit-openai-codex-allow-claude-code-toggle"
+            id="bulk-edit-openai-codex-app-server-toggle"
             type="button"
             :class="[
               'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              codexCLIOnlyAllowClaudeCodeEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              codexCLIOnlyAppServerEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
             ]"
-            @click="codexCLIOnlyAllowClaudeCodeEnabled = !codexCLIOnlyAllowClaudeCodeEnabled"
+            @click="codexCLIOnlyAppServerEnabled = !codexCLIOnlyAppServerEnabled"
           >
             <span
               :class="[
                 'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                codexCLIOnlyAllowClaudeCodeEnabled ? 'translate-x-5' : 'translate-x-0'
+                codexCLIOnlyAppServerEnabled ? 'translate-x-5' : 'translate-x-0'
               ]"
             />
           </button>
@@ -1212,6 +1254,7 @@ import {
   resolveOpenAIWSModeConcurrencyHintKey
 } from '@/utils/openaiWsMode'
 import type { OpenAIWSMode } from '@/utils/openaiWsMode'
+import { normalizeCustomHeaderRows, type CustomHeaderRow } from '@/utils/customHeaders'
 interface Props {
   show: boolean
   accountIds: number[]
@@ -1307,6 +1350,7 @@ const enableBaseUrl = ref(false)
 const enableModelRestriction = ref(false)
 const enableCustomErrorCodes = ref(false)
 const enableInterceptWarmup = ref(false)
+const enableCustomHeaders = ref(false)
 const enableProxy = ref(false)
 const enableConcurrency = ref(false)
 const enableLoadFactor = ref(false)
@@ -1318,7 +1362,7 @@ const enableOpenAIPassthrough = ref(false)
 const enableOpenAIWSMode = ref(false)
 const enableOpenAIAPIKeyWSMode = ref(false)
 const enableCodexCLIOnly = ref(false)
-const enableCodexCLIOnlyAllowClaudeCode = ref(false)
+const enableCodexCLIOnlyAppServer = ref(false)
 const enableOpenAICompactMode = ref(false)
 const enableOpenAICompactModelMapping = ref(false)
 const enableRpmLimit = ref(false)
@@ -1337,6 +1381,8 @@ const modelMappings = ref<ModelMapping[]>([])
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
+const customHeadersEnabled = ref(true)
+const customHeaders = ref<CustomHeaderRow[]>([])
 const proxyId = ref<number | null>(null)
 const concurrency = ref(1)
 const loadFactor = ref<number | null>(null)
@@ -1348,7 +1394,7 @@ const openaiPassthroughEnabled = ref(false)
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
-const codexCLIOnlyAllowClaudeCodeEnabled = ref(false)
+const codexCLIOnlyAppServerEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const rpmLimitEnabled = ref(false)
@@ -1489,6 +1535,9 @@ const removeErrorCode = (code: number) => {
   }
 }
 
+const addCustomHeader = () => customHeaders.value.push({ key: '', value: '' })
+const removeCustomHeader = (index: number) => customHeaders.value.splice(index, 1)
+
 const buildModelMappingObject = (): Record<string, string> | null => {
   return buildModelMappingPayload(
     modelRestrictionMode.value,
@@ -1589,6 +1638,13 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     credentialsChanged = true
   }
 
+  if (enableCustomHeaders.value) {
+    const extra = ensureExtra()
+    extra.custom_headers = customHeadersEnabled.value
+      ? normalizeCustomHeaderRows(customHeaders.value).headers
+      : {}
+  }
+
   if (enableOpenAIWSMode.value) {
     const extra = ensureExtra()
     extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
@@ -1610,9 +1666,13 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.codex_cli_only = codexCLIOnlyEnabled.value
   }
 
-  if (enableCodexCLIOnlyAllowClaudeCode.value) {
+  if (
+    enableCodexCLIOnlyAppServer.value &&
+    enableCodexCLIOnly.value &&
+    codexCLIOnlyEnabled.value
+  ) {
     const extra = ensureExtra()
-    extra.codex_cli_only_allowed_clients = codexCLIOnlyAllowClaudeCodeEnabled.value ? ['claude_code'] : []
+    extra.codex_cli_only_allow_app_server = codexCLIOnlyAppServerEnabled.value
   }
 
   if (enableOpenAICompactMode.value) {
@@ -1755,6 +1815,7 @@ const handleSubmit = async () => {
     enableModelRestriction.value ||
     enableCustomErrorCodes.value ||
     enableInterceptWarmup.value ||
+    enableCustomHeaders.value ||
     enableProxy.value ||
     enableConcurrency.value ||
     enableLoadFactor.value ||
@@ -1765,7 +1826,7 @@ const handleSubmit = async () => {
     enableOpenAIWSMode.value ||
     enableOpenAIAPIKeyWSMode.value ||
     enableCodexCLIOnly.value ||
-    enableCodexCLIOnlyAllowClaudeCode.value ||
+    enableCodexCLIOnlyAppServer.value ||
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
     enableRpmLimit.value ||
@@ -1774,6 +1835,14 @@ const handleSubmit = async () => {
   if (!hasAnyFieldEnabled) {
     appStore.showError(t('admin.accounts.bulkEdit.noFieldsSelected'))
     return
+  }
+
+  if (enableCustomHeaders.value && customHeadersEnabled.value) {
+    const normalized = normalizeCustomHeaderRows(customHeaders.value)
+    if (normalized.error) {
+      appStore.showError(t(`admin.accounts.customHeadersErrors.${normalized.error}`))
+      return
+    }
   }
 
   const built = buildUpdatePayload()
@@ -1857,6 +1926,7 @@ watch(
       enableModelRestriction.value = false
       enableCustomErrorCodes.value = false
       enableInterceptWarmup.value = false
+      enableCustomHeaders.value = false
       enableProxy.value = false
       enableConcurrency.value = false
       enableLoadFactor.value = false
@@ -1868,7 +1938,7 @@ watch(
       enableOpenAIWSMode.value = false
       enableOpenAIAPIKeyWSMode.value = false
       enableCodexCLIOnly.value = false
-      enableCodexCLIOnlyAllowClaudeCode.value = false
+      enableCodexCLIOnlyAppServer.value = false
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false
@@ -1882,6 +1952,8 @@ watch(
       selectedErrorCodes.value = []
       customErrorCodeInput.value = null
       interceptWarmupRequests.value = false
+      customHeadersEnabled.value = true
+      customHeaders.value = []
       proxyId.value = null
       concurrency.value = 1
       loadFactor.value = null
@@ -1892,7 +1964,7 @@ watch(
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       codexCLIOnlyEnabled.value = false
-      codexCLIOnlyAllowClaudeCodeEnabled.value = false
+      codexCLIOnlyAppServerEnabled.value = false
       openAICompactMode.value = 'auto'
       openAICompactModelMappings.value = []
       rpmLimitEnabled.value = false

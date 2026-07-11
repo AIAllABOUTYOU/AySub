@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/enttest"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -102,22 +104,26 @@ func TestParsePaymentConfig(t *testing.T) {
 		if len(cfg.EnabledTypes) != 0 {
 			t.Fatalf("expected empty EnabledTypes, got %v", cfg.EnabledTypes)
 		}
+		if cfg.SubscriptionUSDToCNYRate != 0 {
+			t.Fatalf("expected subscription CNY conversion disabled, got %v", cfg.SubscriptionUSDToCNYRate)
+		}
 	})
 
 	t.Run("all values populated", func(t *testing.T) {
 		t.Parallel()
 		vals := map[string]string{
-			SettingPaymentEnabled:      "true",
-			SettingMinRechargeAmount:   "5.00",
-			SettingMaxRechargeAmount:   "1000.00",
-			SettingDailyRechargeLimit:  "5000.00",
-			SettingOrderTimeoutMinutes: "15",
-			SettingMaxPendingOrders:    "5",
-			SettingEnabledPaymentTypes: "alipay,wxpay,stripe",
-			SettingBalancePayDisabled:  "true",
-			SettingLoadBalanceStrategy: "least_amount",
-			SettingProductNamePrefix:   "PRE",
-			SettingProductNameSuffix:   "SUF",
+			SettingPaymentEnabled:           "true",
+			SettingMinRechargeAmount:        "5.00",
+			SettingMaxRechargeAmount:        "1000.00",
+			SettingDailyRechargeLimit:       "5000.00",
+			SettingOrderTimeoutMinutes:      "15",
+			SettingMaxPendingOrders:         "5",
+			SettingEnabledPaymentTypes:      "alipay,wxpay,stripe",
+			SettingBalancePayDisabled:       "true",
+			SettingSubscriptionUSDToCNYRate: "7.123456",
+			SettingLoadBalanceStrategy:      "least_amount",
+			SettingProductNamePrefix:        "PRE",
+			SettingProductNameSuffix:        "SUF",
 		}
 		cfg := svc.parsePaymentConfig(vals)
 
@@ -147,6 +153,9 @@ func TestParsePaymentConfig(t *testing.T) {
 		}
 		if !cfg.BalanceDisabled {
 			t.Fatal("expected BalanceDisabled=true")
+		}
+		if cfg.SubscriptionUSDToCNYRate != 7.123456 {
+			t.Fatalf("SubscriptionUSDToCNYRate = %v, want 7.123456", cfg.SubscriptionUSDToCNYRate)
 		}
 		if cfg.LoadBalanceStrategy != "least_amount" {
 			t.Fatalf("LoadBalanceStrategy = %q, want %q", cfg.LoadBalanceStrategy, "least_amount")
@@ -197,6 +206,49 @@ func TestParsePaymentConfig(t *testing.T) {
 			t.Fatalf("expected empty EnabledTypes for empty string, got %v", cfg.EnabledTypes)
 		}
 	})
+}
+
+func TestUpdatePaymentConfigSubscriptionUSDToCNYRate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		rate       float64
+		wantStored string
+		wantReason string
+	}{
+		{name: "disabled", rate: 0, wantStored: "0"},
+		{name: "full precision", rate: 7.123456, wantStored: "7.123456"},
+		{name: "negative", rate: -1, wantReason: "INVALID_SUBSCRIPTION_USD_TO_CNY_RATE"},
+		{name: "nan", rate: math.NaN(), wantReason: "INVALID_SUBSCRIPTION_USD_TO_CNY_RATE"},
+		{name: "positive infinity", rate: math.Inf(1), wantReason: "INVALID_SUBSCRIPTION_USD_TO_CNY_RATE"},
+		{name: "negative infinity", rate: math.Inf(-1), wantReason: "INVALID_SUBSCRIPTION_USD_TO_CNY_RATE"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &paymentConfigSettingRepoStub{values: map[string]string{}}
+			svc := &PaymentConfigService{settingRepo: repo}
+			err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{SubscriptionUSDToCNYRate: &tt.rate})
+			if tt.wantReason != "" {
+				if err == nil || infraerrors.Reason(err) != tt.wantReason {
+					t.Fatalf("error = %v, want reason %q", err, tt.wantReason)
+				}
+				if repo.updates != nil {
+					t.Fatalf("invalid rate must not persist settings: %v", repo.updates)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := repo.updates[SettingSubscriptionUSDToCNYRate]; got != tt.wantStored {
+				t.Fatalf("stored rate = %q, want %q", got, tt.wantStored)
+			}
+		})
+	}
 }
 
 func TestGetBasePaymentType(t *testing.T) {

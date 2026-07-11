@@ -3,11 +3,88 @@
 package repository
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
+
+func newSchedulerCacheUnitTest(t *testing.T) (context.Context, *schedulerCache, *miniredis.Miniredis, *redis.Client) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	return context.Background(), newSchedulerCacheWithChunkSizes(rdb, 8, 8).(*schedulerCache), mr, rdb
+}
+
+func TestSchedulerCacheListBucketsReconcilesActiveIndex(t *testing.T) {
+	ctx, cache, _, rdb := newSchedulerCacheUnitTest(t)
+	active := service.SchedulerBucket{GroupID: 1, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+	stale := service.SchedulerBucket{GroupID: 2, Platform: service.PlatformGemini, Mode: service.SchedulerModeMixed}
+
+	require.NoError(t, cache.SetSnapshot(ctx, active, []service.Account{{ID: 11}}))
+	require.NoError(t, rdb.SAdd(ctx, schedulerBucketSetKey, stale.String(), "invalid-bucket").Err())
+
+	buckets, err := cache.ListBuckets(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []service.SchedulerBucket{active}, buckets)
+	require.False(t, rdb.SIsMember(ctx, schedulerBucketSetKey, stale.String()).Val())
+	require.False(t, rdb.SIsMember(ctx, schedulerBucketSetKey, "invalid-bucket").Val())
+}
+
+func TestSchedulerCacheExpiredOwnerCannotReleaseNewLock(t *testing.T) {
+	ctx, cache, mr, rdb := newSchedulerCacheUnitTest(t)
+	bucket := service.SchedulerBucket{GroupID: 3, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}
+
+	oldOwner, acquired, err := cache.TryLockBucket(ctx, bucket, time.Second)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	mr.FastForward(2 * time.Second)
+
+	newOwner, acquired, err := cache.TryLockBucket(ctx, bucket, time.Minute)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.NotEqual(t, oldOwner, newOwner)
+	require.NoError(t, cache.UnlockBucket(ctx, bucket, oldOwner))
+
+	value, err := rdb.Get(ctx, schedulerBucketKey(schedulerLockPrefix, bucket)).Result()
+	require.NoError(t, err)
+	require.Equal(t, newOwner, value)
+}
+
+func TestSchedulerCacheReconcileExpiredBucketLocks(t *testing.T) {
+	ctx, cache, mr, rdb := newSchedulerCacheUnitTest(t)
+	expired := service.SchedulerBucket{GroupID: 4, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeMixed}
+	anomalous := service.SchedulerBucket{GroupID: 5, Platform: service.PlatformGemini, Mode: service.SchedulerModeSingle}
+
+	_, acquired, err := cache.TryLockBucket(ctx, expired, time.Second)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	mr.FastForward(2 * time.Second)
+
+	now, err := rdb.Time(ctx).Result()
+	require.NoError(t, err)
+	require.NoError(t, rdb.ZAdd(ctx, schedulerLockIndexKey, redis.Z{
+		Score:  float64(now.UnixMilli()),
+		Member: expired.String(),
+	}).Err())
+	require.NoError(t, rdb.Set(ctx, schedulerBucketKey(schedulerLockPrefix, anomalous), "orphan-owner", 0).Err())
+	_, acquired, err = cache.TryLockBucket(ctx, anomalous, time.Minute)
+	require.NoError(t, err)
+	require.False(t, acquired)
+	require.NoError(t, rdb.ZScore(ctx, schedulerLockIndexKey, anomalous.String()).Err())
+
+	cleaned, err := cache.reconcileExpiredBucketLocks(ctx, schedulerLockCleanupBatchSize)
+	require.NoError(t, err)
+	require.Equal(t, 1, cleaned)
+	require.EqualValues(t, 0, rdb.Exists(ctx, schedulerBucketKey(schedulerLockPrefix, anomalous)).Val())
+	require.ErrorIs(t, rdb.ZScore(ctx, schedulerLockIndexKey, expired.String()).Err(), redis.Nil)
+	require.ErrorIs(t, rdb.ZScore(ctx, schedulerLockIndexKey, anomalous.String()).Err(), redis.Nil)
+}
 
 func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	account := service.Account{
@@ -133,4 +210,26 @@ func TestBuildSchedulerMetadataAccount_KeepsModelRateLimits(t *testing.T) {
 	require.Contains(t, limits, "gemini-3-flash")
 	require.Contains(t, limits, "antigravity:gemini")
 	require.Nil(t, got.Extra["unused_large_field"])
+}
+
+func TestBuildSchedulerMetadataAccount_KeepsSparkShadowRoutingIdentity(t *testing.T) {
+	parentID := int64(100)
+	account := service.Account{
+		ID:              200,
+		Platform:        service.PlatformOpenAI,
+		Type:            service.AccountTypeOAuth,
+		ParentAccountID: &parentID,
+		QuotaDimension:  service.QuotaDimensionSpark,
+		Credentials: map[string]any{
+			"model_mapping":         map[string]any{"gpt-5.3-codex-spark": "gpt-5.3-codex-spark"},
+			"compact_model_mapping": map[string]any{"gpt-5.4": "gpt-5.4-openai-compact"},
+			"access_token":          "drop-me",
+		},
+	}
+	got := buildSchedulerMetadataAccount(account)
+	require.Equal(t, parentID, *got.ParentAccountID)
+	require.Equal(t, service.QuotaDimensionSpark, got.QuotaDimension)
+	require.NotNil(t, got.Credentials["model_mapping"])
+	require.NotNil(t, got.Credentials["compact_model_mapping"])
+	require.Nil(t, got.Credentials["access_token"])
 }

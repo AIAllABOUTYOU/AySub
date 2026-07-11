@@ -52,6 +52,10 @@ type ConcurrencyCache interface {
 	CleanupStaleProcessSlots(ctx context.Context, activeRequestPrefix string) error
 }
 
+type ConcurrencyCleanupCache interface {
+	CleanupExpiredAccountSlotKeys(ctx context.Context) error
+}
+
 type APIKeyConcurrencyCache interface {
 	TrackAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error
 	ReleaseAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error
@@ -543,26 +547,22 @@ func (s *ConcurrencyService) CleanupExpiredAccountSlots(ctx context.Context, acc
 }
 
 // StartSlotCleanupWorker starts a background cleanup worker for expired account slots.
-func (s *ConcurrencyService) StartSlotCleanupWorker(accountRepo AccountRepository, interval time.Duration) {
-	if s == nil || s.cache == nil || accountRepo == nil || interval <= 0 {
+func (s *ConcurrencyService) StartSlotCleanupWorker(_ AccountRepository, interval time.Duration) {
+	if s == nil || s.cache == nil || interval <= 0 {
+		return
+	}
+	cleanupCache, ok := s.cache.(ConcurrencyCleanupCache)
+	if !ok {
 		return
 	}
 
 	runCleanup := func() {
-		listCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		accounts, err := accountRepo.ListSchedulable(listCtx)
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := cleanupCache.CleanupExpiredAccountSlotKeys(cleanupCtx)
 		cancel()
 		if err != nil {
-			logger.LegacyPrintf("service.concurrency", "Warning: list schedulable accounts failed: %v", err)
+			logger.LegacyPrintf("service.concurrency", "Warning: cleanup expired account slots failed: %v", err)
 			return
-		}
-		for _, account := range accounts {
-			accountCtx, accountCancel := context.WithTimeout(context.Background(), 2*time.Second)
-			err := s.cache.CleanupExpiredAccountSlots(accountCtx, account.ID)
-			accountCancel()
-			if err != nil {
-				logger.LegacyPrintf("service.concurrency", "Warning: cleanup expired slots failed for account %d: %v", account.ID, err)
-			}
 		}
 	}
 

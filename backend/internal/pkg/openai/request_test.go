@@ -2,6 +2,26 @@ package openai
 
 import "testing"
 
+func TestPairCodexClientIdentity(t *testing.T) {
+	tests := []struct {
+		name, ua, wantOriginator, wantUA string
+		wantOK                           bool
+	}{
+		{"leading identity", "codex_vscode/1.2.3", "codex_vscode", "codex_vscode/1.2.3", true},
+		{"desktop case preserved", "Codex Desktop/1.2.3", "Codex Desktop", "Codex Desktop/1.2.3", true},
+		{"trailer identity", "cccc/0.142.0 (Ubuntu; x86_64) (codex-tui; 0.142.0)", "codex-tui", "codex-tui/0.142.0 (Ubuntu; x86_64) (codex-tui; 0.142.0)", true},
+		{"third party rejected", "luna/1.0.0", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originator, ua, ok := PairCodexClientIdentity(tt.ua)
+			if ok != tt.wantOK || originator != tt.wantOriginator || ua != tt.wantUA {
+				t.Fatalf("got (%q, %q, %v), want (%q, %q, %v)", originator, ua, ok, tt.wantOriginator, tt.wantUA, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestIsCodexCLIRequest(t *testing.T) {
 	tests := []struct {
 		name string

@@ -18,8 +18,12 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 			"output_cost_per_token": 0.000015,
 			"output_cost_per_token_priority": 0.00003,
 			"cache_creation_input_token_cost": 0.0000025,
+			"cache_creation_input_token_cost_priority": 0.000005,
 			"cache_read_input_token_cost": 0.00000025,
 			"cache_read_input_token_cost_priority": 0.0000005,
+			"long_context_input_token_threshold": 272000,
+			"long_context_input_cost_multiplier": 2.0,
+			"long_context_output_cost_multiplier": 1.5,
 			"supports_service_tier": true,
 			"supports_prompt_caching": true,
 			"litellm_provider": "openai",
@@ -33,7 +37,11 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	require.NotNil(t, pricing)
 	require.InDelta(t, 5e-6, pricing.InputCostPerTokenPriority, 1e-12)
 	require.InDelta(t, 3e-5, pricing.OutputCostPerTokenPriority, 1e-12)
+	require.InDelta(t, 5e-6, pricing.CacheCreationInputTokenCostPriority, 1e-12)
 	require.InDelta(t, 5e-7, pricing.CacheReadInputTokenCostPriority, 1e-12)
+	require.Equal(t, 272000, pricing.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, pricing.LongContextOutputCostMultiplier, 1e-12)
 	require.True(t, pricing.SupportsServiceTier)
 }
 
@@ -125,7 +133,12 @@ func TestGetModelPricing_Gpt56UsesStaticFallbackWhenRemoteMissing(t *testing.T) 
 	require.InDelta(t, 2.5e-6, got.InputCostPerToken, 1e-12)
 	require.InDelta(t, 1.5e-5, got.OutputCostPerToken, 1e-12)
 	require.InDelta(t, 2.5e-7, got.CacheReadInputTokenCost, 1e-12)
+	require.InDelta(t, 3.125e-6, got.CacheCreationInputTokenCost, 1e-12)
 	require.Equal(t, 272000, got.LongContextInputTokenThreshold)
+
+	bare := svc.GetModelPricing("gpt-5.6")
+	require.NotNil(t, bare)
+	require.InDelta(t, 5e-6, bare.InputCostPerToken, 1e-12)
 }
 
 func TestDefaultPricingIncludesCodexAutoReview(t *testing.T) {
@@ -142,6 +155,42 @@ func TestDefaultPricingIncludesCodexAutoReview(t *testing.T) {
 	require.InDelta(t, 5e-6, got.InputCostPerToken, 1e-12)
 	require.InDelta(t, 3e-5, got.OutputCostPerToken, 1e-12)
 	require.InDelta(t, 5e-7, got.CacheReadInputTokenCost, 1e-12)
+}
+
+func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	svc := &PricingService{}
+	pricingData, err := svc.parsePricingData(data)
+	require.NoError(t, err)
+
+	tests := []struct {
+		model                                                             string
+		input, cached, cacheWrite, output                                 float64
+		inputPriority, cachedPriority, cacheWritePriority, outputPriority float64
+	}{
+		{model: "gpt-5.6-sol", input: 5e-6, cached: 0.5e-6, cacheWrite: 6.25e-6, output: 30e-6, inputPriority: 10e-6, cachedPriority: 1e-6, cacheWritePriority: 12.5e-6, outputPriority: 60e-6},
+		{model: "gpt-5.6-terra", input: 2.5e-6, cached: 0.25e-6, cacheWrite: 3.125e-6, output: 15e-6, inputPriority: 5e-6, cachedPriority: 0.5e-6, cacheWritePriority: 6.25e-6, outputPriority: 30e-6},
+		{model: "gpt-5.6-luna", input: 1e-6, cached: 0.1e-6, cacheWrite: 1.25e-6, output: 6e-6, inputPriority: 2e-6, cachedPriority: 0.2e-6, cacheWritePriority: 2.5e-6, outputPriority: 12e-6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			pricing := pricingData[tt.model]
+			require.NotNil(t, pricing)
+			require.InDelta(t, tt.input, pricing.InputCostPerToken, 1e-12)
+			require.InDelta(t, tt.cached, pricing.CacheReadInputTokenCost, 1e-12)
+			require.InDelta(t, tt.cacheWrite, pricing.CacheCreationInputTokenCost, 1e-12)
+			require.InDelta(t, tt.output, pricing.OutputCostPerToken, 1e-12)
+			require.InDelta(t, tt.inputPriority, pricing.InputCostPerTokenPriority, 1e-12)
+			require.InDelta(t, tt.cachedPriority, pricing.CacheReadInputTokenCostPriority, 1e-12)
+			require.InDelta(t, tt.cacheWritePriority, pricing.CacheCreationInputTokenCostPriority, 1e-12)
+			require.InDelta(t, tt.outputPriority, pricing.OutputCostPerTokenPriority, 1e-12)
+			require.Equal(t, 272000, pricing.LongContextInputTokenThreshold)
+			require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+			require.InDelta(t, 1.5, pricing.LongContextOutputCostMultiplier, 1e-12)
+		})
+	}
 }
 
 func TestGetModelPricing_Gpt54MiniUsesDedicatedStaticFallbackWhenRemoteMissing(t *testing.T) {

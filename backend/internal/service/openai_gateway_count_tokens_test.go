@@ -64,7 +64,7 @@ func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_APIKeyUsesResponsesI
 	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
 }
 
-func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthUnsupportedReturnsNotFound(t *testing.T) {
+func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthMissingScopeUsesLocalEstimate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -77,7 +77,7 @@ func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthUnsupportedRetu
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusUnauthorized,
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"unauthorized"}}`)),
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","code":"missing_scope","message":"Missing scopes: api.responses.write"}}`)),
 	}}
 
 	svc := &OpenAIGatewayService{
@@ -99,8 +99,8 @@ func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_OAuthUnsupportedRetu
 
 	err := svc.ForwardCountTokensAsAnthropic(context.Background(), c, account, body, "gpt-5.4")
 	require.NoError(t, err)
-	require.Equal(t, http.StatusNotFound, rec.Code)
-	require.Contains(t, rec.Body.String(), "Token counting is not supported for this OpenAI account type")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Greater(t, int(gjson.Get(rec.Body.String(), "input_tokens").Int()), 0)
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, "https://api.openai.com/v1/responses/input_tokens", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("authorization"))

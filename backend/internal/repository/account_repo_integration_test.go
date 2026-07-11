@@ -65,11 +65,11 @@ func (s *schedulerCacheRecorder) UpdateLastUsed(ctx context.Context, updates map
 	return nil
 }
 
-func (s *schedulerCacheRecorder) TryLockBucket(ctx context.Context, bucket service.SchedulerBucket, ttl time.Duration) (bool, error) {
-	return true, nil
+func (s *schedulerCacheRecorder) TryLockBucket(ctx context.Context, bucket service.SchedulerBucket, ttl time.Duration) (string, bool, error) {
+	return "test-owner", true, nil
 }
 
-func (s *schedulerCacheRecorder) UnlockBucket(ctx context.Context, bucket service.SchedulerBucket) error {
+func (s *schedulerCacheRecorder) UnlockBucket(ctx context.Context, bucket service.SchedulerBucket, owner string) error {
 	return nil
 }
 

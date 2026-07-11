@@ -14,6 +14,7 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-5.4-mini')
     expect(models).toContain('gpt-5.4-2026-03-05')
     expect(models).toContain('codex-auto-review')
+    expect(models).toContain('gpt-5.6')
   })
 
   it('openai 模型列表包含 GPT Image 1 Mini', () => {

@@ -1083,6 +1083,22 @@ func (s *defaultOpenAIAccountScheduler) isAccountTransportCompatible(account *Ac
 	return s.service.isOpenAIAccountTransportCompatible(account, requiredTransport)
 }
 
+func (s *defaultOpenAIAccountScheduler) lookupShadowParentAccount(ctx context.Context, id int64) *Account {
+	if s == nil || s.service == nil {
+		return nil
+	}
+	if s.service.schedulerSnapshot != nil {
+		if account, err := s.service.schedulerSnapshot.GetAccount(ctx, id); err == nil && account != nil {
+			return account
+		}
+	}
+	if s.service.accountRepo == nil {
+		return nil
+	}
+	account, _ := s.service.accountRepo.GetByID(ctx, id)
+	return account
+}
+
 func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) bool {
 	if account == nil {
 		return false
@@ -1095,6 +1111,11 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.C
 	// rechecks won't reach healthy accounts that fell outside TopK — manifesting as
 	// "no available accounts" even though healthy ones exist.
 	if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
+		return false
+	}
+	if !parentHealthyForShadow(account, func(id int64) *Account {
+		return s.lookupShadowParentAccount(ctx, id)
+	}) {
 		return false
 	}
 	if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
@@ -1457,6 +1478,58 @@ type GatewayOpenAIWSSchedulerScoreWeightsView struct {
 	TTFT      float64
 	// Reset 倾向「会话窗口最早重置」的账号；0 表示关闭（默认）。
 	Reset float64
+}
+
+type OpenAIAccountSchedulerScoreSnapshot struct {
+	BaseScore             float64
+	StickyScore           float64
+	StickyScoreInfinity   bool
+	StickyWeightedEnabled bool
+}
+
+func (s *RateLimitService) BuildOpenAIAccountSchedulerScoreSnapshot(
+	_ context.Context,
+	accounts []*Account,
+	loadMap map[int64]*AccountLoadInfo,
+) map[int64]OpenAIAccountSchedulerScoreSnapshot {
+	gateway := &OpenAIGatewayService{}
+	if s != nil {
+		gateway.cfg = s.cfg
+	}
+	return buildOpenAIAccountSchedulerScoreSnapshot(gateway, accounts, loadMap)
+}
+
+func BuildOpenAIAccountSchedulerScoreSnapshot(accounts []*Account, loadMap map[int64]*AccountLoadInfo) map[int64]OpenAIAccountSchedulerScoreSnapshot {
+	return buildOpenAIAccountSchedulerScoreSnapshot(&OpenAIGatewayService{}, accounts, loadMap)
+}
+
+func buildOpenAIAccountSchedulerScoreSnapshot(
+	gateway *OpenAIGatewayService,
+	accounts []*Account,
+	loadMap map[int64]*AccountLoadInfo,
+) map[int64]OpenAIAccountSchedulerScoreSnapshot {
+	if len(accounts) == 0 {
+		return nil
+	}
+	scheduler := newDefaultOpenAIAccountScheduler(gateway, nil)
+	concrete, ok := scheduler.(*defaultOpenAIAccountScheduler)
+	if !ok {
+		return nil
+	}
+	plan := concrete.buildOpenAIAccountLoadPlan(OpenAIAccountScheduleRequest{}, accounts, loadMap)
+	result := make(map[int64]OpenAIAccountSchedulerScoreSnapshot, len(plan.candidates))
+	for _, candidate := range plan.candidates {
+		if candidate.account == nil {
+			continue
+		}
+		result[candidate.account.ID] = OpenAIAccountSchedulerScoreSnapshot{
+			BaseScore:             candidate.score,
+			StickyScore:           candidate.score,
+			StickyScoreInfinity:   true,
+			StickyWeightedEnabled: false,
+		}
+	}
+	return result
 }
 
 func clamp01(value float64) float64 {
