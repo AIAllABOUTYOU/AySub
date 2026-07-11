@@ -2256,6 +2256,19 @@ func TestExtractOpenAIUsageFromJSONBytes_AcceptsResponseAndChatUsageShapes(t *te
 	require.Equal(t, 4, usage.CacheReadInputTokens)
 }
 
+func TestExtractOpenAIUsageFromJSONBytesPreservesCanonicalCacheWrite(t *testing.T) {
+	usage, ok := extractOpenAIUsageFromJSONBytes([]byte(`{"usage":{"prompt_tokens":20,"completion_tokens":5,"cache_creation_input_tokens":8,"prompt_tokens_details":{"cached_tokens":4,"cache_write_tokens":6}}}`))
+	require.True(t, ok)
+	require.Equal(t, 20, usage.InputTokens)
+	require.Equal(t, 5, usage.OutputTokens)
+	require.Equal(t, 4, usage.CacheReadInputTokens)
+	require.Equal(t, 6, usage.CacheCreationInputTokens)
+
+	usage, ok = extractOpenAIUsageFromJSONBytes([]byte(`{"usage":{"cache_creation_input_tokens":8,"input_tokens_details":{"cache_write_tokens":0}}}`))
+	require.True(t, ok)
+	require.Zero(t, usage.CacheCreationInputTokens)
+}
+
 func TestExtractCodexFinalResponse_SampleReplay(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message`,

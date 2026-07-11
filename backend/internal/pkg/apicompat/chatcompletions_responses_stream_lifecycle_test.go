@@ -45,6 +45,27 @@ func TestStream_ReasoningOpensItemBeforeDelta(t *testing.T) {
 	}
 }
 
+func TestStreamReasoningOnlySynthesizesVisibleText(t *testing.T) {
+	events := collectStreamEvents(t, []string{
+		`{"choices":[{"index":0,"delta":{"reasoning_content":"visible fallback"}}]}`,
+		`{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}`,
+	})
+
+	var sawDelta bool
+	for _, event := range events {
+		if event.Type == "response.output_text.delta" {
+			sawDelta = true
+			require.Equal(t, "visible fallback", event.Delta)
+		}
+		if event.Type == "response.completed" {
+			require.NotNil(t, event.Response)
+			require.Len(t, event.Response.Output, 2)
+			require.Equal(t, "visible fallback", event.Response.Output[1].Content[0].Text)
+		}
+	}
+	require.True(t, sawDelta)
+}
+
 // TestStream_ToolCallLifecycleComplete guards that a tool call is fully closed
 // (function_call_arguments.done + output_item.done with full arguments), which
 // codex needs to execute the call.

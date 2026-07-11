@@ -28,3 +28,21 @@ func TestResponsesUsageUnmarshalCacheCreationAliases(t *testing.T) {
 		})
 	}
 }
+
+func TestChatUsageToResponsesUsagePreservesCacheWriteTokens(t *testing.T) {
+	usage := ChatUsageToResponsesUsage(&ChatUsage{
+		PromptTokens:     20,
+		CompletionTokens: 5,
+		TotalTokens:      25,
+		PromptTokensDetails: &ChatTokenDetails{
+			CachedTokens:     4,
+			CacheWriteTokens: 6,
+		},
+	})
+
+	require.NotNil(t, usage)
+	require.Equal(t, 6, usage.CacheCreationInputTokens)
+	require.NotNil(t, usage.InputTokensDetails)
+	require.Equal(t, 4, usage.InputTokensDetails.CachedTokens)
+	require.Equal(t, 6, usage.InputTokensDetails.CacheWriteTokens)
+}

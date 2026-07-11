@@ -309,6 +309,22 @@ func TestChatCompletionsToResponses_EmptyContentNeverNull(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsResponseToResponsesReasoningOnlyFallsBackToMessageText(t *testing.T) {
+	content := json.RawMessage(`""`)
+	resp := &ChatCompletionsResponse{
+		ID: "chatcmpl_reasoning_only", Object: "chat.completion", Model: "deepseek-reasoner",
+		Choices: []ChatChoice{{
+			Message:      ChatMessage{Role: "assistant", Content: content, ReasoningContent: "reasoning-only answer"},
+			FinishReason: "stop",
+		}},
+	}
+
+	out := ChatCompletionsResponseToResponses(resp, "deepseek-reasoner", nil, false, nil)
+	require.Len(t, out.Output, 2)
+	require.Equal(t, "reasoning", out.Output[0].Type)
+	require.Equal(t, "reasoning-only answer", out.Output[1].Content[0].Text)
+}
+
 func TestChatCompletionsToResponses_SystemArrayContent(t *testing.T) {
 	req := &ChatCompletionsRequest{
 		Model: "gpt-4o",
