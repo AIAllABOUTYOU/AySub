@@ -3,6 +3,7 @@ import argparse
 import json
 import sys
 from datetime import date
+from typing import Optional
 
 
 HIGH_SEVERITIES = {"high", "critical"}
@@ -48,7 +49,7 @@ def parse_exceptions(path: str) -> list[dict]:
     return exceptions
 
 
-def pick_advisory_id(advisory: dict) -> str | None:
+def pick_advisory_id(advisory: dict) -> Optional[str]:
     # 优先使用可稳定匹配的标识（GHSA/URL/CVE），避免误匹配到其他同名漏洞。
     return (
         advisory.get("github_advisory_id")
@@ -131,7 +132,7 @@ def normalize_advisory(advisory: str) -> str:
     return str(advisory).strip().lower()
 
 
-def parse_date(value: str) -> date | None:
+def parse_date(value: str) -> Optional[date]:
     # 仅接受 ISO8601 日期格式，非法值视为无效。
     try:
         return date.fromisoformat(value)
