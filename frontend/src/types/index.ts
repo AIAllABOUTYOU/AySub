@@ -1391,6 +1391,8 @@ export interface XaiSSOBasicToken {
 export interface CodexSessionImportRequest {
   content?: string
   contents?: string[]
+  entry_start?: number
+  entry_limit?: number
   name?: string
   notes?: string | null
   group_ids?: number[]
@@ -1403,9 +1405,26 @@ export interface CodexSessionImportRequest {
   auto_pause_on_expired?: boolean
   credential_extras?: Record<string, unknown>
   extra?: Record<string, unknown>
+  index_offset?: number
+  total_items?: number
+  filter_http_status_401?: boolean
   update_existing?: boolean
   skip_default_group_bind?: boolean
   confirm_mixed_channel_risk?: boolean
+}
+
+export interface CodexSessionImportHTTPStatusItem {
+  index: number
+  name?: string
+  email?: string
+  account_id?: string
+  http_status: number
+}
+
+export interface CodexSessionImportPreviewResult {
+  total: number
+  source_entry_counts: number[]
+  http_status_401: CodexSessionImportHTTPStatusItem[]
 }
 
 export interface CodexSessionImportMessage {

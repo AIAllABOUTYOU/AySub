@@ -24,6 +24,11 @@ const codexImportClockSkewSeconds int64 = 120
 type CodexSessionImportRequest struct {
 	Content                 string         `json:"content"`
 	Contents                []string       `json:"contents"`
+	EntryStart              int            `json:"entry_start"`
+	EntryLimit              int            `json:"entry_limit"`
+	IndexOffset             int            `json:"index_offset"`
+	TotalItems              int            `json:"total_items"`
+	FilterHTTPStatus401     bool           `json:"filter_http_status_401"`
 	Name                    string         `json:"name"`
 	Notes                   *string        `json:"notes"`
 	GroupIDs                []int64        `json:"group_ids"`
@@ -64,6 +69,20 @@ type CodexSessionImportMessage struct {
 	Index   int    `json:"index"`
 	Name    string `json:"name,omitempty"`
 	Message string `json:"message"`
+}
+
+type CodexSessionPreviewResult struct {
+	Total             int                       `json:"total"`
+	SourceEntryCounts []int                     `json:"source_entry_counts"`
+	HTTPStatus401     []CodexSessionPreviewItem `json:"http_status_401"`
+}
+
+type CodexSessionPreviewItem struct {
+	Index      int    `json:"index"`
+	Name       string `json:"name,omitempty"`
+	Email      string `json:"email,omitempty"`
+	AccountID  string `json:"account_id,omitempty"`
+	HTTPStatus int    `json:"http_status"`
 }
 
 type codexImportEntry struct {
@@ -115,6 +134,10 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := validateCodexImportWindow(req, 0); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if req.Concurrency != nil && *req.Concurrency < 0 {
 		response.BadRequest(c, "concurrency must be >= 0")
 		return
@@ -141,10 +164,62 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 		response.BadRequest(c, "请输入 accessToken 或 Codex session JSON")
 		return
 	}
+	entries, err = selectCodexImportWindow(entries, req.EntryStart, req.EntryLimit, req.IndexOffset)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if err := validateCodexImportWindow(req, len(entries)); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 
 	executeAdminIdempotentJSON(c, "admin.accounts.import_codex_session", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		return h.importCodexSessions(ctx, req, entries)
 	})
+}
+
+func (h *AccountHandler) PreviewCodexSessionImport(c *gin.Context) {
+	var req CodexSessionImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := validateCodexImportWindow(req, 0); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	entries, sourceEntryCounts, err := parseCodexSessionImportEntriesWithSourceCounts(req)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if len(entries) == 0 {
+		response.BadRequest(c, "请输入 accessToken 或 Codex session JSON")
+		return
+	}
+	if err := validateCodexImportWindow(req, len(entries)); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	result := CodexSessionPreviewResult{
+		Total:             len(entries),
+		SourceEntryCounts: sourceEntryCounts,
+		HTTPStatus401:     make([]CodexSessionPreviewItem, 0),
+	}
+	for _, entry := range entries {
+		status, ok := codexImportHTTPStatus(entry.Value)
+		if !ok || status != 401 {
+			continue
+		}
+		item := codexImportSafePreviewItem(entry)
+		item.HTTPStatus = status
+		result.HTTPStatus401 = append(result.HTTPStatus401, item)
+	}
+
+	response.Success(c, result)
 }
 
 func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessionImportRequest, entries []codexImportEntry) (CodexSessionImportResult, error) {
@@ -177,9 +252,37 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		skipDefaultGroupBind = *req.SkipDefaultGroupBind
 	}
 	skipMixedChannelCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
+	totalItems := len(entries)
+	if req.TotalItems > 0 {
+		totalItems = req.TotalItems
+	}
 
 	seenIdentity := map[string]int{}
 	for _, entry := range entries {
+		if req.FilterHTTPStatus401 {
+			if status, ok := codexImportHTTPStatus(entry.Value); ok && status == 401 {
+				previewItem := codexImportSafePreviewItem(entry)
+				accountName := buildCodexCreateAccountName(req.Name, &codexImportAccount{
+					Name:      previewItem.Name,
+					Email:     previewItem.Email,
+					AccountID: previewItem.AccountID,
+				}, entry.Index, totalItems)
+				message := "来源 HTTP 状态为 401，已跳过"
+				result.Skipped++
+				result.Items = append(result.Items, CodexSessionImportItem{
+					Index:   entry.Index,
+					Name:    accountName,
+					Action:  "skipped",
+					Message: message,
+				})
+				result.Warnings = append(result.Warnings, CodexSessionImportMessage{
+					Index:   entry.Index,
+					Name:    accountName,
+					Message: message,
+				})
+				continue
+			}
+		}
 		item, err := normalizeCodexImportEntry(entry)
 		if err != nil {
 			result.Failed++
@@ -194,7 +297,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			})
 			continue
 		}
-		accountName := buildCodexCreateAccountName(req.Name, item, entry.Index, len(entries))
+		accountName := buildCodexCreateAccountName(req.Name, item, entry.Index, totalItems)
 		effectiveExpiresAt, credentialExpiresAt, autoPauseOnExpired, expiryWarnings, expiryErr := resolveCodexImportExpiry(req, item)
 		if expiryErr != nil {
 			result.Failed++
@@ -243,7 +346,24 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		}
 		markCodexIdentitySeen(seenIdentity, item.IdentityKeys, entry.Index)
 
-		if existing := index.Find(item.IdentityKeys); existing != nil && updateExisting {
+		if existing := index.Find(item.IdentityKeys); existing != nil {
+			if !updateExisting {
+				message := "已存在匹配账号，且未启用更新凭证，已跳过"
+				result.Skipped++
+				result.Items = append(result.Items, CodexSessionImportItem{
+					Index:     entry.Index,
+					Name:      accountName,
+					Action:    "skipped",
+					AccountID: existing.ID,
+					Message:   message,
+				})
+				result.Warnings = append(result.Warnings, CodexSessionImportMessage{
+					Index:   entry.Index,
+					Name:    accountName,
+					Message: message,
+				})
+				continue
+			}
 			mergedCredentials := mergeCodexImportCredentials(existing.Credentials, credentials, item)
 			mergedExtra := mergeCodexImportMap(existing.Extra, extra)
 			updateInput := &service.UpdateAccountInput{
@@ -351,6 +471,11 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 }
 
 func parseCodexSessionImportEntries(req CodexSessionImportRequest) ([]codexImportEntry, error) {
+	entries, _, err := parseCodexSessionImportEntriesWithSourceCounts(req)
+	return entries, err
+}
+
+func parseCodexSessionImportEntriesWithSourceCounts(req CodexSessionImportRequest) ([]codexImportEntry, []int, error) {
 	contents := make([]string, 0, 1+len(req.Contents))
 	if strings.TrimSpace(req.Content) != "" {
 		contents = append(contents, req.Content)
@@ -362,19 +487,64 @@ func parseCodexSessionImportEntries(req CodexSessionImportRequest) ([]codexImpor
 	}
 
 	var entries []codexImportEntry
+	sourceEntryCounts := make([]int, 0, len(contents))
 	for _, content := range contents {
 		values, err := parseCodexSessionImportContent(content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		sourceEntryCounts = append(sourceEntryCounts, len(values))
 		for _, value := range values {
 			entries = append(entries, codexImportEntry{
-				Index: len(entries) + 1,
+				Index: req.IndexOffset + len(entries) + 1,
 				Value: value,
 			})
 		}
 	}
-	return entries, nil
+	return entries, sourceEntryCounts, nil
+}
+
+func validateCodexImportWindow(req CodexSessionImportRequest, entryCount int) error {
+	if req.EntryStart < 0 {
+		return errors.New("entry_start must be >= 0")
+	}
+	if req.EntryLimit < 0 {
+		return errors.New("entry_limit must be >= 0")
+	}
+	if req.IndexOffset < 0 {
+		return errors.New("index_offset must be >= 0")
+	}
+	if req.TotalItems < 0 {
+		return errors.New("total_items must be >= 0")
+	}
+	if req.TotalItems > 0 && (req.IndexOffset > req.TotalItems || entryCount > req.TotalItems-req.IndexOffset) {
+		return errors.New("index_offset and batch size must fit within total_items")
+	}
+	return nil
+}
+
+func selectCodexImportWindow(entries []codexImportEntry, start, limit, indexOffset int) ([]codexImportEntry, error) {
+	if start < 0 {
+		return nil, errors.New("entry_start must be >= 0")
+	}
+	if limit < 0 {
+		return nil, errors.New("entry_limit must be >= 0")
+	}
+	if start > len(entries) {
+		return nil, errors.New("entry_start exceeds parsed entry count")
+	}
+	if limit > 0 && (start >= len(entries) || limit > len(entries)-start) {
+		return nil, errors.New("entry window exceeds parsed entry count")
+	}
+	end := len(entries)
+	if limit > 0 {
+		end = start + limit
+	}
+	selected := append([]codexImportEntry(nil), entries[start:end]...)
+	for index := range selected {
+		selected[index].Index = indexOffset + index + 1
+	}
+	return selected, nil
 }
 
 func parseCodexSessionImportContent(content string) ([]any, error) {
@@ -497,6 +667,76 @@ func codexImportContainerValues(obj map[string]any) []any {
 		}
 	}
 	return nil
+}
+
+func codexImportHTTPStatus(value any) (int, bool) {
+	obj, ok := value.(map[string]any)
+	if !ok {
+		return 0, false
+	}
+	for _, path := range [][]string{
+		{"http_status"},
+		{"httpStatus"},
+		{"meta", "http_status"},
+		{"meta", "httpStatus"},
+	} {
+		raw, exists := codexPathValue(obj, path)
+		if !exists {
+			continue
+		}
+		status, err := strconv.Atoi(codexStringValue(raw))
+		if err == nil {
+			return status, true
+		}
+	}
+	return 0, false
+}
+
+func codexImportSafePreviewItem(entry codexImportEntry) CodexSessionPreviewItem {
+	result := CodexSessionPreviewItem{Index: entry.Index}
+	obj, ok := entry.Value.(map[string]any)
+	if !ok {
+		result.Name = fmt.Sprintf("Codex 导入账号 %d", entry.Index)
+		return result
+	}
+
+	result.Name = firstCodexString(obj, []string{"name"}, []string{"user", "name"}, []string{"meta", "label"})
+	result.Email = firstCodexString(obj,
+		[]string{"email"},
+		[]string{"user", "email"},
+		[]string{"credentials", "email"},
+		[]string{"providerSpecificData", "email"},
+		[]string{"meta", "label"},
+	)
+	result.AccountID = firstCodexString(obj,
+		[]string{"chatgpt_account_id"},
+		[]string{"chatgptAccountId"},
+		[]string{"account_id"},
+		[]string{"accountId"},
+		[]string{"tokens", "chatgpt_account_id"},
+		[]string{"tokens", "chatgptAccountId"},
+		[]string{"tokens", "account_id"},
+		[]string{"tokens", "accountId"},
+		[]string{"credentials", "chatgpt_account_id"},
+		[]string{"credentials", "chatgptAccountId"},
+		[]string{"providerSpecificData", "chatgpt_account_id"},
+		[]string{"providerSpecificData", "chatgptAccountId"},
+		[]string{"meta", "chatgpt_account_id"},
+		[]string{"meta", "chatgptAccountId"},
+		[]string{"account", "id"},
+		[]string{"account", "account_id"},
+		[]string{"account", "chatgpt_account_id"},
+	)
+	if result.AccountID == "" && firstCodexString(obj, []string{"provider"}) == "codex" {
+		result.AccountID = firstCodexString(obj, []string{"id"})
+	}
+	if result.Name == "" {
+		result.Name = buildCodexImportAccountName(&codexImportAccount{
+			Email:     result.Email,
+			AccountID: result.AccountID,
+		}, entry.Index)
+	}
+	return result
 }
 
 func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, error) {

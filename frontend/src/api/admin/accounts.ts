@@ -20,6 +20,7 @@ import type {
   XaiCookieTokenImportResult,
   XaiCookieTokenExportResult,
   CodexSessionImportRequest,
+  CodexSessionImportPreviewResult,
   CodexSessionImportResult,
   CheckMixedChannelRequest,
   CheckMixedChannelResponse
@@ -762,7 +763,16 @@ export async function importXaiCookieTokens(payload: XaiCookieTokenImportRequest
 }
 
 export async function importCodexSession(payload: CodexSessionImportRequest): Promise<CodexSessionImportResult> {
-  const { data } = await apiClient.post<CodexSessionImportResult>('/admin/accounts/import/codex-session', payload)
+  const { data } = await apiClient.post<CodexSessionImportResult>('/admin/accounts/import/codex-session', payload, {
+    timeout: 120000
+  })
+  return data
+}
+
+export async function previewCodexSessionImport(payload: CodexSessionImportRequest): Promise<CodexSessionImportPreviewResult> {
+  const { data } = await apiClient.post<CodexSessionImportPreviewResult>('/admin/accounts/import/codex-session/preview', payload, {
+    timeout: 120000
+  })
   return data
 }
 
@@ -968,6 +978,7 @@ export const accountsAPI = {
   importData,
   exportXaiCookieTokens,
   importXaiCookieTokens,
+  previewCodexSessionImport,
   importCodexSession,
   getAntigravityDefaultModelMapping,
   batchClearError,

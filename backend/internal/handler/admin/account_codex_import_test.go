@@ -1,12 +1,18 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 )
 
 func TestParseCodexSessionImportEntriesSupportsRawTokenJSONAndArray(t *testing.T) {
@@ -426,6 +432,259 @@ func TestCodexIdentityDoesNotMergeDifferentUsersInSameAccount(t *testing.T) {
 
 	if duplicateIndex, ok := firstSeenCodexIdentity(seen, second); ok {
 		t.Fatalf("different users in same account matched duplicate index %d; first=%v second=%v", duplicateIndex, first, second)
+	}
+}
+
+func TestPreviewCodexSessionImportReturnsSafeHTTPStatus401ItemsAndSourceCounts(t *testing.T) {
+	req := CodexSessionImportRequest{
+		Content: `[
+			{"http_status":401,"name":"first","email":"first@example.com","account_id":"acct-first","access_token":"secret-first"},
+			{"httpStatus":200,"accessToken":"secret-ok"}
+		]`,
+		Contents: []string{
+			`{"meta":{"httpStatus":"401","label":"second@example.com","chatgpt_account_id":"acct-second"},"accessToken":"secret-second"}`,
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/preview", bytes.NewReader(body))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	(&AccountHandler{}).PreviewCodexSessionImport(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Code int                       `json:"code"`
+		Data CodexSessionPreviewResult `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if response.Code != 0 {
+		t.Fatalf("response code = %d", response.Code)
+	}
+	if response.Data.Total != 3 {
+		t.Fatalf("total = %d, want 3", response.Data.Total)
+	}
+	if fmt.Sprint(response.Data.SourceEntryCounts) != "[2 1]" {
+		t.Fatalf("source_entry_counts = %v, want [2 1]", response.Data.SourceEntryCounts)
+	}
+	if len(response.Data.HTTPStatus401) != 2 {
+		t.Fatalf("len(http_status_401) = %d, want 2", len(response.Data.HTTPStatus401))
+	}
+	first := response.Data.HTTPStatus401[0]
+	if first.Index != 1 || first.Name != "first" || first.Email != "first@example.com" || first.AccountID != "acct-first" || first.HTTPStatus != 401 {
+		t.Fatalf("first preview item = %+v", first)
+	}
+	second := response.Data.HTTPStatus401[1]
+	if second.Index != 3 || second.Email != "second@example.com" || second.AccountID != "acct-second" || second.HTTPStatus != 401 {
+		t.Fatalf("second preview item = %+v", second)
+	}
+	responseText := recorder.Body.String()
+	if strings.Contains(responseText, "secret-first") || strings.Contains(responseText, "secret-second") {
+		t.Fatalf("preview response leaked credentials: %s", responseText)
+	}
+}
+
+func TestParseCodexSessionImportEntriesAppliesGlobalIndexOffset(t *testing.T) {
+	entries, sourceCounts, err := parseCodexSessionImportEntriesWithSourceCounts(CodexSessionImportRequest{
+		Content:     `[{"accessToken":"first"},{"accessToken":"second"}]`,
+		Contents:    []string{`{"accessToken":"third"}`},
+		IndexOffset: 50,
+	})
+	if err != nil {
+		t.Fatalf("parse entries: %v", err)
+	}
+	if len(entries) != 3 || entries[0].Index != 51 || entries[1].Index != 52 || entries[2].Index != 53 {
+		t.Fatalf("entry indexes = %+v", entries)
+	}
+	if fmt.Sprint(sourceCounts) != "[2 1]" {
+		t.Fatalf("source counts = %v, want [2 1]", sourceCounts)
+	}
+}
+
+func TestCodexImportHTTPStatusSupportsCommonNumberAndStringFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		value map[string]any
+	}{
+		{name: "root snake number", value: map[string]any{"http_status": json.Number("401")}},
+		{name: "root snake string", value: map[string]any{"http_status": "401"}},
+		{name: "root camel number", value: map[string]any{"httpStatus": float64(401)}},
+		{name: "root camel string", value: map[string]any{"httpStatus": "401"}},
+		{name: "meta snake", value: map[string]any{"meta": map[string]any{"http_status": "401"}}},
+		{name: "meta camel", value: map[string]any{"meta": map[string]any{"httpStatus": json.Number("401")}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, ok := codexImportHTTPStatus(tt.value)
+			if !ok || status != 401 {
+				t.Fatalf("codexImportHTTPStatus() = %d, %v; want 401, true", status, ok)
+			}
+		})
+	}
+}
+
+func TestImportCodexSessionsFiltersHTTPStatus401BeforeNormalization(t *testing.T) {
+	adminSvc := newStubAdminService()
+	handler := &AccountHandler{adminService: adminSvc}
+	req := CodexSessionImportRequest{
+		Content:             `{"http_status":"401","name":"unauthorized","email":"bad@example.com"}`,
+		Name:                "batch",
+		IndexOffset:         50,
+		TotalItems:          100,
+		FilterHTTPStatus401: true,
+	}
+	entries, err := parseCodexSessionImportEntries(req)
+	if err != nil {
+		t.Fatalf("parse entries: %v", err)
+	}
+
+	result, err := handler.importCodexSessions(t.Context(), req, entries)
+	if err != nil {
+		t.Fatalf("importCodexSessions: %v", err)
+	}
+	if result.Total != 1 || result.Skipped != 1 || result.Created != 0 || result.Updated != 0 || result.Failed != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(result.Items) != 1 || result.Items[0].Index != 51 || result.Items[0].Action != "skipped" || result.Items[0].Name != "batch #51" {
+		t.Fatalf("items = %+v", result.Items)
+	}
+	if len(result.Warnings) != 1 || result.Warnings[0].Index != 51 || !strings.Contains(result.Warnings[0].Message, "401") {
+		t.Fatalf("warnings = %+v", result.Warnings)
+	}
+	if len(adminSvc.createdAccounts) != 0 {
+		t.Fatalf("created accounts = %d, want 0", len(adminSvc.createdAccounts))
+	}
+}
+
+func TestImportCodexSessionsUsesTotalItemsForSingleItemFinalBatchName(t *testing.T) {
+	adminSvc := newStubAdminService()
+	handler := &AccountHandler{adminService: adminSvc}
+	token := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{
+		"email": "last@example.com",
+	})
+	req := CodexSessionImportRequest{
+		Content:     fmt.Sprintf(`{"access_token":%q,"refresh_token":"refresh-last"}`, token),
+		Name:        "batch",
+		IndexOffset: 100,
+		TotalItems:  101,
+	}
+	entries, err := parseCodexSessionImportEntries(req)
+	if err != nil {
+		t.Fatalf("parse entries: %v", err)
+	}
+	if err := validateCodexImportWindow(req, len(entries)); err != nil {
+		t.Fatalf("validate window: %v", err)
+	}
+
+	result, err := handler.importCodexSessions(t.Context(), req, entries)
+	if err != nil {
+		t.Fatalf("importCodexSessions: %v", err)
+	}
+	if result.Created != 1 || len(result.Items) != 1 || result.Items[0].Index != 101 || result.Items[0].Name != "batch #101" {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(adminSvc.createdAccounts) != 1 || adminSvc.createdAccounts[0].Name != "batch #101" {
+		t.Fatalf("created accounts = %+v", adminSvc.createdAccounts)
+	}
+}
+
+func TestImportCodexSessionsSkipsExistingAccountWhenUpdateDisabled(t *testing.T) {
+	adminSvc := newStubAdminService()
+	adminSvc.accounts = []service.Account{{
+		ID:       42,
+		Name:     "existing",
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"chatgpt_user_id": "user-existing",
+		},
+	}}
+	handler := &AccountHandler{adminService: adminSvc}
+	updateExisting := false
+	token := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_user_id": "user-existing",
+		},
+	})
+	req := CodexSessionImportRequest{
+		Content:        fmt.Sprintf(`{"access_token":%q,"refresh_token":"refresh"}`, token),
+		UpdateExisting: &updateExisting,
+	}
+	entries, err := parseCodexSessionImportEntries(req)
+	if err != nil {
+		t.Fatalf("parse entries: %v", err)
+	}
+
+	result, err := handler.importCodexSessions(t.Context(), req, entries)
+	if err != nil {
+		t.Fatalf("importCodexSessions: %v", err)
+	}
+	if result.Skipped != 1 || result.Created != 0 || result.Updated != 0 || result.Failed != 0 {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(adminSvc.createdAccounts) != 0 {
+		t.Fatalf("created accounts = %d, want 0", len(adminSvc.createdAccounts))
+	}
+	if len(result.Items) != 1 || result.Items[0].AccountID != 42 || result.Items[0].Action != "skipped" {
+		t.Fatalf("items = %+v", result.Items)
+	}
+}
+
+func TestValidateCodexImportWindow(t *testing.T) {
+	tests := []struct {
+		name       string
+		req        CodexSessionImportRequest
+		entryCount int
+		wantError  bool
+	}{
+		{name: "negative offset", req: CodexSessionImportRequest{IndexOffset: -1}, entryCount: 1, wantError: true},
+		{name: "negative total", req: CodexSessionImportRequest{TotalItems: -1}, entryCount: 1, wantError: true},
+		{name: "offset past total", req: CodexSessionImportRequest{IndexOffset: 3, TotalItems: 2}, entryCount: 0, wantError: true},
+		{name: "batch past total", req: CodexSessionImportRequest{IndexOffset: 1, TotalItems: 2}, entryCount: 2, wantError: true},
+		{name: "valid final batch", req: CodexSessionImportRequest{IndexOffset: 100, TotalItems: 101}, entryCount: 1},
+		{name: "unspecified total", req: CodexSessionImportRequest{IndexOffset: 100}, entryCount: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCodexImportWindow(tt.req, tt.entryCount)
+			if (err != nil) != tt.wantError {
+				t.Fatalf("validateCodexImportWindow error = %v, wantError %v", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestSelectCodexImportWindowKeepsGlobalIndexes(t *testing.T) {
+	entries := make([]codexImportEntry, 101)
+	for index := range entries {
+		entries[index] = codexImportEntry{Index: index + 1, Value: fmt.Sprintf("item-%d", index+1)}
+	}
+
+	selected, err := selectCodexImportWindow(entries, 50, 50, 50)
+	if err != nil {
+		t.Fatalf("selectCodexImportWindow: %v", err)
+	}
+	if len(selected) != 50 || selected[0].Index != 51 || selected[49].Index != 100 {
+		t.Fatalf("selected indexes = first:%d last:%d len:%d", selected[0].Index, selected[len(selected)-1].Index, len(selected))
+	}
+	if selected[0].Value != "item-51" || selected[49].Value != "item-100" {
+		t.Fatalf("selected values = first:%v last:%v", selected[0].Value, selected[49].Value)
+	}
+
+	final, err := selectCodexImportWindow(entries, 100, 1, 100)
+	if err != nil {
+		t.Fatalf("select final window: %v", err)
+	}
+	if len(final) != 1 || final[0].Index != 101 || final[0].Value != "item-101" {
+		t.Fatalf("final window = %+v", final)
 	}
 }
 

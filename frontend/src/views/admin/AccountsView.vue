@@ -419,7 +419,7 @@
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <XaiCookieTokenImportModal :show="showXaiCookieTokenImport" @close="showXaiCookieTokenImport = false" @imported="handleXaiCookieTokensImported" />
-    <CodexSessionImportModal :show="showCodexSessionImport" @close="showCodexSessionImport = false" @imported="handleCodexSessionsImported" />
+    <CodexSessionImportModal :show="showCodexSessionImport" :groups="groups" @close="showCodexSessionImport = false" @imported="handleCodexSessionsImported" />
     <BulkEditAccountModal
       :show="showBulkEdit"
       :account-ids="selIds"
