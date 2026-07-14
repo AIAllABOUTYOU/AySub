@@ -52,9 +52,14 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 
 	clientStream := responsesReq.Stream
 	serviceTier := extractOpenAIServiceTierFromBody(body)
-	customTools := apicompat.CustomToolNames(responsesReq.Tools)
-	toolSearch := apicompat.HasToolSearchTool(responsesReq.Tools)
-	namespaceTools := apicompat.NamespaceToolNames(responsesReq.Tools)
+	effectiveTools, err := apicompat.EffectiveResponsesTools(&responsesReq)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": err.Error()}})
+		return nil, fmt.Errorf("resolve responses tools: %w", err)
+	}
+	customTools := apicompat.CustomToolNames(effectiveTools)
+	toolSearch := apicompat.HasToolSearchTool(effectiveTools)
+	namespaceTools := apicompat.NamespaceToolNames(effectiveTools)
 
 	chatReq, err := apicompat.ResponsesToChatCompletionsRequest(&responsesReq)
 	if err != nil {

@@ -913,7 +913,28 @@ const (
 	defaultGrokImagineVideo15Price480P  = 0.08
 	defaultGrokImagineVideo15Price720P  = 0.14
 	defaultGrokImagineVideo15Price1080P = 0.25
+	defaultWebSearchPricePerCall        = 0.01
 )
+
+// CalculateWebSearchCost calculates standalone Codex alpha/search usage by call.
+func (s *BillingService) CalculateWebSearchCost(callCount int, groupPrice *float64, rateMultiplier float64) *CostBreakdown {
+	if callCount <= 0 {
+		return &CostBreakdown{}
+	}
+	unitPrice := defaultWebSearchPricePerCall
+	if groupPrice != nil && *groupPrice >= 0 {
+		unitPrice = *groupPrice
+	}
+	if rateMultiplier < 0 {
+		rateMultiplier = 0
+	}
+	totalCost := unitPrice * float64(callCount)
+	return &CostBreakdown{
+		TotalCost:   totalCost,
+		ActualCost:  totalCost * rateMultiplier,
+		BillingMode: string(BillingModePerRequest),
+	}
+}
 
 // CalculateImageCost 计算图片生成费用
 // model: 请求的模型名称（用于获取 LiteLLM 默认价格）

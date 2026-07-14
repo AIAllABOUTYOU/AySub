@@ -548,6 +548,25 @@ func (s *OpenAIGatewayService) ForwardImages(
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}
+	if account != nil && account.Platform == PlatformXAI && account.usesOfficialGrokAPI() {
+		endpoint := GrokMediaEndpointImagesGenerations
+		if c != nil && c.Request != nil && strings.Contains(c.Request.URL.Path, "/images/edits") {
+			endpoint = GrokMediaEndpointImagesEdits
+		}
+		forwardBody := body
+		contentType := ""
+		if c != nil {
+			contentType = c.GetHeader("Content-Type")
+		}
+		if mappedModel := strings.TrimSpace(channelMappedModel); mappedModel != "" {
+			var err error
+			forwardBody, contentType, err = rewriteOpenAIImagesModel(forwardBody, contentType, mappedModel)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return s.ForwardGrokMedia(ctx, c, account, endpoint, "", forwardBody, contentType)
+	}
 	switch account.Type {
 	case AccountTypeAPIKey:
 		return s.forwardOpenAIImagesAPIKey(ctx, c, account, body, parsed, channelMappedModel)

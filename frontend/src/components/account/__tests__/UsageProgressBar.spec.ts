@@ -66,4 +66,31 @@ describe('UsageProgressBar', () => {
     expect(wrapper.text()).toContain('2h 30m')
     expect(wrapper.text()).not.toContain('现在')
   })
+
+  it('剩余容量模式按剩余比例显示长度和告警颜色', async () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: 'Req',
+        utilization: 100,
+        remainingCapacity: true,
+        color: 'indigo'
+      }
+    })
+
+    expect(wrapper.get('.h-1\\.5 > div').attributes('style')).toContain('width: 100%')
+    expect(wrapper.get('.h-1\\.5 > div').classes()).toContain('bg-green-500')
+
+    await wrapper.setProps({ utilization: 15 })
+    expect(wrapper.text()).toContain('15%')
+    expect(wrapper.get('.h-1\\.5 > div').classes()).toContain('bg-red-500')
+  })
+
+  it('默认利用率模式仍保留超限百分比', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: { label: '5h', utilization: 120, color: 'indigo' }
+    })
+
+    expect(wrapper.text()).toContain('120%')
+    expect(wrapper.get('.h-1\\.5 > div').attributes('style')).toContain('width: 100%')
+  })
 })

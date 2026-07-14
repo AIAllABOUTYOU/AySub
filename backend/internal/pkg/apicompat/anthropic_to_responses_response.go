@@ -164,6 +164,8 @@ type AnthropicEventToResponsesState struct {
 	OutputTokens             int
 	CacheReadInputTokens     int
 	CacheCreationInputTokens int
+
+	StopReason string
 }
 
 // NewAnthropicEventToResponsesState returns an initialised stream state.
@@ -405,7 +407,6 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 }
 
 func anthToResHandleMessageDelta(evt *AnthropicStreamEvent, state *AnthropicEventToResponsesState) []ResponsesStreamEvent {
-	// Update usage
 	if evt.Usage != nil {
 		state.OutputTokens = evt.Usage.OutputTokens
 		if evt.Usage.InputTokens > 0 {
@@ -417,6 +418,9 @@ func anthToResHandleMessageDelta(evt *AnthropicStreamEvent, state *AnthropicEven
 		if evt.Usage.CacheCreationInputTokens > 0 {
 			state.CacheCreationInputTokens = evt.Usage.CacheCreationInputTokens
 		}
+	}
+	if evt.Delta != nil && evt.Delta.StopReason != "" {
+		state.StopReason = evt.Delta.StopReason
 	}
 
 	return nil
@@ -432,11 +436,13 @@ func anthToResHandleMessageStop(state *AnthropicEventToResponsesState) []Respons
 	// Close any open item
 	events = append(events, closeCurrentResponsesItem(state)...)
 
-	// Determine status
 	status := "completed"
 	var incompleteDetails *ResponsesIncompleteDetails
+	if state.StopReason == "max_tokens" {
+		status = "incomplete"
+		incompleteDetails = &ResponsesIncompleteDetails{Reason: "max_output_tokens"}
+	}
 
-	// Emit response.completed
 	events = append(events, makeResponsesCompletedEvent(state, status, incompleteDetails))
 	state.CompletedSent = true
 	return events
@@ -509,15 +515,20 @@ func makeResponsesCompletedEvent(
 		}
 	}
 
+	eventType := "response.completed"
+	if status == "incomplete" {
+		eventType = "response.incomplete"
+	}
+
 	return ResponsesStreamEvent{
-		Type:           "response.completed",
+		Type:           eventType,
 		SequenceNumber: seq,
 		Response: &ResponsesResponse{
 			ID:                state.ResponseID,
 			Object:            "response",
 			Model:             state.Model,
 			Status:            status,
-			Output:            []ResponsesOutput{}, // Simplified; full output tracking would add complexity
+			Output:            []ResponsesOutput{},
 			Usage:             usage,
 			IncompleteDetails: incompleteDetails,
 		},

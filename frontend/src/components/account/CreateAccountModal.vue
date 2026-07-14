@@ -166,9 +166,36 @@
       <!-- Account Type Selection (xAI / Grok) -->
       <div v-if="form.platform === 'xai'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
+        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3" data-tour="account-form-type">
           <button
             type="button"
+            data-testid="xai-account-type-oauth"
+            @click="accountCategory = 'oauth-based'"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              accountCategory === 'oauth-based'
+                ? 'border-zinc-500 bg-zinc-50 dark:bg-zinc-900/20'
+                : 'border-gray-200 hover:border-zinc-300 dark:border-dark-600 dark:hover:border-zinc-700'
+            ]"
+          >
+            <div
+              :class="[
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                accountCategory === 'oauth-based'
+                  ? 'bg-zinc-700 text-white'
+                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+              ]"
+            >
+              <Icon name="sparkles" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Grok Subscription</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            data-testid="xai-account-type-api-key"
             @click="accountCategory = 'apikey'"
             :class="[
               'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
@@ -1133,7 +1160,7 @@
               form.platform === 'openai'
                 ? 'https://api.openai.com'
                 : form.platform === 'xai'
-                  ? 'https://api.x.ai'
+                  ? 'https://api.x.ai/v1'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : 'https://api.anthropic.com'
@@ -1883,9 +1910,9 @@
         />
       </div>
 
-      <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <!-- OpenAI/xAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
+        v-if="(form.platform === 'openai' || form.platform === 'xai') && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -3055,10 +3082,10 @@
         :loading="currentOAuthLoading"
         :error="currentOAuthError"
         :show-help="form.platform === 'anthropic'"
-        :show-proxy-warning="form.platform !== 'openai' && !!form.proxy_id"
+        :show-proxy-warning="form.platform !== 'openai' && form.platform !== 'xai' && !!form.proxy_id"
         :allow-multiple="form.platform === 'anthropic'"
         :show-cookie-option="form.platform === 'anthropic'"
-        :show-refresh-token-option="form.platform === 'openai' || form.platform === 'antigravity'"
+        :show-refresh-token-option="form.platform === 'openai' || form.platform === 'antigravity' || form.platform === 'xai'"
         :show-mobile-refresh-token-option="form.platform === 'openai'"
         :show-session-token-option="false"
         :show-access-token-option="false"
@@ -3411,6 +3438,7 @@ import {
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
+import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import type {
   Proxy,
   AdminGroup,
@@ -3468,6 +3496,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
+  if (form.platform === 'xai') return t('admin.accounts.oauth.grok.title')
   return t('admin.accounts.oauth.title')
 })
 
@@ -3505,12 +3534,14 @@ const oauth = useAccountOAuth() // For Anthropic OAuth
 const openaiOAuth = useOpenAIOAuth() // For OpenAI OAuth
 const geminiOAuth = useGeminiOAuth() // For Gemini OAuth
 const antigravityOAuth = useAntigravityOAuth() // For Antigravity OAuth
+const grokOAuth = useGrokOAuth() // For xAI/Grok OAuth
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
   if (form.platform === 'openai') return openaiOAuth.authUrl.value
   if (form.platform === 'gemini') return geminiOAuth.authUrl.value
   if (form.platform === 'antigravity') return antigravityOAuth.authUrl.value
+  if (form.platform === 'xai') return grokOAuth.authUrl.value
   return oauth.authUrl.value
 })
 
@@ -3518,6 +3549,7 @@ const currentSessionId = computed(() => {
   if (form.platform === 'openai') return openaiOAuth.sessionId.value
   if (form.platform === 'gemini') return geminiOAuth.sessionId.value
   if (form.platform === 'antigravity') return antigravityOAuth.sessionId.value
+  if (form.platform === 'xai') return grokOAuth.sessionId.value
   return oauth.sessionId.value
 })
 
@@ -3525,6 +3557,7 @@ const currentOAuthLoading = computed(() => {
   if (form.platform === 'openai') return openaiOAuth.loading.value
   if (form.platform === 'gemini') return geminiOAuth.loading.value
   if (form.platform === 'antigravity') return antigravityOAuth.loading.value
+  if (form.platform === 'xai') return grokOAuth.loading.value
   return oauth.loading.value
 })
 
@@ -3532,6 +3565,7 @@ const currentOAuthError = computed(() => {
   if (form.platform === 'openai') return openaiOAuth.error.value
   if (form.platform === 'gemini') return geminiOAuth.error.value
   if (form.platform === 'antigravity') return antigravityOAuth.error.value
+  if (form.platform === 'xai') return grokOAuth.error.value
   return oauth.error.value
 })
 
@@ -3945,6 +3979,9 @@ const canExchangeCode = computed(() => {
   if (form.platform === 'antigravity') {
     return authCode.trim() && antigravityOAuth.sessionId.value && !antigravityOAuth.loading.value
   }
+  if (form.platform === 'xai') {
+    return authCode.trim() && grokOAuth.sessionId.value && !grokOAuth.loading.value
+  }
   return authCode.trim() && oauth.sessionId.value && !oauth.loading.value
 })
 
@@ -3982,7 +4019,11 @@ watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
     if (form.platform === 'xai') {
-      form.type = category === 'cookie' ? 'cookie' as AccountType : 'apikey'
+      form.type = category === 'cookie'
+        ? 'cookie' as AccountType
+        : category === 'oauth-based'
+          ? 'oauth'
+          : 'apikey'
       return
     }
     // Antigravity upstream 类型（实际创建为 apikey）
@@ -4015,7 +4056,7 @@ watch(
       (newPlatform === 'openai')
         ? 'https://api.openai.com'
         : newPlatform === 'xai'
-          ? 'https://api.x.ai'
+          ? 'https://api.x.ai/v1'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -4038,9 +4079,12 @@ watch(
       antigravityModelRestrictionMode.value = 'mapping'
     }
     if (newPlatform === 'xai') {
-      accountCategory.value = 'apikey'
+      accountCategory.value = 'oauth-based'
       addMethod.value = 'oauth'
       grokCookieBaseUrl.value = 'https://grok.com'
+      modelRestrictionMode.value = 'mapping'
+      form.concurrency = 1
+      form.load_factor = null
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -4083,6 +4127,7 @@ watch(
 
     geminiOAuth.resetState()
     antigravityOAuth.resetState()
+    grokOAuth.resetState()
   }
 )
 
@@ -4535,6 +4580,7 @@ const resetForm = () => {
   openaiOAuth.resetState()
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
+  grokOAuth.resetState()
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
@@ -4900,7 +4946,7 @@ const handleSubmit = async () => {
     form.platform === 'openai'
       ? 'https://api.openai.com'
       : form.platform === 'xai'
-        ? 'https://api.x.ai'
+        ? 'https://api.x.ai/v1'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
         : 'https://api.anthropic.com'
@@ -4967,6 +5013,7 @@ const goBackToBasicInfo = () => {
   openaiOAuth.resetState()
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
+  grokOAuth.resetState()
   oauthFlowRef.value?.reset()
 }
 
@@ -4982,6 +5029,8 @@ const handleGenerateUrl = async () => {
     )
   } else if (form.platform === 'antigravity') {
     await antigravityOAuth.generateAuthUrl(form.proxy_id)
+  } else if (form.platform === 'xai') {
+    await grokOAuth.generateAuthUrl(form.proxy_id)
   } else {
     await oauth.generateAuthUrl(addMethod.value, form.proxy_id)
   }
@@ -4992,6 +5041,8 @@ const handleValidateRefreshToken = (rt: string) => {
     handleOpenAIValidateRT(rt)
   } else if (form.platform === 'antigravity') {
     handleAntigravityValidateRT(rt)
+  } else if (form.platform === 'xai') {
+    handleGrokValidateRT(rt)
   }
 }
 
@@ -5392,6 +5443,111 @@ const handleOpenAIValidateRT = (rt: string) => handleOpenAIBatchRT(rt)
 // 手动输入 Mobile RT
 const handleOpenAIValidateMobileRT = (rt: string) => handleOpenAIBatchRT(rt, OPENAI_MOBILE_RT_CLIENT_ID)
 
+const buildGrokOAuthPayload = (
+  tokenInfo: import('@/api/admin/grok').GrokTokenInfo,
+  accountName: string
+): CreateAccountRequest | null => {
+  const credentials = grokOAuth.buildCredentials(tokenInfo)
+  const modelMapping = buildModelMappingObject(
+    modelRestrictionMode.value,
+    allowedModels.value,
+    modelMappings.value
+  )
+  if (modelMapping) credentials.model_mapping = modelMapping
+  if (!applyTempUnschedConfig(credentials)) return null
+
+  const extra = grokOAuth.buildExtraInfo(tokenInfo)
+  if (customHeaders.value.length > 0) {
+    const normalized = normalizeCustomHeaderRows(customHeaders.value)
+    if (normalized.error) {
+      appStore.showError(t(`admin.accounts.customHeadersErrors.${normalized.error}`))
+      return null
+    }
+    extra.custom_headers = normalized.headers
+  }
+
+  return {
+    name: accountName,
+    notes: form.notes,
+    platform: 'xai',
+    type: 'oauth',
+    credentials,
+    extra,
+    proxy_id: form.proxy_id,
+    concurrency: form.concurrency,
+    load_factor: form.load_factor ?? undefined,
+    priority: form.priority,
+    rate_multiplier: form.rate_multiplier,
+    group_ids: form.group_ids,
+    expires_at: form.expires_at,
+    auto_pause_on_expired: autoPauseOnExpired.value
+  }
+}
+
+// xAI/Grok 手动 RT 批量验证和创建
+const handleGrokValidateRT = async (refreshTokenInput: string) => {
+  const refreshTokens = refreshTokenInput
+    .split('\n')
+    .map((rt) => rt.trim())
+    .filter(Boolean)
+
+  if (refreshTokens.length === 0) {
+    grokOAuth.error.value = t('admin.accounts.oauth.grok.pleaseEnterRefreshToken')
+    return
+  }
+
+  grokOAuth.loading.value = true
+  grokOAuth.error.value = ''
+  let successCount = 0
+  const errors: string[] = []
+
+  try {
+    for (let index = 0; index < refreshTokens.length; index++) {
+      try {
+        const tokenInfo = await grokOAuth.validateRefreshToken(refreshTokens[index], form.proxy_id)
+        if (!tokenInfo) {
+          errors.push(`#${index + 1}: ${grokOAuth.error.value || 'Validation failed'}`)
+          grokOAuth.error.value = ''
+          continue
+        }
+
+        const baseName = form.name || tokenInfo.email || 'Grok OAuth Account'
+        const accountName = refreshTokens.length > 1 ? `${baseName} #${index + 1}` : baseName
+        const payload = buildGrokOAuthPayload(tokenInfo, accountName)
+        if (!payload) return
+        await adminAPI.accounts.create(payload)
+        successCount++
+      } catch (error: any) {
+        errors.push(`#${index + 1}: ${error.response?.data?.detail || error.message || 'Unknown error'}`)
+      }
+    }
+
+    if (successCount === refreshTokens.length) {
+      appStore.showSuccess(
+        refreshTokens.length > 1
+          ? t('admin.accounts.oauth.batchSuccess', { count: successCount })
+          : t('admin.accounts.accountCreated')
+      )
+      emit('created')
+      handleClose()
+    } else if (successCount > 0) {
+      grokOAuth.error.value = errors.join('\n')
+      appStore.showWarning(
+        t('admin.accounts.oauth.batchPartialSuccess', {
+          success: successCount,
+          failed: refreshTokens.length - successCount
+        })
+      )
+      emit('created')
+    } else {
+      grokOAuth.error.value = errors.join('\n')
+      appStore.showError(t('admin.accounts.oauth.batchFailed'))
+    }
+  } finally {
+    grokOAuth.loading.value = false
+  }
+}
+
 // Antigravity 手动 RT 批量验证和创建
 const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
   if (!refreshTokenInput.trim()) return
@@ -5565,6 +5721,46 @@ const handleAntigravityExchange = async (authCode: string) => {
   }
 }
 
+// xAI/Grok OAuth 授权码兑换
+const handleGrokExchange = async (authCode: string) => {
+  if (!authCode.trim() || !grokOAuth.sessionId.value) return
+
+  grokOAuth.loading.value = true
+  grokOAuth.error.value = ''
+
+  try {
+    const stateToUse = (oauthFlowRef.value?.oauthState || grokOAuth.state.value).trim()
+    if (!stateToUse) {
+      grokOAuth.error.value = t('admin.accounts.oauth.authFailed')
+      appStore.showError(grokOAuth.error.value)
+      return
+    }
+
+    const tokenInfo = await grokOAuth.exchangeAuthCode({
+      code: authCode.trim(),
+      sessionId: grokOAuth.sessionId.value,
+      state: stateToUse,
+      proxyId: form.proxy_id
+    })
+    if (!tokenInfo) return
+
+    const payload = buildGrokOAuthPayload(
+      tokenInfo,
+      form.name || tokenInfo.email || 'Grok OAuth Account'
+    )
+    if (!payload) return
+    await adminAPI.accounts.create(payload)
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    emit('created')
+    handleClose()
+  } catch (error: any) {
+    grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    appStore.showError(grokOAuth.error.value)
+  } finally {
+    grokOAuth.loading.value = false
+  }
+}
+
 // Anthropic OAuth 授权码兑换
 const handleAnthropicExchange = async (authCode: string) => {
   if (!authCode.trim() || !oauth.sessionId.value) return
@@ -5665,6 +5861,8 @@ const handleExchangeCode = async () => {
       return handleGeminiExchange(authCode)
     case 'antigravity':
       return handleAntigravityExchange(authCode)
+    case 'xai':
+      return handleGrokExchange(authCode)
     default:
       return handleAnthropicExchange(authCode)
   }

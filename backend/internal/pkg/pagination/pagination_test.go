@@ -1,6 +1,10 @@
 package pagination
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestNormalizeSortOrder(t *testing.T) {
 	t.Parallel()
@@ -66,6 +70,28 @@ func TestPaginationParamsLimit(t *testing.T) {
 			if got := p.Limit(); got != tt.want {
 				t.Fatalf("Limit() for PageSize=%d = %d, want %d", tt.pageSize, got, tt.want)
 			}
+		})
+	}
+}
+
+func TestPaginationParamsOffsetUsesNormalizedLimit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		page     int
+		pageSize int
+		want     int
+	}{
+		{name: "invalid page uses first page", page: 0, pageSize: 50, want: 0},
+		{name: "zero page size uses default", page: 2, pageSize: 0, want: 20},
+		{name: "negative page size uses default", page: 2, pageSize: -1, want: 20},
+		{name: "normal values", page: 3, pageSize: 50, want: 100},
+		{name: "page size beyond max is clamped", page: 2, pageSize: 1500, want: 1000},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, (PaginationParams{Page: test.page, PageSize: test.pageSize}).Offset())
 		})
 	}
 }

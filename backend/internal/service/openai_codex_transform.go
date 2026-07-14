@@ -1248,6 +1248,12 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 				ensureCopy()
 				delete(newItem, "id")
 			}
+		} else if typ == "message" {
+			// Continuation message IDs must use the upstream msg* namespace.
+			if id, ok := m["id"].(string); ok && id != "" && !strings.HasPrefix(id, "msg") {
+				ensureCopy()
+				delete(newItem, "id")
+			}
 		}
 
 		filtered = append(filtered, newItem)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log/slog"
+	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 type Account struct {
@@ -93,6 +95,7 @@ const (
 	OpenAIEndpointCapabilityAudioTranslate  OpenAIEndpointCapability = "audio_translations"
 	OpenAIEndpointCapabilityVideos          OpenAIEndpointCapability = "videos"
 	OpenAIEndpointCapabilityLiveKit         OpenAIEndpointCapability = "livekit"
+	OpenAIEndpointCapabilityGrokMedia       OpenAIEndpointCapability = "grok_official_media"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -527,6 +530,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		if a.Platform == domain.PlatformAntigravity {
 			return domain.DefaultAntigravityModelMapping
 		}
+		if a.usesOfficialGrokAPI() {
+			return xai.DefaultModelMapping()
+		}
 		// Bedrock 默认映射由 forwardBedrock 统一处理（需配合 region prefix 调整）
 		return nil
 	}
@@ -534,6 +540,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		// Antigravity 平台使用默认映射
 		if a.Platform == domain.PlatformAntigravity {
 			return domain.DefaultAntigravityModelMapping
+		}
+		if a.usesOfficialGrokAPI() {
+			return xai.DefaultModelMapping()
 		}
 		return nil
 	}
@@ -558,6 +567,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	// Antigravity 平台使用默认映射
 	if a.Platform == domain.PlatformAntigravity {
 		return domain.DefaultAntigravityModelMapping
+	}
+	if a.usesOfficialGrokAPI() {
+		return xai.DefaultModelMapping()
 	}
 	return nil
 }
@@ -1100,6 +1112,18 @@ func (a *Account) IsXAI() bool {
 	return a.Platform == PlatformXAI
 }
 
+func (a *Account) IsGrok() bool {
+	return a.IsXAI()
+}
+
+func (a *Account) IsGrokOAuth() bool {
+	return a.IsGrok() && a.Type == AccountTypeOAuth
+}
+
+func (a *Account) usesOfficialGrokAPI() bool {
+	return a != nil && a.IsGrok() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey)
+}
+
 func (a *Account) IsXAICookie() bool {
 	return a != nil && a.Platform == PlatformXAI && a.Type == AccountTypeCookie
 }
@@ -1127,9 +1151,59 @@ func (a *Account) GetOpenAIBaseURL() string {
 		}
 	}
 	if a.IsXAI() {
-		return "https://api.x.ai"
+		return xai.DefaultBaseURL
 	}
 	return "https://api.openai.com"
+}
+
+func (a *Account) GetGrokBaseURL() string {
+	if !a.IsGrok() {
+		return ""
+	}
+	baseURL := strings.TrimSpace(a.GetCredential("base_url"))
+	if a.IsGrokOAuth() && (baseURL == "" || isOfficialGrokAPIBaseURL(baseURL)) {
+		return xai.DefaultCLIBaseURL
+	}
+	if baseURL != "" {
+		return baseURL
+	}
+	return xai.DefaultBaseURL
+}
+
+func isOfficialGrokAPIBaseURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	defaultURL, err := url.Parse(xai.DefaultBaseURL)
+	if err != nil {
+		return false
+	}
+	if !strings.EqualFold(parsed.Scheme, defaultURL.Scheme) || !strings.EqualFold(parsed.Hostname(), defaultURL.Hostname()) {
+		return false
+	}
+	if port := parsed.Port(); port != "" {
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber != 443 {
+			return false
+		}
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	return path == "" || path == strings.TrimRight(defaultURL.Path, "/")
+}
+
+func (a *Account) GetGrokAccessToken() string {
+	if !a.IsGrok() {
+		return ""
+	}
+	return a.GetCredential("access_token")
+}
+
+func (a *Account) GetGrokRefreshToken() string {
+	if !a.IsGrokOAuth() {
+		return ""
+	}
+	return a.GetCredential("refresh_token")
 }
 
 func (a *Account) GetOpenAIAccessToken() string {
@@ -1269,6 +1343,10 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 		}
 	case OpenAIEndpointCapabilityVideos, OpenAIEndpointCapabilityLiveKit:
 		if !a.IsXAICookie() {
+			return false
+		}
+	case OpenAIEndpointCapabilityGrokMedia:
+		if !a.usesOfficialGrokAPI() {
 			return false
 		}
 	default:

@@ -7,6 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEnsureCodexIdentityHeaders(t *testing.T) {
+	h := make(http.Header)
+	ensureCodexIdentityHeaders(h)
+	enforceCodexIdentityHeaders(h)
+
+	require.Equal(t, "codex_cli_rs", h.Get("originator"))
+	require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
+	require.Equal(t, codexCLIVersion, h.Get("version"))
+	require.Equal(t, "responses=experimental", h.Get("OpenAI-Beta"))
+}
+
 func TestEnforceCodexIdentityHeaders(t *testing.T) {
 	const tuiUA = "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)"
 	tests := []struct {

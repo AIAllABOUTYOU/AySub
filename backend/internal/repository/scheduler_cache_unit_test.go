@@ -21,6 +21,26 @@ func newSchedulerCacheUnitTest(t *testing.T) (context.Context, *schedulerCache, 
 	return context.Background(), newSchedulerCacheWithChunkSizes(rdb, 8, 8).(*schedulerCache), mr, rdb
 }
 
+func TestSchedulerCacheSkipsAndClearsUnencodableAccounts(t *testing.T) {
+	ctx, cache, _, _ := newSchedulerCacheUnitTest(t)
+	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	cacheable, err := cache.writeAccounts(ctx, []service.Account{
+		{ID: 111, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
+		{ID: 112, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, ExpiresAt: &invalidTime},
+	})
+	require.NoError(t, err)
+	require.Len(t, cacheable, 1)
+
+	account := service.Account{ID: 113, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey}
+	require.NoError(t, cache.SetAccount(ctx, &account))
+	account.ExpiresAt = &invalidTime
+	require.NoError(t, cache.SetAccount(ctx, &account))
+	cached, err := cache.GetAccount(ctx, account.ID)
+	require.NoError(t, err)
+	require.Nil(t, cached)
+}
+
 func TestSchedulerCacheListBucketsReconcilesActiveIndex(t *testing.T) {
 	ctx, cache, _, rdb := newSchedulerCacheUnitTest(t)
 	active := service.SchedulerBucket{GroupID: 1, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeSingle}

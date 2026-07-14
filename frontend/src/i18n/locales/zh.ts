@@ -898,6 +898,7 @@ export default {
         geminiCli: 'Gemini CLI',
         codexCli: 'Codex CLI',
         codexCliWs: 'Codex CLI (WebSocket)',
+        grokBuild: 'Grok Build',
         opencode: 'OpenCode'
       },
       antigravity: {
@@ -914,6 +915,12 @@ export default {
           '将以下环境变量添加到您的终端配置文件或直接在终端中运行，以配置 Gemini CLI 访问。',
         modelComment: '如果你有 Gemini 3 权限可以填：gemini-3-pro-preview',
         note: '这些环境变量将在当前终端会话中生效。如需永久配置，请将其添加到 ~/.bashrc、~/.zshrc 或相应的配置文件中。'
+      },
+      grok: {
+        description: '配置 Grok Build 或 OpenCode，让 Responses API 请求通过当前 AySub xAI 分组发送。',
+        configTomlHint: '如已有 config.toml，请先备份再合并此模型配置。保存后运行 grok inspect 验证生效配置。',
+        note: '保存为 ~/.grok/config.toml，然后运行 grok inspect，并在 /model 中选择 aysub-grok。',
+        noteWindows: '保存为 %USERPROFILE%\\.grok\\config.toml，然后运行 grok inspect，并在 /model 中选择 aysub-grok。'
       },
       opencode: {
         title: 'OpenCode 配置示例',
@@ -2078,6 +2085,7 @@ export default {
       totalRequests: '总请求数',
       todayCost: '今日消费',
       totalCost: '总消费',
+      newUsersToday: '今日新增用户',
       actual: '实际',
       standard: '标准',
       accountCost: '成本',
@@ -2089,6 +2097,10 @@ export default {
       performance: '性能指标',
       avgResponse: '平均响应',
       averageTime: '平均时间',
+      active: '活跃',
+      ok: '正常',
+      err: '错误',
+      create: '创建',
       timeRange: '时间范围',
       granularity: '粒度',
       day: '按天',
@@ -2098,6 +2110,7 @@ export default {
       metricTokens: '按 Token',
       metricActualCost: '按实际消费',
       tokenUsageTrend: 'Token 使用趋势',
+      userUsageTrend: '用户使用趋势（Top 12）',
       noDataAvailable: '暂无数据',
       model: '模型',
       group: '分组',
@@ -3115,6 +3128,12 @@ export default {
         finalPricePreview: '最终每秒价格预览',
         notConfigured: '未配置'
       },
+      webSearchPricing: {
+        title: 'Codex 网页搜索计费',
+        pricePerCall: '每次搜索价格（USD）',
+        pricePerCallHint: '留空使用默认价格 $0.01/次（官方价格 $10/1000 次）；填写 0 表示免费。最终价格会叠加当前分组倍率。',
+        finalPricePreview: '应用当前倍率后的每次价格：{price}'
+      },
       modelsList: {
         title: '自定义 /v1/models 模型列表',
         hint: '仅影响 /v1/models 展示结果，不影响白名单模型调用和账号调度。',
@@ -3192,6 +3211,14 @@ export default {
         tooltip: '启用后，当请求包含 MCP 工具时，会在 system prompt 中注入 XML 格式调用协议提示词。关闭此选项可避免对某些客户端造成干扰。',
         enabled: '已启用',
         disabled: '已禁用'
+      },
+      claudeMaxSimulation: {
+        title: 'Claude Max 用量模拟',
+        tooltip:
+          '启用后，对于没有上游缓存写入用量的 Claude 模型，系统会确定性地将 token 映射为少量输入加 1h 缓存创建，同时保持总 token 不变。',
+        enabled: '已启用（模拟 1h 缓存）',
+        disabled: '已禁用',
+        hint: '仅调整用量计费日志中的 token 类别。不会持久化每个请求的映射状态。'
       },
       supportedScopes: {
         title: '支持的模型系列',
@@ -4332,6 +4359,11 @@ export default {
         gemini3Flash: 'G3F',
         gemini3Image: 'G31FI',
         claude: 'Claude',
+        grokRequests: '请求',
+        grokTokens: 'Token',
+        grokUnknown: 'Grok 配额需等待首次上游响应返回 xAI rate-limit 头后显示。',
+        grokRetryAfter: '{time} 后重试',
+        grokNoHeaders: '未观察到配额响应头',
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },
@@ -4934,6 +4966,39 @@ export default {
           pleaseEnterRefreshToken: '请输入 Refresh Token',
           pleaseEnterSessionToken: '请输入 Session Token'
         },
+        grok: {
+          title: 'Grok 账号授权',
+          followSteps: '请按照以下步骤授权您的 xAI/Grok 账号：',
+          step1GenerateUrl: '生成 xAI 授权链接',
+          generateAuthUrl: '生成授权链接',
+          step2OpenUrl: '在浏览器中打开链接并完成授权',
+          openUrlDesc: '在新标签页中打开授权链接，登录 xAI 并授权 API 访问。',
+          importantNotice: '当浏览器跳转到本地 callback URL 后，请复制完整 URL 或 code 参数回填到这里。',
+          step3EnterCode: '输入授权链接或 Code',
+          authCodeDesc: '授权完成后，粘贴 callback URL、查询字符串或授权码：',
+          authCode: '授权链接或 Code',
+          authCodePlaceholder: '粘贴完整 callback URL、?code=... 查询字符串或 code 值',
+          authCodeHint: '支持完整 callback URL、查询字符串或裸 code。',
+          refreshTokenAuth: '手动输入 RT',
+          refreshTokenDesc: '输入已有的 xAI refresh token，支持批量输入（每行一个）。',
+          refreshTokenPlaceholder: '粘贴您的 xAI refresh token...\n支持多个，每行一个',
+          validating: '验证中...',
+          validateAndCreate: '验证并创建账号',
+          pleaseEnterRefreshToken: '请输入 Refresh Token',
+          failedToGenerateUrl: '生成 Grok 授权链接失败',
+          missingExchangeParams: '缺少授权码、state 或 OAuth 会话',
+          failedToExchangeCode: 'Grok 授权码兑换失败',
+          failedToValidateRT: '验证 Grok refresh token 失败',
+          errors: {
+            GROK_OAUTH_SESSION_NOT_FOUND: 'Grok OAuth 会话不存在或已过期。请重新生成授权链接，并粘贴最新的回调链接。',
+            GROK_OAUTH_INVALID_STATE: 'Grok OAuth state 与当前会话不匹配。请粘贴同一次生成的授权链接返回的回调 URL。',
+            GROK_OAUTH_STATE_REQUIRED: '回调链接缺少 OAuth state。请粘贴完整 callback URL，不要只粘贴 code。',
+            GROK_OAUTH_CODE_REQUIRED: '缺少 Grok 授权码。请粘贴完整 callback URL、查询字符串或 code 值。',
+            GROK_OAUTH_NO_REFRESH_TOKEN: 'Grok 响应未返回 refresh token。请重新生成授权链接，并再次确认 offline access 授权。',
+            GROK_OAUTH_PROXY_NOT_AVAILABLE: '无法查询 Grok OAuth 代理配置。请检查选择的代理后重试。',
+            GROK_OAUTH_PROXY_NOT_FOUND: '找不到所选代理。请选择可用代理后重试。'
+          }
+        },
         // Gemini specific
         gemini: {
           title: 'Gemini 账户授权',
@@ -5148,6 +5213,7 @@ export default {
       reAuthorizeAccount: '重新授权账号',
       claudeCodeAccount: 'Claude Code 账号',
       openaiAccount: 'OpenAI 账号',
+      xaiAccount: 'xAI / Grok 账号',
       geminiAccount: 'Gemini 账号',
       antigravityAccount: 'Antigravity 账号',
       inputMethod: '输入方式',
@@ -7569,6 +7635,13 @@ export default {
         scopeOAuth: '仅 OAuth 账号',
         scopeAPIKey: '仅 API Key 账号',
         scopeBedrock: '仅 Bedrock 账号',
+        userIds: '指定用户',
+        userIdsHint: '输入任意邮箱关键词进行模糊搜索。留空表示对全部 AySub 用户生效；选中用户的 API Key 请求优先匹配用户规则。',
+        userSearchPlaceholder: '输入用户邮箱搜索',
+        userSearchEmpty: '未找到匹配用户',
+        userDeleted: '（已删除）',
+        userIdFallback: '用户 #{id}',
+        removeUser: '移除用户',
         errorMessage: '错误消息',
         errorMessagePlaceholder: '拦截时返回的自定义错误消息',
         errorMessageHint: '留空则使用默认错误消息。',

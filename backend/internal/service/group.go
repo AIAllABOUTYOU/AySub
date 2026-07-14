@@ -48,6 +48,7 @@ type Group struct {
 	VideoPrice480P               *float64
 	VideoPrice720P               *float64
 	VideoPrice1080P              *float64
+	WebSearchPricePerCall        *float64
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool

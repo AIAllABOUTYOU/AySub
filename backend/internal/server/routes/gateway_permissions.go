@@ -66,7 +66,7 @@ func permissionEndpointID(inbound string) string {
 		return service.EndpointPermissionMessages
 	case handler.EndpointChatCompletions:
 		return service.EndpointPermissionChatCompletions
-	case handler.EndpointResponses:
+	case handler.EndpointResponses, handler.EndpointResponsesCompact, handler.EndpointAlphaSearch:
 		return service.EndpointPermissionResponses
 	case handler.EndpointEmbeddings:
 		return service.EndpointPermissionEmbeddings

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,38 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+func TestApplyGrokCLIProxyHeaders(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetURL  string
+		override   string
+		wantHeader bool
+		wantVer    string
+	}{
+		{name: "cli default", targetURL: "https://cli-chat-proxy.grok.com/v1/responses", wantHeader: true, wantVer: grokCLIStableVersion},
+		{name: "valid override", targetURL: "https://cli-chat-proxy.grok.com/v1/responses", override: "0.3.0", wantHeader: true, wantVer: "0.3.0"},
+		{name: "old override rejected", targetURL: "https://cli-chat-proxy.grok.com/v1/responses", override: "0.1.0", wantHeader: true, wantVer: grokCLIStableVersion},
+		{name: "direct xai unchanged", targetURL: "https://api.x.ai/v1/responses"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(grokCLIVersionOverride, tt.override)
+			parsed, err := url.Parse(tt.targetURL)
+			require.NoError(t, err)
+			req := &http.Request{URL: parsed, Header: make(http.Header)}
+			applyGrokCLIProxyHeaders(req)
+			if !tt.wantHeader {
+				require.Empty(t, req.Header.Get("X-XAI-Token-Auth"))
+				return
+			}
+			require.Equal(t, "xai-grok-cli", req.Header.Get("X-XAI-Token-Auth"))
+			require.Equal(t, tt.wantVer, req.Header.Get("x-grok-client-version"))
+			require.Equal(t, "xai-grok-workspace/"+tt.wantVer, req.Header.Get("User-Agent"))
+		})
+	}
+}
 
 // HTTPUpstreamSuite HTTP 上游服务测试套件
 // 使用 testify/suite 组织测试，支持 SetupTest 初始化

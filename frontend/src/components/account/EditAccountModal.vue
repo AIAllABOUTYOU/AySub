@@ -38,7 +38,7 @@
               account.platform === 'openai'
                 ? 'https://api.openai.com'
                 : account.platform === 'xai'
-                  ? 'https://api.x.ai'
+                  ? 'https://api.x.ai/v1'
                 : account.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : account.platform === 'antigravity'
@@ -3010,7 +3010,7 @@ const tempUnschedPresets = computed(() => [
 // Computed: default base URL based on platform
 const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
-  if (props.account?.platform === 'xai') return 'https://api.x.ai'
+  if (props.account?.platform === 'xai') return 'https://api.x.ai/v1'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
   return 'https://api.anthropic.com'
 })
@@ -3279,7 +3279,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
         : newAccount.platform === 'xai'
-          ? 'https://api.x.ai'
+          ? 'https://api.x.ai/v1'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'
@@ -3357,7 +3357,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
         : newAccount.platform === 'xai'
-          ? 'https://api.x.ai'
+          ? 'https://api.x.ai/v1'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
           : 'https://api.anthropic.com'

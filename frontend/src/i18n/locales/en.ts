@@ -899,6 +899,7 @@ export default {
         geminiCli: 'Gemini CLI',
         codexCli: 'Codex CLI',
         codexCliWs: 'Codex CLI (WebSocket)',
+        grokBuild: 'Grok Build',
         opencode: 'OpenCode',
       },
       antigravity: {
@@ -912,6 +913,12 @@ export default {
         description: 'Add the following environment variables to your terminal profile or run directly in terminal to configure Gemini CLI access.',
         modelComment: 'If you have Gemini 3 access, you can use: gemini-3-pro-preview',
         note: 'These environment variables will be active in the current terminal session. For permanent configuration, add them to ~/.bashrc, ~/.zshrc, or the appropriate configuration file.',
+      },
+      grok: {
+        description: 'Configure Grok Build or OpenCode to send Responses API traffic through your AySub xAI group.',
+        configTomlHint: 'Back up an existing config.toml before merging this model entry. Run grok inspect after saving to verify the effective configuration.',
+        note: 'Save the file as ~/.grok/config.toml, then run grok inspect and select aysub-grok from /model.',
+        noteWindows: 'Save the file as %USERPROFILE%\\.grok\\config.toml, then run grok inspect and select aysub-grok from /model.'
       },
       opencode: {
         title: 'OpenCode Example',
@@ -3035,6 +3042,12 @@ export default {
         finalPricePreview: 'Final per-second price preview',
         notConfigured: 'Not configured'
       },
+      webSearchPricing: {
+        title: 'Codex Web Search Pricing',
+        pricePerCall: 'Price per search call (USD)',
+        pricePerCallHint: 'Leave empty to use the default $0.01 per call (official pricing: $10 per 1,000 calls); 0 means free. The current group rate multiplier is applied on top.',
+        finalPricePreview: 'Per-call price after current multiplier: {price}'
+      },
       modelsList: {
         title: 'Custom /v1/models Model List',
         hint: 'Only changes the /v1/models response. Whitelist model calls and account routing are unchanged.',
@@ -4792,6 +4805,39 @@ export default {
           pleaseEnterRefreshToken: 'Please enter Refresh Token',
           pleaseEnterSessionToken: 'Please enter Session Token'
         },
+        grok: {
+          title: 'Grok Account Authorization',
+          followSteps: 'Follow these steps to authorize your xAI/Grok account:',
+          step1GenerateUrl: 'Generate the xAI authorization URL',
+          generateAuthUrl: 'Generate Auth URL',
+          step2OpenUrl: 'Open the URL in your browser and complete authorization',
+          openUrlDesc: 'Open the authorization URL in a new tab, sign in to xAI, and authorize API access.',
+          importantNotice: 'When the browser reaches the local callback URL, copy the full URL or the code query parameter back here.',
+          step3EnterCode: 'Enter Authorization URL or Code',
+          authCodeDesc: 'After authorization, paste the callback URL, query string, or authorization code:',
+          authCode: 'Authorization URL or Code',
+          authCodePlaceholder: 'Paste the full callback URL, ?code=... query string, or code value',
+          authCodeHint: 'Full callback URLs, query strings, and bare codes are accepted.',
+          refreshTokenAuth: 'Manual RT Input',
+          refreshTokenDesc: 'Enter existing xAI refresh token(s). Supports batch input, one per line.',
+          refreshTokenPlaceholder: 'Paste your xAI refresh token...\nSupports multiple, one per line',
+          validating: 'Validating...',
+          validateAndCreate: 'Validate & Create Account',
+          pleaseEnterRefreshToken: 'Please enter Refresh Token',
+          failedToGenerateUrl: 'Failed to generate Grok auth URL',
+          missingExchangeParams: 'Missing authorization code, state, or OAuth session',
+          failedToExchangeCode: 'Failed to exchange Grok authorization code',
+          failedToValidateRT: 'Failed to validate Grok refresh token',
+          errors: {
+            GROK_OAUTH_SESSION_NOT_FOUND: 'Grok OAuth session was not found or has expired. Generate a new auth URL and paste the newest callback URL.',
+            GROK_OAUTH_INVALID_STATE: 'Grok OAuth state does not match this session. Paste the callback URL from the same generated auth link.',
+            GROK_OAUTH_STATE_REQUIRED: 'The callback URL is missing the OAuth state. Paste the full callback URL, not only the code.',
+            GROK_OAUTH_CODE_REQUIRED: 'The Grok authorization code is missing. Paste the full callback URL, query string, or code value.',
+            GROK_OAUTH_NO_REFRESH_TOKEN: 'The Grok response did not include a refresh token. Generate a new auth URL and approve offline access again.',
+            GROK_OAUTH_PROXY_NOT_AVAILABLE: 'Grok OAuth proxy lookup is unavailable. Check the selected proxy and retry.',
+            GROK_OAUTH_PROXY_NOT_FOUND: 'The selected proxy could not be found. Choose an available proxy and retry.'
+          }
+        },
         // Gemini specific
 	        gemini: {
 	          title: 'Gemini Account Authorization',
@@ -5011,6 +5057,7 @@ export default {
       reAuthorizeAccount: 'Re-Authorize Account',
       claudeCodeAccount: 'Claude Code Account',
       openaiAccount: 'OpenAI Account',
+      xaiAccount: 'xAI / Grok Account',
       geminiAccount: 'Gemini Account',
       antigravityAccount: 'Antigravity Account',
       inputMethod: 'Input Method',
@@ -5087,6 +5134,11 @@ export default {
         gemini3Flash: 'G3F',
         gemini3Image: 'G31FI',
         claude: 'Claude',
+        grokRequests: 'Req',
+        grokTokens: 'Tok',
+        grokUnknown: 'Grok quota is unknown until the first upstream response includes xAI rate-limit headers.',
+        grokRetryAfter: 'Retry after {time}',
+        grokNoHeaders: 'No quota headers observed',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },
@@ -7415,6 +7467,13 @@ export default {
         scopeOAuth: 'OAuth only',
         scopeAPIKey: 'API Key only',
         scopeBedrock: 'Bedrock only',
+        userIds: 'Specific users',
+        userIdsHint: 'Type any part of a user email to search. Leave empty to apply to all AySub users. Selected users match requests from their API keys and take precedence over global rules.',
+        userSearchPlaceholder: 'Search by user email',
+        userSearchEmpty: 'No matching users found',
+        userDeleted: '(deleted)',
+        userIdFallback: 'User #{id}',
+        removeUser: 'Remove user',
         errorMessage: 'Error message',
         errorMessagePlaceholder: 'Custom error message when blocked',
         errorMessageHint: 'Leave empty for the default message.',

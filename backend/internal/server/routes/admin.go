@@ -41,6 +41,9 @@ func RegisterAdminRoutes(
 		// Antigravity OAuth
 		registerAntigravityOAuthRoutes(admin, h)
 
+		// xAI OAuth
+		registerGrokOAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -400,6 +403,20 @@ func registerAntigravityOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers)
 		antigravity.POST("/oauth/auth-url", h.Admin.AntigravityOAuth.GenerateAuthURL)
 		antigravity.POST("/oauth/exchange-code", h.Admin.AntigravityOAuth.ExchangeCode)
 		antigravity.POST("/oauth/refresh-token", h.Admin.AntigravityOAuth.RefreshToken)
+	}
+}
+
+func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	xai := admin.Group("/xai")
+	{
+		xai.POST("/oauth/auth-url", h.Admin.GrokOAuth.GenerateAuthURL)
+		xai.POST("/oauth/exchange-code", h.Admin.GrokOAuth.ExchangeCode)
+		xai.POST("/oauth/refresh-token", h.Admin.GrokOAuth.RefreshToken)
+		xai.POST("/oauth/create-from-oauth", h.Admin.GrokOAuth.CreateAccountFromOAuth)
+		xai.POST("/accounts/:id/refresh", h.Admin.GrokOAuth.RefreshAccountToken)
+		xai.GET("/accounts/:id/quota", h.Admin.GrokOAuth.QueryQuota)
+		xai.POST("/accounts/:id/reset-quota", h.Admin.GrokOAuth.ResetQuota)
+		xai.GET("/runtime-sanity", h.Admin.GrokOAuth.RuntimeSanity)
 	}
 }
 

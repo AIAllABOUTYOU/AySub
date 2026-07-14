@@ -1,0 +1,291 @@
+package handler
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+func (h *OpenAIGatewayHandler) GrokVideoGeneration(c *gin.Context) {
+	h.handleGrokMedia(c, service.GrokMediaEndpointVideosGenerations, "")
+}
+
+func (h *OpenAIGatewayHandler) GrokVideoStatus(c *gin.Context) {
+	requestID := strings.TrimSpace(c.Param("request_id"))
+	if requestID == "" {
+		requestID = strings.TrimSpace(c.Param("video_id"))
+	}
+	h.handleGrokMedia(c, service.GrokMediaEndpointVideoStatus, requestID)
+}
+
+func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.GrokMediaEndpoint, requestID string) {
+	streamStarted := false
+	defer h.recoverResponsesPanic(c, &streamStarted)
+
+	requestStart := time.Now()
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
+		return
+	}
+	reqLog := requestLogger(
+		c,
+		"handler.openai_gateway.grok_media",
+		zap.Int64("user_id", subject.UserID),
+		zap.Int64("api_key_id", apiKey.ID),
+		zap.Any("group_id", apiKey.GroupID),
+		zap.String("endpoint", string(endpoint)),
+	)
+	if !h.ensureResponsesDependencies(c, reqLog) {
+		return
+	}
+
+	var body []byte
+	var err error
+	if endpoint.RequiresRequestBody() {
+		body, err = pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+		if err != nil {
+			if maxErr, ok := extractMaxBytesError(err); ok {
+				h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
+				return
+			}
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
+			return
+		}
+		if len(body) == 0 {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
+			return
+		}
+	}
+
+	contentType := c.GetHeader("Content-Type")
+	requestInfo := service.ParseGrokMediaRequest(contentType, body)
+	requestModel := requestInfo.Model
+	if endpoint.IsGenerationRequest() && requestModel == "" {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
+		return
+	}
+	if endpoint == service.GrokMediaEndpointVideoStatus && strings.TrimSpace(requestID) == "" {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "request_id is required")
+		return
+	}
+
+	reqLog = reqLog.With(zap.String("model", requestModel))
+	setOpsRequestContext(c, requestModel, false)
+	setOpsEndpointContext(c, "", int16(service.RequestTypeSync))
+	if endpoint.IsGenerationRequest() {
+		if !service.GroupAllowsImageGeneration(apiKey.Group) {
+			h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
+			return
+		}
+		if moderationBody := requestInfo.ModerationBody(); len(moderationBody) > 0 {
+			decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIImages, requestModel, moderationBody)
+			if decision != nil && decision.Blocked {
+				h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
+				return
+			}
+		}
+		imageRelease, acquired := h.acquireImageGenerationSlot(c, streamStarted)
+		if !acquired {
+			return
+		}
+		if imageRelease != nil {
+			defer imageRelease()
+		}
+	}
+
+	if h.errorPassthroughService != nil {
+		service.BindErrorPassthroughService(c, h.errorPassthroughService)
+	}
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
+	userRelease, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, reqLog)
+	if !acquired {
+		return
+	}
+	if userRelease != nil {
+		defer userRelease()
+	}
+	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.errorResponse(c, status, code, message)
+		return
+	}
+
+	sessionSeed := body
+	if len(sessionSeed) == 0 {
+		sessionSeed = []byte(requestID)
+	}
+	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, sessionSeed)
+	if endpoint == service.GrokMediaEndpointVideoStatus {
+		sessionHash = service.GrokMediaVideoRequestSessionHash(requestID)
+	}
+	requestCtx := service.WithOpenAICompatiblePlatform(c.Request.Context(), service.PlatformXAI)
+	failedAccountIDs := make(map[int64]struct{})
+	sameAccountRetryCount := make(map[int64]int)
+	var lastFailoverErr *service.UpstreamFailoverError
+	switchCount := 0
+	maxAccountSwitches := h.maxAccountSwitches
+	if maxAccountSwitches <= 0 {
+		maxAccountSwitches = 3
+	}
+	routingStart := time.Now()
+
+	for {
+		selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
+			requestCtx,
+			apiKey.GroupID,
+			"",
+			sessionHash,
+			requestModel,
+			failedAccountIDs,
+			service.OpenAIUpstreamTransportHTTPSSE,
+			service.OpenAIEndpointCapabilityGrokMedia,
+			false,
+		)
+		if err != nil || selection == nil || selection.Account == nil {
+			if len(failedAccountIDs) == 0 {
+				classification := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, requestModel, requestModel, service.PlatformXAI)
+				if !classification.ModelNotFound {
+					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
+				}
+				h.errorResponse(c, classification.Status, classification.ErrType, classification.Message)
+				return
+			}
+			if lastFailoverErr != nil {
+				h.handleFailoverExhausted(c, lastFailoverErr, false)
+			} else {
+				h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "No available official xAI media accounts")
+			}
+			return
+		}
+
+		account := selection.Account
+		setOpsSelectedAccount(c, account.ID, account.Platform)
+		accountRelease, accountAcquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, false, &streamStarted, reqLog)
+		if !accountAcquired {
+			return
+		}
+		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
+		forwardStart := time.Now()
+		writerSizeBeforeForward := c.Writer.Size()
+		result, err := func() (*service.OpenAIForwardResult, error) {
+			if accountRelease != nil {
+				defer accountRelease()
+			}
+			return h.gatewayService.ForwardGrokMedia(requestCtx, c, account, endpoint, requestID, body, contentType)
+		}()
+		forwardDurationMs := time.Since(forwardStart).Milliseconds()
+		upstreamLatencyMs, _ := getContextInt64(c, service.OpsUpstreamLatencyMsKey)
+		if upstreamLatencyMs > 0 && forwardDurationMs > upstreamLatencyMs {
+			service.SetOpsLatencyMs(c, service.OpsResponseLatencyMsKey, forwardDurationMs-upstreamLatencyMs)
+		}
+
+		if err != nil {
+			var failoverErr *service.UpstreamFailoverError
+			if !errors.As(err, &failoverErr) {
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				if c.Writer.Size() == writerSizeBeforeForward {
+					h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
+				}
+				reqLog.Warn("grok_media.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+				return
+			}
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			if c.Writer.Size() != writerSizeBeforeForward {
+				h.handleFailoverExhausted(c, failoverErr, true)
+				return
+			}
+			if failoverErr.RetryableOnSameAccount && sameAccountRetryCount[account.ID] < account.GetPoolModeRetryCount() {
+				sameAccountRetryCount[account.ID]++
+				select {
+				case <-requestCtx.Done():
+					return
+				case <-time.After(sameAccountRetryDelay):
+				}
+				continue
+			}
+			h.gatewayService.RecordOpenAIAccountSwitch()
+			failedAccountIDs[account.ID] = struct{}{}
+			lastFailoverErr = failoverErr
+			if switchCount >= maxAccountSwitches {
+				h.handleFailoverExhausted(c, failoverErr, false)
+				return
+			}
+			switchCount++
+			continue
+		}
+
+		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+		if endpoint == service.GrokMediaEndpointVideosGenerations && result != nil && strings.TrimSpace(result.ResponseID) != "" {
+			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(requestCtx, apiKey.GroupID, result.ResponseID, account.ID); err != nil {
+				reqLog.Warn("grok_media.bind_video_request_account_failed", zap.Error(err))
+			}
+		}
+		if endpoint.IsGenerationRequest() && requestModel != "" && result != nil {
+			h.recordGrokMediaUsage(c, reqLog, apiKey, subject, subscription, account, result, requestModel, body, requestID)
+		}
+		return
+	}
+}
+
+func (h *OpenAIGatewayHandler) recordGrokMediaUsage(
+	c *gin.Context,
+	reqLog *zap.Logger,
+	apiKey *service.APIKey,
+	subject middleware2.AuthSubject,
+	subscription *service.UserSubscription,
+	account *service.Account,
+	result *service.OpenAIForwardResult,
+	requestModel string,
+	body []byte,
+	requestID string,
+) {
+	payloadForHash := body
+	if len(payloadForHash) == 0 {
+		payloadForHash = []byte(requestID)
+	}
+	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
+			Result:             result,
+			APIKey:             apiKey,
+			User:               apiKey.User,
+			Account:            account,
+			Subscription:       subscription,
+			InboundEndpoint:    GetInboundEndpoint(c),
+			UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+			UserAgent:          c.GetHeader("User-Agent"),
+			IPAddress:          ip.GetClientIP(c),
+			RequestPayloadHash: service.HashUsageRequestPayload(payloadForHash),
+			APIKeyService:      h.apiKeyService,
+			ChannelUsageFields: service.ChannelUsageFields{OriginalModel: requestModel, ChannelMappedModel: requestModel},
+		})
+		if err != nil {
+			logger.L().With(
+				zap.Int64("user_id", subject.UserID),
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.Int64("account_id", account.ID),
+			).Error("grok_media.record_usage_failed", zap.Error(err))
+			reqLog.Debug("grok_media.record_usage_failed", zap.Error(err))
+		}
+	})
+}

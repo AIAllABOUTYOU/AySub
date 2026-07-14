@@ -47,6 +47,21 @@ func RegisterGatewayRoutes(
 		ctx := service.WithOpenAICompatiblePlatform(c.Request.Context(), platform)
 		c.Request = c.Request.WithContext(ctx)
 	}
+	grokVideoGenerationHandler := func(c *gin.Context) {
+		platform := openAICompatiblePlatform(c)
+		if platform != service.PlatformXAI {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"type":    "not_found_error",
+					"message": "Official xAI video generation is not supported for this platform",
+				},
+			})
+			return
+		}
+		withOpenAICompatiblePlatform(c, platform)
+		h.OpenAIGateway.GrokVideoGeneration(c)
+	}
 
 	// API网关（Claude API兼容）
 	gateway := r.Group("/v1")
@@ -113,6 +128,7 @@ func RegisterGatewayRoutes(
 			}
 			h.Gateway.Responses(c)
 		})
+		gateway.POST("/alpha/search", h.OpenAIGateway.AlphaSearch)
 		gateway.GET("/responses", h.OpenAIGateway.ResponsesWebSocket)
 		// OpenAI Chat Completions API: auto-route based on group platform
 		gateway.POST("/chat/completions", func(c *gin.Context) {
@@ -238,6 +254,7 @@ func RegisterGatewayRoutes(
 			withOpenAICompatiblePlatform(c, platform)
 			h.OpenAIGateway.Videos(c)
 		})
+		gateway.POST("/videos/generations", grokVideoGenerationHandler)
 		gateway.GET("/videos/:video_id", h.OpenAIGateway.VideoJob)
 		gateway.GET("/videos/:video_id/content", h.OpenAIGateway.VideoContent)
 		gateway.GET("/files/image", h.OpenAIGateway.LocalImageFile)
@@ -303,12 +320,14 @@ func RegisterGatewayRoutes(
 	permissionGoogle := requireAPIKeyGatewayPermission(gatewayPermissionProtocolGoogle, auditService)
 	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
 	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, responsesHandler)
+	r.POST("/alpha/search", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.AlphaSearch)
 	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.ResponsesWebSocket)
 	codexDirect := r.Group("/backend-api/codex")
 	codexDirect.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic)
 	{
 		codexDirect.POST("/responses", responsesHandler)
 		codexDirect.POST("/responses/*subpath", responsesHandler)
+		codexDirect.POST("/alpha/search", h.OpenAIGateway.AlphaSearch)
 		codexDirect.GET("/responses", h.OpenAIGateway.ResponsesWebSocket)
 		codexDirect.GET("/models", h.OpenAIGateway.CodexModels)
 	}
@@ -426,6 +445,7 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.Videos(c)
 	})
+	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, grokVideoGenerationHandler)
 	r.GET("/videos/:video_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoJob)
 	r.GET("/videos/:video_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoContent)
 	r.GET("/files/image", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.LocalImageFile)

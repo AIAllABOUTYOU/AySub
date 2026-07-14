@@ -837,8 +837,7 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, firstResult)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
-	require.Empty(t, upstream.requests[0].Header.Get("OpenAI-Beta"))
-	require.Empty(t, upstream.requests[0].Header.Get("originator"))
+	requireOpenAIMessagesCodexIdentity(t, upstream.requests[0], codexCLIUserAgent, "codex_cli_rs")
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
 	secondRec := httptest.NewRecorder()
@@ -852,8 +851,7 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 	require.Equal(t, "turn_state_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Equal(t, generateSessionUUID(isolateOpenAISessionID(0, "stable-cache-key")), upstream.requests[1].Header.Get("session_id"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
-	require.Empty(t, upstream.requests[1].Header.Get("OpenAI-Beta"))
-	require.Empty(t, upstream.requests[1].Header.Get("originator"))
+	requireOpenAIMessagesCodexIdentity(t, upstream.requests[1], codexCLIUserAgent, "codex_cli_rs")
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
@@ -1064,8 +1062,16 @@ func TestForwardAsAnthropic_OAuthKeepsSystemAsDeveloperInput(t *testing.T) {
 	instructions := gjson.GetBytes(upstream.lastBody, "instructions")
 	require.True(t, instructions.Exists())
 	require.Empty(t, instructions.String())
-	require.Empty(t, upstream.requests[0].Header.Get("OpenAI-Beta"))
-	require.Empty(t, upstream.requests[0].Header.Get("originator"))
+	requireOpenAIMessagesCodexIdentity(t, upstream.requests[0], codexCLIUserAgent, "codex_cli_rs")
+}
+
+func requireOpenAIMessagesCodexIdentity(t *testing.T, req *http.Request, wantUserAgent, wantOriginator string) {
+	t.Helper()
+	require.NotNil(t, req)
+	require.Equal(t, wantUserAgent, req.Header.Get("User-Agent"))
+	require.Equal(t, wantOriginator, req.Header.Get("originator"))
+	require.Equal(t, codexCLIVersion, req.Header.Get("version"))
+	require.Equal(t, "responses=experimental", req.Header.Get("OpenAI-Beta"))
 }
 
 func TestForwardAsAnthropic_OAuthAddsClaudeCodeTodoGuardForCompatModel(t *testing.T) {

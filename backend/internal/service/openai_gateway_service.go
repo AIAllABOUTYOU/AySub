@@ -262,6 +262,8 @@ type OpenAIForwardResult struct {
 	VideoResolution    string
 	// VideoDurationSeconds 是提交时请求的生成时长，已按 AySub 视频请求契约校验。
 	VideoDurationSeconds int
+	// WebSearchCalls is the number of successful standalone alpha/search calls.
+	WebSearchCalls int
 
 	wsReplayInput       []json.RawMessage
 	wsReplayInputExists bool
@@ -359,6 +361,7 @@ type OpenAIGatewayService struct {
 	httpUpstream          HTTPUpstream
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
+	grokTokenProvider     *GrokTokenProvider
 	toolCorrector         *CodexToolCorrector
 	openaiWSResolver      OpenAIWSProtocolResolver
 	resolver              *ModelPricingResolver
@@ -387,6 +390,12 @@ type OpenAIGatewayService struct {
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	selectionCursors                    *accountSelectionCursorStore
+}
+
+func (s *OpenAIGatewayService) SetGrokTokenProvider(provider *GrokTokenProvider) {
+	if s != nil {
+		s.grokTokenProvider = provider
+	}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -2402,6 +2411,10 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	account = credentialAccount
 	switch account.Type {
 	case AccountTypeOAuth:
+		if account.IsGrok() {
+			accessToken, err := s.getGrokAccessToken(ctx, account)
+			return accessToken, "oauth", err
+		}
 		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
@@ -2417,6 +2430,10 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		return accessToken, "oauth", nil
 	case AccountTypeAPIKey:
+		if account.IsGrok() {
+			apiKey, err := s.getGrokAccessToken(ctx, account)
+			return apiKey, "apikey", err
+		}
 		apiKey := account.GetOpenAIApiKey()
 		if apiKey == "" {
 			return "", "", errors.New("api_key not found in credentials")
@@ -2523,6 +2540,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	requestView := newOpenAIRequestView(body)
 	reqModel, reqStream, promptCacheKey := requestView.Model, requestView.Stream, requestView.PromptCacheKey
 	originalModel := reqModel
+
+	if account.IsGrok() && !account.IsXAICookie() {
+		return s.forwardGrokResponses(ctx, c, account, body, originalModel, reqStream, startTime)
+	}
 
 	if account.Type == AccountTypeAPIKey && !shouldUseResponsesAPIForAccount(account) {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
@@ -6167,7 +6188,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
 	}
-	cost, err = s.calculateOpenAIRecordUsageCost(ctx, result, apiKey, billingModels, multiplier, imageMultiplier, videoMultiplier, tokens, serviceTier)
+	cost, err = s.calculateOpenAIRecordUsageCost(ctx, result, apiKey, billingModels, multiplier, imageMultiplier, videoMultiplier, baseMultiplier, tokens, serviceTier)
 	if err != nil {
 		if !isUsagePricingUnavailableError(err) {
 			return err
@@ -6345,10 +6366,14 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	multiplier float64,
 	imageMultiplier float64,
 	videoMultiplier float64,
+	webSearchMultiplier float64,
 	tokens UsageTokens,
 	serviceTier string,
 ) (*CostBreakdown, error) {
 	billingModel := firstUsageBillingModel(billingModels)
+	if result != nil && result.WebSearchCalls > 0 {
+		return s.billingService.CalculateWebSearchCost(result.WebSearchCalls, webSearchPricePerCallFromAPIKey(apiKey), webSearchMultiplier), nil
+	}
 	if isGrokVideoUsageResult(result, billingModels) {
 		if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved == nil || resolved.Mode != BillingModeToken {
 			return s.calculateOpenAIVideoCost(ctx, billingModel, apiKey, result, videoMultiplier), nil

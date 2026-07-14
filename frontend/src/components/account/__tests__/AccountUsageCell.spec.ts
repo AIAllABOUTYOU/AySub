@@ -196,6 +196,35 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('fast|75|2026-06-03T11:00:00Z')
   })
 
+  it('Grok OAuth 配额条按剩余容量展示', async () => {
+    getUsage.mockResolvedValue({
+      grok_request_quota: { limit: 100, remaining: 100, reset_at: '2026-07-09T16:00:00Z' },
+      grok_token_quota: { limit: 1000, remaining: 250, reset_at: '2026-07-09T16:00:00Z' },
+      grok_quota_snapshot_state: 'observed'
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 5002, platform: 'xai', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color', 'remainingCapacity'],
+            template: '<div>{{ label }}|{{ utilization }}|{{ remainingCapacity }}</div>'
+          },
+          AccountQuotaInfo: true,
+          OpenAIQuotaResetCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokRequests|100|true')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokTokens|25|true')
+  })
+
 
   it('OpenAI OAuth 快照已过期时首屏会重新请求 usage', async () => {
     getUsage.mockResolvedValue({

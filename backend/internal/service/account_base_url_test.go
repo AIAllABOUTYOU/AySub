@@ -172,7 +172,7 @@ func TestGetOpenAIBaseURL_XAI(t *testing.T) {
 				Platform:    PlatformXAI,
 				Credentials: map[string]any{},
 			},
-			expected: "https://api.x.ai",
+			expected: "https://api.x.ai/v1",
 		},
 		{
 			name: "xai apikey custom base_url wins",

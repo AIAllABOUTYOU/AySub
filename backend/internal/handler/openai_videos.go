@@ -229,6 +229,10 @@ func (h *OpenAIGatewayHandler) VideoJob(c *gin.Context) {
 	videoID := strings.TrimSpace(c.Param("video_id"))
 	job, ok := h.gatewayService.GetVideoJob(videoID)
 	if !ok {
+		if apiKey, exists := middleware2.GetAPIKeyFromContext(c); exists && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformXAI {
+			h.GrokVideoStatus(c)
+			return
+		}
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Video not found")
 		return
 	}

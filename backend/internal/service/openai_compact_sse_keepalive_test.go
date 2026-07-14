@@ -82,3 +82,15 @@ func TestWriteOpenAIFastPolicyBlockedResponse_AfterKeepaliveCommit(t *testing.T)
 	require.Len(t, events, 1)
 	require.Equal(t, "permission_error", gjson.Get(events[0][1], "response.error.code").String())
 }
+
+func TestOpenAICompactKeepaliveWriterReleasedDelegatesAreSafe(t *testing.T) {
+	w := &openAICompactKeepaliveWriter{}
+	require.NotNil(t, w.Header())
+	require.False(t, w.Written())
+	require.Equal(t, 0, w.Size())
+	require.Equal(t, 0, w.Status())
+	_, _, err := w.Hijack()
+	require.Error(t, err)
+	require.NotNil(t, w.CloseNotify())
+	require.Nil(t, w.Pusher())
+}

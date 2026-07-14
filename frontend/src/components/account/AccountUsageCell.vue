@@ -171,6 +171,58 @@
       </div>
     </template>
 
+    <!-- Grok OAuth accounts: show passive xAI quota headers as remaining capacity -->
+    <template v-else-if="account.platform === 'xai' && account.type === 'oauth'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="h-3 w-[72px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      </div>
+      <div v-else-if="error" class="text-xs text-red-500">{{ error }}</div>
+      <div v-else-if="usageInfo" class="space-y-1">
+        <div v-if="grokEntitlementLabel" class="mb-0.5">
+          <span class="inline-block rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+            {{ grokEntitlementLabel }}
+          </span>
+        </div>
+        <div v-if="grokLocalUsage" class="mb-0.5 flex items-center">
+          <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatWindowRequests(grokLocalUsage) }} req</span>
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatWindowTokens(grokLocalUsage) }}</span>
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">A ${{ formatWindowCost(grokLocalUsage) }}</span>
+            <span
+              v-if="grokLocalUsage.user_cost != null"
+              class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
+              :title="t('usage.userBilled')"
+            >
+              U ${{ formatWindowUserCost(grokLocalUsage) }}
+            </span>
+          </div>
+        </div>
+        <UsageProgressBar
+          v-if="grokRequestQuotaBar"
+          :label="t('admin.accounts.usageWindow.grokRequests')"
+          :utilization="grokRequestQuotaBar.utilization"
+          :resets-at="grokRequestQuotaBar.resetsAt"
+          :remaining-capacity="true"
+          color="indigo"
+        />
+        <UsageProgressBar
+          v-if="grokTokenQuotaBar"
+          :label="t('admin.accounts.usageWindow.grokTokens')"
+          :utilization="grokTokenQuotaBar.utilization"
+          :resets-at="grokTokenQuotaBar.resetsAt"
+          :remaining-capacity="true"
+          color="emerald"
+        />
+        <div v-if="grokRetryAfterLabel" class="text-[10px] text-amber-600 dark:text-amber-400">
+          {{ t('admin.accounts.usageWindow.grokRetryAfter', { time: grokRetryAfterLabel }) }}
+        </div>
+        <div v-if="grokQuotaUnknown" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ grokQuotaUnknownLabel }}
+        </div>
+      </div>
+      <div v-else class="text-xs text-gray-400">-</div>
+    </template>
+
     <!-- Grok Cookie accounts: fetch live rate-limits from Grok Web -->
     <template v-else-if="account.platform === 'xai' && account.type === 'cookie'">
       <div v-if="loading" class="space-y-1.5">
@@ -607,7 +659,7 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'xai') {
-    return props.account.type === 'cookie'
+    return props.account.type === 'oauth' || props.account.type === 'cookie'
   }
   return false
 })
@@ -635,6 +687,46 @@ const hasOpenAIUsageFallback = computed(() => {
 const hasGrokQuota = computed(() => {
   return usageInfo.value?.grok_quota && Object.keys(usageInfo.value.grok_quota).length > 0
 })
+
+interface GrokQuotaBarInfo {
+  utilization: number
+  resetsAt: string | null
+}
+
+const makeGrokQuotaBar = (
+  quota?: { limit?: number | null; remaining?: number | null; reset_at?: string | null } | null
+): GrokQuotaBarInfo | null => {
+  if (!quota || quota.limit == null || quota.remaining == null || quota.limit <= 0) return null
+  const remaining = Math.min(quota.limit, Math.max(0, quota.remaining))
+  return {
+    utilization: (remaining / quota.limit) * 100,
+    resetsAt: quota.reset_at || null
+  }
+}
+
+const grokRequestQuotaBar = computed(() => makeGrokQuotaBar(usageInfo.value?.grok_request_quota))
+const grokTokenQuotaBar = computed(() => makeGrokQuotaBar(usageInfo.value?.grok_token_quota))
+const grokQuotaUnknown = computed(() => {
+  if (props.account.platform !== 'xai' || props.account.type !== 'oauth') return false
+  if (grokRequestQuotaBar.value || grokTokenQuotaBar.value) return false
+  return usageInfo.value?.grok_quota_snapshot_state !== 'observed'
+})
+const grokQuotaUnknownLabel = computed(() =>
+  usageInfo.value?.grok_quota_snapshot_state === 'no_headers'
+    ? t('admin.accounts.usageWindow.grokNoHeaders')
+    : t('admin.accounts.usageWindow.grokUnknown')
+)
+const grokLocalUsage = computed(() => usageInfo.value?.grok_local_usage || props.todayStats || null)
+const grokEntitlementLabel = computed(() => usageInfo.value?.grok_entitlement_status?.trim() || null)
+const grokRetryAfterLabel = computed(() => {
+  const seconds = usageInfo.value?.grok_retry_after_seconds
+  if (seconds == null || seconds <= 0) return null
+  return seconds < 60 ? `${seconds}s` : `${Math.ceil(seconds / 60)}m`
+})
+const formatWindowRequests = (stats: WindowStats) => formatCompactNumber(stats.requests, { allowBillions: false })
+const formatWindowTokens = (stats: WindowStats) => formatCompactNumber(stats.tokens)
+const formatWindowCost = (stats: WindowStats) => stats.cost.toFixed(2)
+const formatWindowUserCost = (stats: WindowStats) => (stats.user_cost ?? 0).toFixed(2)
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
 

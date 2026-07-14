@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,16 @@ func newAPIKeyRepoSQLite(t *testing.T) (*apiKeyRepository, *dbent.Client) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	return &apiKeyRepository{client: client}, client
+}
+
+func TestLatestUsageLogIPsQueryPostgresUsesPerKeyLateralLookup(t *testing.T) {
+	query, args := latestUsageLogIPsQuery([]int64{11, 22}, dialect.Postgres)
+	normalizedQuery := strings.Join(strings.Fields(query), " ")
+	require.Contains(t, normalizedQuery, "FROM unnest($1::bigint[]) AS requested(api_key_id)")
+	require.Contains(t, normalizedQuery, "CROSS JOIN LATERAL")
+	require.Contains(t, normalizedQuery, "ORDER BY ul.created_at DESC, ul.id DESC LIMIT 1")
+	require.NotContains(t, normalizedQuery, "ROW_NUMBER")
+	require.Len(t, args, 1)
 }
 
 func mustCreateAPIKeyRepoUser(t *testing.T, ctx context.Context, client *dbent.Client, email string) *service.User {
@@ -74,12 +85,6 @@ func TestLatestUsageLogIPsQuerySQLite(t *testing.T) {
 	require.Contains(t, query, "api_key_id IN (?, ?)")
 	require.Contains(t, query, "ROW_NUMBER() OVER")
 	require.Equal(t, []any{int64(7), int64(9)}, args)
-}
-
-func TestLatestUsageLogIPsQueryPostgres(t *testing.T) {
-	query, args := latestUsageLogIPsQuery([]int64{7, 9}, dialect.Postgres)
-	require.Contains(t, query, "api_key_id = ANY($1::bigint[])")
-	require.Len(t, args, 1)
 }
 
 func TestAPIKeyRepository_UpdateLastUsed(t *testing.T) {

@@ -53,6 +53,8 @@ const migrationsLockRetryInterval = 500 * time.Millisecond
 const nonTransactionalMigrationSuffix = "_notx.sql"
 const paymentOrdersOutTradeNoUniqueMigration = "120_enforce_payment_orders_out_trade_no_unique_notx.sql"
 const paymentOrdersOutTradeNoUniqueIndex = "paymentorder_out_trade_no_unique"
+const latestAPIKeyIPIndexMigration = "175_add_usage_logs_api_key_latest_ip_index_notx.sql"
+const latestAPIKeyIPIndex = "idx_usage_logs_api_key_latest_ip"
 
 type migrationChecksumCompatibilityRule struct {
 	fileChecksum       string
@@ -259,9 +261,25 @@ func prepareNonTransactionalMigration(ctx context.Context, db *sql.DB, name stri
 	switch name {
 	case paymentOrdersOutTradeNoUniqueMigration:
 		return preparePaymentOrdersOutTradeNoUniqueMigration(ctx, db)
+	case latestAPIKeyIPIndexMigration:
+		return dropInvalidIndexIfPresent(ctx, db, latestAPIKeyIPIndex)
 	default:
 		return nil
 	}
+}
+
+func dropInvalidIndexIfPresent(ctx context.Context, db *sql.DB, indexName string) error {
+	invalid, err := indexIsInvalid(ctx, db, indexName)
+	if err != nil {
+		return fmt.Errorf("check invalid index %s: %w", indexName, err)
+	}
+	if !invalid {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("DROP INDEX CONCURRENTLY IF EXISTS %s", indexName)); err != nil {
+		return fmt.Errorf("drop invalid index %s: %w", indexName, err)
+	}
+	return nil
 }
 
 func preparePaymentOrdersOutTradeNoUniqueMigration(ctx context.Context, db *sql.DB) error {

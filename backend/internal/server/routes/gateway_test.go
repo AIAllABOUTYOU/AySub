@@ -64,6 +64,23 @@ func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {
 	}
 }
 
+func TestGatewayRoutesOpenAIAlphaSearchPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+
+	for _, path := range []string{
+		"/v1/alpha/search",
+		"/alpha/search",
+		"/backend-api/codex/alpha/search",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"gpt-5.6-sol"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit alpha/search handler", path)
+	}
+}
+
 func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouter()
 
@@ -111,11 +128,13 @@ func TestGatewayRoutesOpenAIVideosPathsAreRegistered(t *testing.T) {
 		body   string
 	}{
 		{http.MethodPost, "/v1/videos", `{"model":"grok-imagine-video","prompt":"make a video"}`},
+		{http.MethodPost, "/v1/videos/generations", `{"model":"grok-imagine-video","prompt":"make a video"}`},
 		{http.MethodGet, "/v1/videos/video_test", ``},
 		{http.MethodGet, "/v1/videos/video_test/content", ``},
 		{http.MethodGet, "/v1/files/image?id=0123456789abcdef", ``},
 		{http.MethodGet, "/v1/files/video?id=0123456789abcdef", ``},
 		{http.MethodPost, "/videos", `{"model":"grok-imagine-video","prompt":"make a video"}`},
+		{http.MethodPost, "/videos/generations", `{"model":"grok-imagine-video","prompt":"make a video"}`},
 		{http.MethodGet, "/videos/video_test", ``},
 		{http.MethodGet, "/videos/video_test/content", ``},
 		{http.MethodGet, "/files/image?id=0123456789abcdef", ``},
