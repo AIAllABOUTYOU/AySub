@@ -884,7 +884,7 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillsWholeSession(t *te
 		},
 		APIKey:  &APIKey{ID: 1014},
 		User:    &User{ID: 2014},
-		Account: &Account{ID: 3014},
+		Account: &Account{ID: 3014, Platform: PlatformOpenAI, Extra: map[string]any{openAILongContextBillingEnabledKey: true}},
 	})
 
 	require.NoError(t, err)
@@ -896,6 +896,7 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillsWholeSession(t *te
 	require.InDelta(t, expectedOutput, usageRepo.lastLog.OutputCost, 1e-10)
 	require.InDelta(t, expectedInput+expectedOutput, usageRepo.lastLog.TotalCost, 1e-10)
 	require.InDelta(t, (expectedInput+expectedOutput)*1.1, usageRepo.lastLog.ActualCost, 1e-10)
+	require.True(t, usageRepo.lastLog.LongContextBillingApplied)
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 

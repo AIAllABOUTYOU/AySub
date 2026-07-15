@@ -64,3 +64,23 @@ func TestAntigravityModelNotFoundKeepsBare404Fallback(t *testing.T) {
 		t.Fatal("antigravity model-not-found helper should keep bare 404 fallback")
 	}
 }
+
+func TestIsOpenAICodexPlanGatedModelError(t *testing.T) {
+	body := []byte(`{"detail":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}`)
+	if !isOpenAICodexPlanGatedModelError(http.StatusBadRequest, body) {
+		t.Fatal("expected Codex plan-gated model error")
+	}
+	errorMessageBody := []byte(`{"error":{"message":"The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account."}}`)
+	if !isOpenAICodexPlanGatedModelError(http.StatusBadRequest, errorMessageBody) {
+		t.Fatal("expected nested Codex plan-gated model error")
+	}
+	if isOpenAICodexPlanGatedModelError(http.StatusNotFound, body) {
+		t.Fatal("non-400 response must not match")
+	}
+	if isOpenAICodexPlanGatedModelError(http.StatusBadRequest, []byte(`{"detail":"model is unavailable"}`)) {
+		t.Fatal("unrelated 400 response must not match")
+	}
+	if isOpenAICodexPlanGatedModelError(http.StatusBadRequest, nil) {
+		t.Fatal("empty response must not match")
+	}
+}

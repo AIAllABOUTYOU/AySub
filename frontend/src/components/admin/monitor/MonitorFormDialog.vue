@@ -221,6 +221,8 @@ import {
   PROVIDER_OPENAI,
   PROVIDER_ANTHROPIC,
   PROVIDER_XAI,
+  DEFAULT_XAI_ENDPOINT,
+  DEFAULT_XAI_MODEL,
   PROVIDER_GEMINI,
   API_MODE_CHAT_COMPLETIONS,
   API_MODE_RESPONSES,
@@ -417,6 +419,10 @@ watch(() => form.provider, () => {
   form.api_key = ''
   if (form.provider !== PROVIDER_OPENAI) {
     form.api_mode = API_MODE_CHAT_COMPLETIONS
+  }
+  if (form.provider === PROVIDER_XAI) {
+    if (!form.endpoint.trim()) form.endpoint = DEFAULT_XAI_ENDPOINT
+    if (!form.primary_model.trim()) form.primary_model = DEFAULT_XAI_MODEL
   }
   clearRequestSnapshot()
 }, { flush: 'sync' })

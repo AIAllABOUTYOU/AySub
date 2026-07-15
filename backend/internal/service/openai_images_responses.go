@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -734,9 +735,13 @@ func buildOpenAIImagesStreamErrorBodyFromUpstream(err *OpenAIImagesUpstreamError
 }
 
 func writeOpenAIImagesUpstreamErrorResponse(c *gin.Context, err *OpenAIImagesUpstreamError) bool {
-	if c == nil || c.Writer == nil || c.Writer.Written() || err == nil {
+	if c == nil || c.Writer == nil || err == nil {
 		return false
 	}
+	if c.Writer.Written() && OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) >= 0 {
+		return false
+	}
+	StopOpenAIImagesJSONKeepaliveCommitted(c)
 	errorObj := gin.H{
 		"type":    err.clientErrorType(),
 		"message": err.clientMessage(),
@@ -1315,6 +1320,20 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	} else {
 		usage, imageCount, imageOutputSizes, err = s.handleOpenAIImagesOAuthNonStreamingResponse(resp, c, parsed.ResponseFormat, requestModel)
 		if err != nil {
+			var failoverErr *UpstreamFailoverError
+			if errors.As(err, &failoverErr) {
+				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+					Platform:           account.Platform,
+					AccountID:          account.ID,
+					AccountName:        account.Name,
+					UpstreamStatusCode: failoverErr.StatusCode,
+					UpstreamRequestID:  resp.Header.Get("x-request-id"),
+					UpstreamURL:        safeUpstreamURL(upstreamReq.URL.String()),
+					Kind:               "failover",
+					Message:            extractUpstreamErrorMessage(failoverErr.ResponseBody),
+				})
+				s.handleFailoverSideEffects(upstreamCtx, resp, account, requestModel)
+			}
 			return nil, err
 		}
 	}

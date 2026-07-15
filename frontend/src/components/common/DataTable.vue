@@ -152,7 +152,7 @@
           </td>
         </tr>
 
-        <!-- Data rows (virtual scroll) -->
+        <!-- Data rows: windowed when large, fully rendered when small (shared row/cell template) -->
         <template v-else>
           <tr v-if="virtualPaddingTop > 0" aria-hidden="true">
             <td :colspan="columns.length"
@@ -160,11 +160,11 @@
             </td>
           </tr>
           <tr
-            v-for="virtualRow in renderedVirtualItems"
-            :key="resolveRowKey(sortedData[virtualRow.index], virtualRow.index)"
-            :data-row-id="resolveRowKey(sortedData[virtualRow.index], virtualRow.index)"
-            :data-index="virtualRow.index"
-            :ref="measureElement"
+            v-for="item in renderRows"
+            :key="resolveRowKey(item.row, item.index)"
+            :data-row-id="resolveRowKey(item.row, item.index)"
+            :data-index="item.index"
+            :ref="item.measure ? measureElement : undefined"
             class="hover:bg-gray-50 dark:hover:bg-dark-800"
           >
             <td
@@ -178,12 +178,12 @@
               ]"
             >
               <slot :name="`cell-${column.key}`"
-                    :row="sortedData[virtualRow.index]"
-                    :value="sortedData[virtualRow.index][column.key]"
+                    :row="item.row"
+                    :value="item.row[column.key]"
                     :expanded="actionsExpanded">
                 {{ column.formatter
-                   ? column.formatter(sortedData[virtualRow.index][column.key], sortedData[virtualRow.index])
-                   : sortedData[virtualRow.index][column.key] }}
+                   ? column.formatter(item.row[column.key], item.row)
+                   : item.row[column.key] }}
               </slot>
             </td>
           </tr>
@@ -366,6 +366,8 @@ interface Props {
   estimateRowHeight?: number
   /** Number of rows to render beyond the visible area (default 5) */
   overscan?: number
+  /** Only virtualize when the row count exceeds this threshold (default 100). */
+  virtualizeThreshold?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -590,41 +592,26 @@ const sortedData = computed(() => {
 })
 
 // --- Virtual scrolling ---
+// Small lists render in full to avoid estimate/measure scroll compensation for variable-height rows.
+const shouldVirtualize = computed(() =>
+  isDesktopViewport.value
+  && props.virtualScroll
+  && (sortedData.value?.length ?? 0) > (props.virtualizeThreshold ?? 100)
+)
+
 const rowVirtualizer = useVirtualizer(computed(() => ({
-  count: isDesktopViewport.value && props.virtualScroll ? (sortedData.value?.length ?? 0) : 0,
+  count: shouldVirtualize.value ? (sortedData.value?.length ?? 0) : 0,
   getScrollElement: () => tableWrapperRef.value,
+  // Keep measured heights attached to row identity across sort/filter and mode changes.
+  getItemKey: (index: number) => {
+    const row = sortedData.value?.[index]
+    return row != null ? resolveRowKey(row, index) : index
+  },
   estimateSize: () => props.estimateRowHeight ?? 56,
   overscan: props.overscan ?? 5,
 })))
 
 const virtualItems = computed(() => rowVirtualizer.value.getVirtualItems())
-const renderedVirtualItems = computed(() => {
-  if (!props.virtualScroll && sortedData.value?.length) {
-    const estimatedSize = props.estimateRowHeight ?? 56
-    return sortedData.value.map((_, index) => ({
-      index,
-      key: index,
-      start: index * estimatedSize,
-      end: (index + 1) * estimatedSize,
-      size: estimatedSize,
-      lane: 0,
-    }))
-  }
-
-  if (virtualItems.value.length > 0 || !isDesktopViewport.value || !sortedData.value?.length) {
-    return virtualItems.value
-  }
-
-  const estimatedSize = props.estimateRowHeight ?? 56
-  return sortedData.value.map((_, index) => ({
-    index,
-    key: index,
-    start: index * estimatedSize,
-    end: (index + 1) * estimatedSize,
-    size: estimatedSize,
-    lane: 0,
-  }))
-})
 
 const virtualPaddingTop = computed(() => {
   const items = virtualItems.value
@@ -642,6 +629,23 @@ const measureElement = (el: any) => {
     rowVirtualizer.value.measureElement(el as Element)
   }
 }
+
+const renderRows = computed<Array<{ index: number; row: any; measure: boolean }>>(() => {
+  const data = sortedData.value ?? []
+  if (shouldVirtualize.value) {
+    if (virtualItems.value.length > 0) {
+      return virtualItems.value.map((virtualRow) => ({
+        index: virtualRow.index,
+        row: data[virtualRow.index],
+        measure: true
+      }))
+    }
+
+    // Preserve AySub's full-render bootstrap when the virtual window is temporarily empty.
+    return data.map((row, index) => ({ index, row, measure: true }))
+  }
+  return data.map((row, index) => ({ index, row, measure: false }))
+})
 
 watch(
   [isDesktopViewport, () => props.data.length],
@@ -751,6 +755,7 @@ watch(
 
 defineExpose({
   virtualizer: rowVirtualizer,
+  shouldVirtualize,
   sortedData,
   resolveRowKey,
   tableWrapperEl: tableWrapperRef,

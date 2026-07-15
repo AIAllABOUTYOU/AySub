@@ -591,6 +591,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		if existing == nil {
+			extra = normalizeCRSOpenAILongContextBillingExtra(nil, extra)
 			if !shouldCreateAccount(src.ID, selectedSet) {
 				item.Action = "skipped"
 				item.Error = "not selected"
@@ -627,6 +628,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			continue
 		}
 
+		extra = normalizeCRSOpenAILongContextBillingExtra(existing.Extra, extra)
 		existing.Extra = mergeMap(existing.Extra, extra)
 		existing.Name = defaultName(src.Name, src.ID)
 		existing.Platform = PlatformOpenAI
@@ -720,6 +722,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		if existing == nil {
+			extra = normalizeCRSOpenAILongContextBillingExtra(nil, extra)
 			if !shouldCreateAccount(src.ID, selectedSet) {
 				item.Action = "skipped"
 				item.Error = "not selected"
@@ -752,6 +755,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			continue
 		}
 
+		extra = normalizeCRSOpenAILongContextBillingExtra(existing.Extra, extra)
 		existing.Extra = mergeMap(existing.Extra, extra)
 		if shadows, shadowErr := s.accountRepo.ListShadowsByParent(ctx, existing.ID); shadowErr != nil {
 			item.Action, item.Error = "failed", "check spark shadows failed: "+shadowErr.Error()
@@ -1122,6 +1126,20 @@ func sanitizeCredentialsMap(input map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+func normalizeCRSOpenAILongContextBillingExtra(existing, incoming map[string]any) map[string]any {
+	const key = openAILongContextBillingEnabledKey
+	if incoming == nil {
+		incoming = make(map[string]any, 1)
+	}
+	delete(incoming, key)
+	if value, ok := existing[key].(bool); ok {
+		incoming[key] = value
+	} else {
+		incoming[key] = false
+	}
+	return incoming
 }
 
 func mapCRSStatus(isActive bool, status string) string {

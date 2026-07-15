@@ -1284,6 +1284,16 @@ func TestAPIContracts(t *testing.T) {
 	}
 }
 
+func TestOpenAILongContextBillingExtraContract(t *testing.T) {
+	require.NoError(t, service.ValidateOpenAILongContextBillingExtra(service.PlatformOpenAI, nil))
+	require.NoError(t, service.ValidateOpenAILongContextBillingExtra(service.PlatformOpenAI, map[string]any{
+		"openai_long_context_billing_enabled": false,
+	}))
+	require.Error(t, service.ValidateOpenAILongContextBillingExtra(service.PlatformOpenAI, map[string]any{
+		"openai_long_context_billing_enabled": "false",
+	}))
+}
+
 type contractDeps struct {
 	now         time.Time
 	router      http.Handler

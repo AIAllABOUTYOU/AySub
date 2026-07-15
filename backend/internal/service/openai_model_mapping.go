@@ -3,21 +3,29 @@ package service
 import "strings"
 
 // resolveOpenAIForwardModel 解析 OpenAI 兼容转发使用的模型。
-// defaultMappedModel 只服务于 /v1/messages 的 Claude 系列显式调度映射，
-// 不作为普通 OpenAI 请求的未知模型兜底。
-func resolveOpenAIForwardModel(account *Account, requestedModel, defaultMappedModel string) string {
+// messagesDispatchMappedModel 只服务于 /v1/messages 的 Claude 系列显式调度映射，
+// 不作为普通 OpenAI 请求（如 gpt-5.5 等）的未知模型兜底——后者应原样透传。
+func resolveOpenAIForwardModel(account *Account, requestedModel, messagesDispatchMappedModel string) string {
+	messagesDispatchMappedModel = strings.TrimSpace(messagesDispatchMappedModel)
 	if account == nil {
-		if defaultMappedModel != "" && claudeMessagesDispatchFamily(requestedModel) != "" {
-			return defaultMappedModel
+		if messagesDispatchMappedModel != "" && isClaudeFamilyModel(requestedModel) {
+			return messagesDispatchMappedModel
 		}
 		return requestedModel
 	}
 
 	mappedModel, matched := account.ResolveMappedModel(requestedModel)
-	if !matched && defaultMappedModel != "" && claudeMessagesDispatchFamily(requestedModel) != "" {
-		return defaultMappedModel
+	if !matched && messagesDispatchMappedModel != "" && isClaudeFamilyModel(requestedModel) {
+		return messagesDispatchMappedModel
 	}
 	return mappedModel
+}
+
+// isClaudeFamilyModel 判断请求模型是否属于 Claude 家族（含 opus/sonnet/haiku 及
+// claude-fable-5 等新型号）。仅这类模型才允许回退到 /v1/messages 的调度映射默认值；
+// gpt-5.5 等 OpenAI 原生模型必须原样透传，避免被分组默认值覆盖。
+func isClaudeFamilyModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "claude")
 }
 
 var openAIOAuthForeignModelPrefixes = []string{

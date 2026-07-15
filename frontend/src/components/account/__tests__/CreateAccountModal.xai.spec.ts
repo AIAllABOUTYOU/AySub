@@ -14,7 +14,7 @@ const reauthSource = readFileSync(
   resolve(process.cwd(), 'src/components/account/ReAuthAccountModal.vue'),
   'utf8'
 )
-const grokApiSource = readFileSync(resolve(process.cwd(), 'src/api/admin/grok.ts'), 'utf8')
+const grokApiSource = readFileSync(resolve(process.cwd(), 'src/api/admin/xai.ts'), 'utf8')
 const grokOAuthSource = readFileSync(
   resolve(process.cwd(), 'src/composables/useGrokOAuth.ts'),
   'utf8'

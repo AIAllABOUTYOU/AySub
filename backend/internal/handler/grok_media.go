@@ -21,6 +21,14 @@ func (h *OpenAIGatewayHandler) GrokVideoGeneration(c *gin.Context) {
 	h.handleGrokMedia(c, service.GrokMediaEndpointVideosGenerations, "")
 }
 
+func (h *OpenAIGatewayHandler) GrokVideoEdit(c *gin.Context) {
+	h.handleGrokMedia(c, service.GrokMediaEndpointVideosEdits, "")
+}
+
+func (h *OpenAIGatewayHandler) GrokVideoExtension(c *gin.Context) {
+	h.handleGrokMedia(c, service.GrokMediaEndpointVideosExtensions, "")
+}
+
 func (h *OpenAIGatewayHandler) GrokVideoStatus(c *gin.Context) {
 	requestID := strings.TrimSpace(c.Param("request_id"))
 	if requestID == "" {
@@ -236,7 +244,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
-		if endpoint == service.GrokMediaEndpointVideosGenerations && result != nil && strings.TrimSpace(result.ResponseID) != "" {
+		if endpoint.IsGenerationRequest() && result != nil && strings.TrimSpace(result.ResponseID) != "" {
 			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(requestCtx, apiKey.GroupID, result.ResponseID, account.ID); err != nil {
 				reqLog.Warn("grok_media.bind_video_request_account_failed", zap.Error(err))
 			}

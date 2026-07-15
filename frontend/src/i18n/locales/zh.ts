@@ -4544,6 +4544,8 @@ export default {
         oauthPassthrough: '自动透传（仅替换认证）',
         oauthPassthroughDesc:
           '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',
+        longContextBilling: 'API 长上下文计费',
+        longContextBillingDesc: '默认关闭。仅当该账号的上游会按模型阈值收取 OpenAI API 长上下文费率时启用。',
         responsesWebsocketsV2: 'Responses WebSocket v2',
         responsesWebsocketsV2Desc:
           '默认关闭。开启后可启用 responses_websockets_v2 协议能力（受网关全局开关与账号类型开关约束）。',
@@ -4584,6 +4586,9 @@ export default {
         responsesStatusAutoUnknown: '自动探测：未探测',
         responsesStatusForcedResponses: '已强制 Responses',
         responsesStatusForcedChatCompletions: '已强制 Chat Completions',
+        planType: '订阅档位（手动覆盖）',
+        planTypeDesc: '手动纠正本账号的 ChatGPT 订阅档位。令牌刷新或命中 429 时，系统可能用检测到的真实档位覆盖此设置。',
+        planTypeClear: '清空（自动识别）',
         codexCLIOnly: '仅允许 Codex 官方客户端',
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
@@ -5879,6 +5884,11 @@ export default {
     ops: {
       title: '运维监控',
       description: '运维监控与排障',
+      systemLogs: {
+        host: 'Host',
+        search: '查询',
+        cleanCurrentFilters: '按当前筛选清理'
+      },
       // Dashboard
       systemHealth: '系统健康',
       overview: '概览',

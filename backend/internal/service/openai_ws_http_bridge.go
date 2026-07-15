@@ -179,6 +179,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if err != nil {
 		return nil, err
 	}
+	if account.Platform != PlatformXAI && isOpenAIResponsesLiteWebSocketPayload(payload) {
+		upstreamReq.Header.Set(responsesLiteHeader, "true")
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

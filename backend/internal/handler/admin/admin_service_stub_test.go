@@ -348,6 +348,12 @@ func (s *stubAdminService) ListOpenAISchedulableAccountsForSchedulerScore(contex
 }
 
 func (s *stubAdminService) GetAccount(ctx context.Context, id int64) (*service.Account, error) {
+	for i := range s.accounts {
+		if s.accounts[i].ID == id {
+			account := s.accounts[i]
+			return &account, nil
+		}
+	}
 	account := service.Account{ID: id, Name: "account", Status: service.StatusActive}
 	return &account, nil
 }

@@ -1488,6 +1488,7 @@ export interface UsageLog {
   total_cost: number
   actual_cost: number
   rate_multiplier: number
+  long_context_billing_applied?: boolean
   billing_type: number
 
   request_type?: UsageRequestType

@@ -62,6 +62,24 @@ func RegisterGatewayRoutes(
 		withOpenAICompatiblePlatform(c, platform)
 		h.OpenAIGateway.GrokVideoGeneration(c)
 	}
+	grokVideoEditHandler := func(c *gin.Context) {
+		if openAICompatiblePlatform(c) != service.PlatformXAI {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Official xAI video editing is not supported for this platform"}})
+			return
+		}
+		withOpenAICompatiblePlatform(c, service.PlatformXAI)
+		h.OpenAIGateway.GrokVideoEdit(c)
+	}
+	grokVideoExtensionHandler := func(c *gin.Context) {
+		if openAICompatiblePlatform(c) != service.PlatformXAI {
+			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"type": "not_found_error", "message": "Official xAI video extension is not supported for this platform"}})
+			return
+		}
+		withOpenAICompatiblePlatform(c, service.PlatformXAI)
+		h.OpenAIGateway.GrokVideoExtension(c)
+	}
 
 	// API网关（Claude API兼容）
 	gateway := r.Group("/v1")
@@ -255,6 +273,8 @@ func RegisterGatewayRoutes(
 			h.OpenAIGateway.Videos(c)
 		})
 		gateway.POST("/videos/generations", grokVideoGenerationHandler)
+		gateway.POST("/videos/edits", grokVideoEditHandler)
+		gateway.POST("/videos/extensions", grokVideoExtensionHandler)
 		gateway.GET("/videos/:video_id", h.OpenAIGateway.VideoJob)
 		gateway.GET("/videos/:video_id/content", h.OpenAIGateway.VideoContent)
 		gateway.GET("/files/image", h.OpenAIGateway.LocalImageFile)
@@ -446,6 +466,8 @@ func RegisterGatewayRoutes(
 		h.OpenAIGateway.Videos(c)
 	})
 	r.POST("/videos/generations", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, grokVideoGenerationHandler)
+	r.POST("/videos/edits", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, grokVideoEditHandler)
+	r.POST("/videos/extensions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, grokVideoExtensionHandler)
 	r.GET("/videos/:video_id", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoJob)
 	r.GET("/videos/:video_id/content", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.VideoContent)
 	r.GET("/files/image", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), permissionAnthropic, requireGroupAnthropic, h.OpenAIGateway.LocalImageFile)

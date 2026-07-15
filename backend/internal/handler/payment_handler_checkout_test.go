@@ -36,7 +36,7 @@ func TestGetCheckoutInfoExposesSubscriptionUSDToCNYRate(t *testing.T) {
 	repo := &checkoutPaymentSettingRepoStub{values: map[string]string{
 		service.SettingSubscriptionUSDToCNYRate: "7.15",
 	}}
-	h := NewPaymentHandler(nil, service.NewPaymentConfigService(client, repo, nil), nil)
+	h := NewPaymentHandler(nil, service.NewPaymentConfigService(client, repo, nil))
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/payment/checkout-info", nil)

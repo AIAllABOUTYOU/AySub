@@ -13,6 +13,8 @@ export const PROVIDER_OPENAI: Provider = 'openai'
 export const PROVIDER_ANTHROPIC: Provider = 'anthropic'
 export const PROVIDER_XAI: Provider = 'xai'
 export const PROVIDER_GEMINI: Provider = 'gemini'
+export const DEFAULT_XAI_ENDPOINT = 'https://api.x.ai'
+export const DEFAULT_XAI_MODEL = 'grok-4.5'
 
 export const API_MODE_CHAT_COMPLETIONS: APIMode = 'chat_completions'
 export const API_MODE_RESPONSES: APIMode = 'responses'

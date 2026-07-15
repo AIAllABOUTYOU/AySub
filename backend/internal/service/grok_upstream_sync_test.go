@@ -1,9 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +26,10 @@ func (s *grokOAuthSyncClientStub) ExchangeCode(context.Context, string, string, 
 
 func (s *grokOAuthSyncClientStub) RefreshToken(context.Context, string, string, string) (*xai.TokenResponse, error) {
 	return s.refreshResponse, nil
+}
+
+func (s *grokOAuthSyncClientStub) ConvertSSOToBuild(context.Context, string, string) (*xai.TokenResponse, error) {
+	return nil, nil
 }
 
 func TestGrokAccountBaseURLRoutesOAuthToCLIProxy(t *testing.T) {
@@ -50,6 +57,35 @@ func TestGrokAccountBaseURLRoutesOAuthToCLIProxy(t *testing.T) {
 	}
 }
 
+func TestBuildGrokResponsesRequestAllowsPublicXAIAPIKeyBaseURLByDefault(t *testing.T) {
+	account := &Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"base_url": "https://grok.example.test/v1/",
+		},
+	}
+
+	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "api-key", "")
+	require.NoError(t, err)
+	require.Equal(t, "https://grok.example.test/v1/responses", req.URL.String())
+	require.Equal(t, "Bearer api-key", req.Header.Get("Authorization"))
+}
+
+func TestBuildGrokResponsesRequestPinsXAIOAuthCustomBaseURLByDefault(t *testing.T) {
+	account := &Account{
+		Platform: PlatformXAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"base_url": "https://grok.example.test/v1",
+		},
+	}
+
+	req, err := buildGrokResponsesRequest(context.Background(), nil, account, []byte(`{"model":"grok-4.3"}`), "access-token", "")
+	require.NoError(t, err)
+	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", req.URL.String())
+}
+
 func TestGrokOfficialMediaCapabilityExcludesCookieAccounts(t *testing.T) {
 	for _, accountType := range []string{AccountTypeOAuth, AccountTypeAPIKey} {
 		account := &Account{Platform: PlatformXAI, Type: accountType}
@@ -59,6 +95,42 @@ func TestGrokOfficialMediaCapabilityExcludesCookieAccounts(t *testing.T) {
 	cookie := &Account{Platform: PlatformXAI, Type: AccountTypeCookie}
 	require.False(t, cookie.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityGrokMedia))
 	require.True(t, cookie.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityVideos))
+}
+
+func TestForwardGrokMediaOAuthImageToVideoUsesOfficialAPIForLargeBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	imageData := strings.Repeat("A", 2*1024*1024)
+	body := []byte(`{"model":"grok-imagine-video-1.5","prompt":"animate","image":{"image_url":"data:image/png;base64,` + imageData + `"}}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos/generations", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	account := &Account{
+		ID:          66,
+		Name:        "grok-oauth",
+		Platform:    PlatformXAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token": "oauth-access-token",
+			"base_url":     xai.DefaultCLIBaseURL,
+		},
+	}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type": []string{"application/json"},
+		},
+		Body: io.NopCloser(strings.NewReader(`{"request_id":"video-request-oauth"}`)),
+	}}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+
+	_, err := svc.ForwardGrokMedia(context.Background(), c, account, GrokMediaEndpointVideosGenerations, "", body, "application/json")
+	require.NoError(t, err)
+	require.Equal(t, xai.DefaultBaseURL+"/videos/generations", upstream.lastReq.URL.String())
+	require.Equal(t, "data:image/png;base64,"+imageData, gjson.GetBytes(upstream.lastBody, "image.image_url").String())
 }
 
 func TestGrokDefaultModelMappingDoesNotOverrideCookieArchitecture(t *testing.T) {

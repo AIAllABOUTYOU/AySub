@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { applyInterceptWarmup } from '../credentialsBuilder'
+import {
+  applyInterceptWarmup,
+  applyPlanType,
+  buildPlanTypeOptions,
+  planTypeDisplayLabel,
+  readPlanType
+} from '../credentialsBuilder'
 
 describe('applyInterceptWarmup', () => {
   it('create + enabled=true: should set intercept_warmup_requests to true', () => {
@@ -42,5 +48,24 @@ describe('applyInterceptWarmup', () => {
     expect(creds.api_key).toBe('sk')
     expect(creds.base_url).toBe('url')
     expect('intercept_warmup_requests' in creds).toBe(false)
+  })
+})
+
+describe('plan_type helpers', () => {
+  it('maps aliases and reads only string values', () => {
+    expect(planTypeDisplayLabel('chatgptpro')).toBe('Pro')
+    expect(planTypeDisplayLabel('team')).toBe('Team')
+    expect(readPlanType({ plan_type: 'plus' })).toBe('plus')
+    expect(readPlanType({ plan_type: 42 })).toBe('')
+  })
+
+  it('keeps a current alias or custom value in options without duplicates', () => {
+    expect(buildPlanTypeOptions('chatgptpro', 'Clear').filter((option) => option.label === 'Pro')).toHaveLength(1)
+    expect(buildPlanTypeOptions('team', 'Clear')).toContainEqual({ value: 'team', label: 'Team' })
+  })
+
+  it('sets or clears plan_type without changing other credentials', () => {
+    expect(applyPlanType({ email: 'a@example.com' }, ' pro ')).toEqual({ email: 'a@example.com', plan_type: 'pro' })
+    expect(applyPlanType({ email: 'a@example.com', plan_type: 'pro' }, '')).toEqual({ email: 'a@example.com' })
   })
 })

@@ -17,6 +17,7 @@ func TestBuildOpsSystemLogsWhere_WithClientRequestIDAndUserID(t *testing.T) {
 	filter := &service.OpsSystemLogFilter{
 		StartTime:       &start,
 		EndTime:         &end,
+		Host:            "api-node-1",
 		Level:           "warn",
 		Component:       "http.access",
 		RequestID:       "req-1",
@@ -35,8 +36,11 @@ func TestBuildOpsSystemLogsWhere_WithClientRequestIDAndUserID(t *testing.T) {
 	if where == "" {
 		t.Fatalf("where should not be empty")
 	}
-	if len(args) != 11 {
-		t.Fatalf("args len = %d, want 11", len(args))
+	if len(args) != 12 {
+		t.Fatalf("args len = %d, want 12", len(args))
+	}
+	if !contains(where, "l.host = $") {
+		t.Fatalf("where should include host condition: %s", where)
 	}
 	if !contains(where, "COALESCE(l.client_request_id,'') = $") {
 		t.Fatalf("where should include client_request_id condition: %s", where)
@@ -62,6 +66,7 @@ func TestBuildOpsSystemLogsCleanupWhere_RequireConstraint(t *testing.T) {
 func TestBuildOpsSystemLogsCleanupWhere_WithClientRequestIDAndUserID(t *testing.T) {
 	userID := int64(9)
 	filter := &service.OpsSystemLogCleanupFilter{
+		Host:            "api-node-2",
 		ClientRequestID: "creq-9",
 		UserID:          &userID,
 	}
@@ -70,8 +75,11 @@ func TestBuildOpsSystemLogsCleanupWhere_WithClientRequestIDAndUserID(t *testing.
 	if !hasConstraint {
 		t.Fatalf("expected hasConstraint=true")
 	}
-	if len(args) != 2 {
-		t.Fatalf("args len = %d, want 2", len(args))
+	if len(args) != 3 {
+		t.Fatalf("args len = %d, want 3", len(args))
+	}
+	if !contains(where, "l.host = $") {
+		t.Fatalf("where should include host condition: %s", where)
 	}
 	if !contains(where, "COALESCE(l.client_request_id,'') = $") {
 		t.Fatalf("where should include client_request_id condition: %s", where)

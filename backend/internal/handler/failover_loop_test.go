@@ -227,6 +227,50 @@ func TestHandleFailoverError_BasicSwitch(t *testing.T) {
 	})
 }
 
+func TestHandleFailoverErrorWithRetryLimit_UsesAccountLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		retryLimit int
+	}{
+		{name: "zero", retryLimit: 0},
+		{name: "one", retryLimit: 1},
+		{name: "five", retryLimit: 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockTempUnscheduler{}
+			fs := NewFailoverState(10, false)
+			err := newTestFailoverErr(503, true, false)
+			if tt.retryLimit > 0 {
+				fs.SameAccountRetryCount[100] = tt.retryLimit - 1
+			}
+
+			action := fs.HandleFailoverErrorWithRetryLimit(
+				context.Background(), mock, 100, "openai", tt.retryLimit, err,
+			)
+
+			if tt.retryLimit == 0 {
+				require.Equal(t, FailoverContinue, action)
+				require.Len(t, mock.retryableCalls, 1)
+				require.Contains(t, fs.FailedAccountIDs, int64(100))
+				return
+			}
+
+			require.Equal(t, FailoverContinue, action)
+			require.Equal(t, tt.retryLimit, fs.SameAccountRetryCount[100])
+			require.Empty(t, mock.retryableCalls)
+
+			action = fs.HandleFailoverErrorWithRetryLimit(
+				context.Background(), mock, 100, "openai", tt.retryLimit, err,
+			)
+			require.Equal(t, FailoverContinue, action)
+			require.Len(t, mock.retryableCalls, 1)
+			require.Contains(t, fs.FailedAccountIDs, int64(100))
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // HandleFailoverError — 缓存计费 (ForceCacheBilling)
 // ---------------------------------------------------------------------------

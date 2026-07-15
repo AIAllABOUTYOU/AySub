@@ -30,7 +30,7 @@ const (
 )
 
 const (
-	// maxSameAccountRetries 同账号重试次数上限（针对 RetryableOnSameAccount 错误）
+	// maxSameAccountRetries 同账号重试次数默认上限（针对 RetryableOnSameAccount 错误）。
 	maxSameAccountRetries = 3
 	// sameAccountRetryDelay 同账号重试间隔
 	sameAccountRetryDelay = 500 * time.Millisecond
@@ -70,6 +70,18 @@ func (s *FailoverState) HandleFailoverError(
 	platform string,
 	failoverErr *service.UpstreamFailoverError,
 ) FailoverAction {
+	return s.HandleFailoverErrorWithRetryLimit(ctx, gatewayService, accountID, platform, maxSameAccountRetries, failoverErr)
+}
+
+// HandleFailoverErrorWithRetryLimit applies the account-level pool retry limit.
+func (s *FailoverState) HandleFailoverErrorWithRetryLimit(
+	ctx context.Context,
+	gatewayService TempUnscheduler,
+	accountID int64,
+	platform string,
+	retryLimit int,
+	failoverErr *service.UpstreamFailoverError,
+) FailoverAction {
 	s.LastFailoverErr = failoverErr
 
 	// 缓存计费判断
@@ -78,13 +90,13 @@ func (s *FailoverState) HandleFailoverError(
 	}
 
 	// 同账号重试：对 RetryableOnSameAccount 的临时性错误，先在同一账号上重试
-	if failoverErr.RetryableOnSameAccount && s.SameAccountRetryCount[accountID] < maxSameAccountRetries {
+	if failoverErr.RetryableOnSameAccount && s.SameAccountRetryCount[accountID] < retryLimit {
 		s.SameAccountRetryCount[accountID]++
 		logger.FromContext(ctx).Warn("gateway.failover_same_account_retry",
 			zap.Int64("account_id", accountID),
 			zap.Int("upstream_status", failoverErr.StatusCode),
 			zap.Int("same_account_retry_count", s.SameAccountRetryCount[accountID]),
-			zap.Int("same_account_retry_max", maxSameAccountRetries),
+			zap.Int("same_account_retry_max", retryLimit),
 		)
 		if !sleepWithContext(ctx, sameAccountRetryDelay) {
 			return FailoverCanceled

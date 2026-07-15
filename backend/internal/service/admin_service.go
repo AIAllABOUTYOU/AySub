@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"sort"
 	"strconv"
@@ -2860,10 +2861,59 @@ func (s *adminServiceImpl) GetAccountsByIDs(ctx context.Context, ids []int64) ([
 	return accounts, nil
 }
 
+func ValidateOpenAILongContextBillingExtra(platform string, extra map[string]any) error {
+	if platform != PlatformOpenAI || extra == nil {
+		return nil
+	}
+	raw, exists := extra[openAILongContextBillingEnabledKey]
+	if !exists {
+		return nil
+	}
+	if _, ok := raw.(bool); !ok {
+		return infraerrors.BadRequest("OPENAI_LONG_CONTEXT_BILLING_INVALID", "openai_long_context_billing_enabled must be a boolean")
+	}
+	return nil
+}
+
+func normalizeOpenAILongContextBillingExtra(platform string, extra map[string]any) (map[string]any, error) {
+	if platform != PlatformOpenAI {
+		return extra, nil
+	}
+	if err := ValidateOpenAILongContextBillingExtra(platform, extra); err != nil {
+		return nil, err
+	}
+	normalized := maps.Clone(extra)
+	if normalized == nil {
+		normalized = make(map[string]any, 1)
+	}
+	if _, exists := normalized[openAILongContextBillingEnabledKey]; !exists {
+		normalized[openAILongContextBillingEnabledKey] = false
+	}
+	return normalized, nil
+}
+
+func normalizeOpenAILongContextBillingUpdateExtra(account *Account, incoming map[string]any) (map[string]any, error) {
+	normalized, err := normalizeOpenAILongContextBillingExtra(account.Platform, incoming)
+	if err != nil || account.Platform != PlatformOpenAI {
+		return normalized, err
+	}
+	if _, provided := incoming[openAILongContextBillingEnabledKey]; !provided {
+		if current, ok := account.Extra[openAILongContextBillingEnabledKey].(bool); ok {
+			normalized[openAILongContextBillingEnabledKey] = current
+		}
+	}
+	return normalized, nil
+}
+
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
 	if err := NormalizeCustomHeaders(input.Extra); err != nil {
 		return nil, err
 	}
+	accountExtra, err := normalizeOpenAILongContextBillingExtra(input.Platform, input.Extra)
+	if err != nil {
+		return nil, err
+	}
+	input.Extra = accountExtra
 	// 绑定分组
 	groupIDs := input.GroupIDs
 	// 如果没有指定分组,自动绑定对应平台的默认分组
@@ -2974,6 +3024,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if input.Extra != nil {
+		input.Extra, err = normalizeOpenAILongContextBillingUpdateExtra(account, input.Extra)
+		if err != nil {
+			return nil, err
+		}
 	}
 	wasOveragesEnabled := account.IsOveragesEnabled()
 	if account.IsShadow() {

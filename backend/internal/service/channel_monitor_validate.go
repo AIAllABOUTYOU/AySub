@@ -123,6 +123,14 @@ func normalizeModels(in []string) []string {
 	return out
 }
 
+func normalizeMonitorPrimaryModel(provider, model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" && provider == MonitorProviderXAI {
+		return MonitorDefaultXAIModel
+	}
+	return model
+}
+
 // defaultAPIMode 空串归一为 chat_completions，保证历史数据与旧客户端兼容。
 func defaultAPIMode(apiMode string) string {
 	if strings.TrimSpace(apiMode) == "" {

@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { GrokExchangeCodeRequest, GrokTokenInfo } from '@/api/admin/grok'
+import type { GrokExchangeCodeRequest, GrokTokenInfo } from '@/api/admin/xai'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 
 const GROK_CLI_BASE_URL = 'https://cli-chat-proxy.grok.com/v1'

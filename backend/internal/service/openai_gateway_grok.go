@@ -236,11 +236,37 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	out, err = sanitizeGrokReasoningNullContent(out)
+	if err != nil {
+		return nil, err
+	}
 	out, err = sanitizeGrokResponsesTools(out)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// sanitizeGrokReasoningNullContent removes content:null from reasoning input
+// items. The official xAI Responses API rejects that shape with HTTP 422.
+func sanitizeGrokReasoningNullContent(body []byte) ([]byte, error) {
+	items := gjson.GetBytes(body, "input")
+	if !items.IsArray() {
+		return body, nil
+	}
+	var err error
+	items.ForEach(func(index, item gjson.Result) bool {
+		if strings.TrimSpace(item.Get("type").String()) != "reasoning" {
+			return true
+		}
+		content := item.Get("content")
+		if !content.Exists() || content.Type != gjson.Null {
+			return true
+		}
+		body, err = sjson.DeleteBytes(body, fmt.Sprintf("input.%d.content", index.Int()))
+		return err == nil
+	})
+	return body, err
 }
 
 func sanitizeGrokResponsesModelCapabilities(body []byte, upstreamModel string) ([]byte, error) {

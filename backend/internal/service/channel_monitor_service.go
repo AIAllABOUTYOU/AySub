@@ -104,6 +104,7 @@ func (s *ChannelMonitorService) Get(ctx context.Context, id int64) (*ChannelMoni
 
 // Create 创建监控（内部加密 api_key）。
 func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCreateParams) (*ChannelMonitor, error) {
+	p.PrimaryModel = normalizeMonitorPrimaryModel(p.Provider, p.PrimaryModel)
 	if err := validateCreateParams(p); err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		APIMode:          defaultAPIMode(p.APIMode),
 		Endpoint:         normalizeEndpoint(p.Endpoint),
 		APIKey:           encrypted, // 注意：传入 repository 时该字段为密文
-		PrimaryModel:     strings.TrimSpace(p.PrimaryModel),
+		PrimaryModel:     p.PrimaryModel,
 		ExtraModels:      normalizeModels(p.ExtraModels),
 		GroupName:        strings.TrimSpace(p.GroupName),
 		Enabled:          p.Enabled,

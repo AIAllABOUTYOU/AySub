@@ -807,6 +807,9 @@ func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 	if isCodexSparkModel(firstNonEmptyString(reqBody["model"])) {
 		return false
 	}
+	if hasOpenAIImageGenerationTool(reqBody) {
+		return false
+	}
 
 	tool := map[string]any{
 		"type":          "image_generation",
@@ -824,17 +827,21 @@ func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 		reqBody["tools"] = []any{tool}
 		return true
 	}
-	for _, rawTool := range tools {
-		toolMap, ok := rawTool.(map[string]any)
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(firstNonEmptyString(toolMap["type"])) == "image_generation" {
-			return false
-		}
-	}
-
 	reqBody["tools"] = append(tools, tool)
+	return true
+}
+
+func ensureOpenAIResponsesImageGenerationToolChoiceAuto(reqBody map[string]any) bool {
+	if len(reqBody) == 0 || !hasOpenAIImageGenerationTool(reqBody) {
+		return false
+	}
+	if isCodexSparkModel(firstNonEmptyString(reqBody["model"])) {
+		return false
+	}
+	if _, ok := reqBody["tool_choice"]; ok {
+		return false
+	}
+	reqBody["tool_choice"] = "auto"
 	return true
 }
 
